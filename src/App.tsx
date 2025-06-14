@@ -1,15 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { InvoiceForm } from './components/InvoiceForm';
 import { InvoicePreview } from './components/InvoicePreview';
 import { CancellationInvoiceForm } from './components/CancellationInvoiceForm';
 import { CancellationInvoicePreview } from './components/CancellationInvoicePreview';
 import { InvoiceData, CancellationInvoiceData } from './types/invoice';
 import { Printer, Edit3, Eye, FileText, XCircle } from 'lucide-react';
+import { invoiceCounterService } from './lib/supabase';
 
 function App() {
   const [invoiceType, setInvoiceType] = useState<'regular' | 'cancellation'>('regular');
   const [activeTab, setActiveTab] = useState<'form' | 'preview'>('form');
-  const [invoiceCounter, setInvoiceCounter] = useState(391); // Starting from current number
+  
+  // Initialize invoice counter from Supabase
+  const [invoiceCounter, setInvoiceCounter] = useState(391);
+  const [isCounterLoaded, setIsCounterLoaded] = useState(false);
+
+  // Load counter from Supabase on app start
+  useEffect(() => {
+    const loadCounter = async () => {
+      try {
+        const counter = await invoiceCounterService.getCounter();
+        setInvoiceCounter(counter);
+        setIsCounterLoaded(true);
+      } catch (error) {
+        console.error('Failed to load counter:', error);
+        // Fallback to localStorage if Supabase fails
+        const savedCounter = localStorage.getItem('invoiceCounter');
+        setInvoiceCounter(savedCounter ? parseInt(savedCounter, 10) : 391);
+        setIsCounterLoaded(true);
+      }
+    };
+
+    loadCounter();
+  }, []);
+
+  // Update invoice numbers when counter changes
+  useEffect(() => {
+    if (!isCounterLoaded) return;
+
+    // Update regular invoice number
+    setInvoiceData(prev => ({
+      ...prev,
+      invoiceNumber: `520/${invoiceCounter}`
+    }));
+
+    // Update cancellation invoice number
+    setCancellationData(prev => ({
+      ...prev,
+      invoiceNumber: `520/${invoiceCounter}`
+    }));
+  }, [invoiceCounter, isCounterLoaded]);
+
+  // Set up real-time subscription to counter changes
+  useEffect(() => {
+    if (!isCounterLoaded) return;
+
+    const subscription = invoiceCounterService.subscribeToCounter((newValue) => {
+      setInvoiceCounter(newValue);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [isCounterLoaded]);
   
   // Function to get current IST date and time formatted as dd/mm/yyyy hh:mm:ss AM/PM
   const getCurrentISTTime = () => {
@@ -36,23 +89,23 @@ function App() {
     companyPhone: '+919876161215',
     companyEmail: 'voyageur.nest@gmail.com',
     invoiceNumber: `520/${invoiceCounter}`,
-    guestName: 'Mr. Akshay',
-    billTo: 'Mr. Akshay',
+    guestName: '',
+    billTo: '',
     address: '',
     companyNameBillTo: '',
     billToRegNo: '',
     date: getCurrentISTTime(),
-    noOfPax: 2,
-    adultChild: '2/0',
+    noOfPax: 0,
+    adultChild: '',
     grCardNo: '',
-    roomNo: '109',
-    dateOfArrival: new Date().toISOString().slice(0, 10),
-    dateOfDeparture: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-    timeOfArrival: '08:00',
-    timeOfDeparture: '06:00',
-    noOfDays: 1,
-    grandTotal: 1600.00,
-    paymentAmount: 500.00,
+    roomNo: '',
+    dateOfArrival: '',
+    dateOfDeparture: '',
+    timeOfArrival: '',
+    timeOfDeparture: '',
+    noOfDays: 0,
+    grandTotal: 0,
+    paymentAmount: 0,
     paymentMethod: 'UPI'
   });
 
@@ -85,9 +138,26 @@ function App() {
     cancellationReason: 'Customer Request'
   });
 
-  const handleNewInvoice = () => {
+  const handleNewInvoice = async () => {
     const newCounter = invoiceCounter + 1;
-    setInvoiceCounter(newCounter);
+    
+    try {
+      // Update counter in Supabase
+      const success = await invoiceCounterService.updateCounter(newCounter);
+      
+      if (success) {
+        setInvoiceCounter(newCounter);
+      } else {
+        // Fallback to localStorage if Supabase fails
+        localStorage.setItem('invoiceCounter', newCounter.toString());
+        setInvoiceCounter(newCounter);
+      }
+    } catch (error) {
+      console.error('Failed to update counter:', error);
+      // Fallback to localStorage
+      localStorage.setItem('invoiceCounter', newCounter.toString());
+      setInvoiceCounter(newCounter);
+    }
     
     if (invoiceType === 'regular') {
       setInvoiceData({
@@ -101,43 +171,45 @@ function App() {
         billToRegNo: '',
         grCardNo: '',
         roomNo: '',
-        dateOfArrival: new Date().toISOString().slice(0, 10),
-        dateOfDeparture: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-        timeOfArrival: '08:00',
-        timeOfDeparture: '06:00',
-        noOfDays: 1,
+        dateOfArrival: '',
+        dateOfDeparture: '',
+        timeOfArrival: '',
+        timeOfDeparture: '',
+        noOfDays: 0,
+        noOfPax: 0,
+        adultChild: '',
         grandTotal: 0,
         paymentAmount: 0
       });
     } else {
-              setCancellationData({
-          companyName: 'Voyageur Nest',
-          companyAddress: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
-          companyPhone: '+919876161215',
-          companyEmail: 'voyageur.nest@gmail.com',
-          invoiceNumber: `520/${newCounter}`,
-          date: getCurrentISTTime(),
-          cancellationDate: getCurrentISTTime(),
-          guestName: '',
-          billTo: '',
-          address: '',
-          companyNameBillTo: '',
-          billToRegNo: '',
-          noOfPax: 1,
-          adultChild: '1/0',
-          grCardNo: '',
-          roomNo: '',
-          dateOfArrival: '',
-          dateOfDeparture: '',
-          timeOfArrival: '12:00',
-          timeOfDeparture: '11:00',
-          noOfDays: 1,
-          originalBookingAmount: 0,
-          totalPaid: 0,
-          cancellationCharges: 0,
-          paymentMethod: 'Cash',
-          cancellationReason: 'Customer Request'
-        });
+      setCancellationData({
+        companyName: 'Voyageur Nest',
+        companyAddress: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
+        companyPhone: '+919876161215',
+        companyEmail: 'voyageur.nest@gmail.com',
+        invoiceNumber: `520/${newCounter}`,
+        date: getCurrentISTTime(),
+        cancellationDate: getCurrentISTTime(),
+        guestName: '',
+        billTo: '',
+        address: '',
+        companyNameBillTo: '',
+        billToRegNo: '',
+        noOfPax: 1,
+        adultChild: '1/0',
+        grCardNo: '',
+        roomNo: '',
+        dateOfArrival: '',
+        dateOfDeparture: '',
+        timeOfArrival: '12:00',
+        timeOfDeparture: '11:00',
+        noOfDays: 1,
+        originalBookingAmount: 0,
+        totalPaid: 0,
+        cancellationCharges: 0,
+        paymentMethod: 'Cash',
+        cancellationReason: 'Customer Request'
+      });
     }
     setActiveTab('form'); // Switch to form tab for new invoice
   };
