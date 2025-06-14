@@ -306,7 +306,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
         </div>
 
         {/* Empty space for additional items */}
-        <div className="border-b-2 border-black" style={{ height: '300px' }}>
+        <div className="border-b-2 border-black" style={{ height: '280px' }}>
           {/* Empty space to fill letter page size */}
         </div>
 
