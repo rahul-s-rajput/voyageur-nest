@@ -210,7 +210,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
                 <th className="border-r border-black p-2 text-left">Nationality</th>
                 <th className="border-r border-black p-2 text-center">No of Pax</th>
                 <th className="border-r border-black p-2 text-center">Adult / Child</th>
-                <th className="border-r border-black p-2 text-center">G.R. Card No</th>
+                <th className="border-r border-black p-2 text-center">No of Rooms</th>
                 <th className="p-2 text-center">Room No</th>
               </tr>
             </thead>

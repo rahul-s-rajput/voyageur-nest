@@ -58,10 +58,10 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-lg">
-      <h2 className="text-xl font-bold mb-4">Cancellation Invoice Details</h2>
+    <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg">
+      <h2 className="text-lg sm:text-xl font-bold mb-4">Cancellation Invoice Details</h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {/* Company Details */}
         <div>
           <label className="block text-sm font-medium mb-1">Company Name:</label>
@@ -69,7 +69,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.companyName}
             onChange={(e) => handleInputChange('companyName', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -79,7 +79,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.invoiceNumber}
             onChange={(e) => handleInputChange('invoiceNumber', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -90,7 +90,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.guestName}
             onChange={(e) => handleInputChange('guestName', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -100,7 +100,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.billTo}
             onChange={(e) => handleInputChange('billTo', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -110,7 +110,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.address}
             onChange={(e) => handleInputChange('address', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -120,7 +120,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.companyNameBillTo}
             onChange={(e) => handleInputChange('companyNameBillTo', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -130,7 +130,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.billToRegNo}
             onChange={(e) => handleInputChange('billToRegNo', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -140,7 +140,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.roomNo}
             onChange={(e) => handleInputChange('roomNo', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -151,7 +151,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="datetime-local"
             value={data.date.includes('/') ? '' : data.date}
             onChange={(e) => handleInputChange('date', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -161,7 +161,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="datetime-local"
             value={data.cancellationDate.includes('/') ? '' : data.cancellationDate}
             onChange={(e) => handleInputChange('cancellationDate', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -173,7 +173,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             value={data.noOfPax === 0 ? '' : data.noOfPax}
             onChange={(e) => handleInputChange('noOfPax', parseInt(e.target.value) || 0)}
             placeholder="Enter number of guests"
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -183,7 +183,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="text"
             value={data.adultChild}
             onChange={(e) => handleInputChange('adultChild', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -194,7 +194,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             value={data.grCardNo === '' ? '' : data.grCardNo}
             onChange={(e) => handleInputChange('grCardNo', e.target.value)}
             placeholder="Enter number of rooms"
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -205,7 +205,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="date"
             value={data.dateOfArrival}
             onChange={(e) => handleInputChange('dateOfArrival', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -215,7 +215,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="date"
             value={data.dateOfDeparture}
             onChange={(e) => handleInputChange('dateOfDeparture', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -225,7 +225,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="time"
             value={data.timeOfArrival}
             onChange={(e) => handleInputChange('timeOfArrival', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -235,7 +235,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             type="time"
             value={data.timeOfDeparture}
             onChange={(e) => handleInputChange('timeOfDeparture', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -246,7 +246,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             value={data.noOfDays === 0 ? '' : data.noOfDays}
             readOnly
             placeholder="Auto-calculated from dates"
-            className="w-full p-2 border rounded bg-gray-100"
+            className="w-full p-2 sm:p-3 border rounded bg-gray-100 text-sm sm:text-base"
           />
         </div>
 
@@ -259,7 +259,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             value={data.originalBookingAmount === 0 ? '' : data.originalBookingAmount}
             onChange={(e) => handleInputChange('originalBookingAmount', parseFloat(e.target.value) || 0)}
             placeholder="Enter original booking amount"
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -271,7 +271,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             value={data.totalPaid === 0 ? '' : data.totalPaid}
             onChange={(e) => handleInputChange('totalPaid', parseFloat(e.target.value) || 0)}
             placeholder="Enter amount paid by guest"
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
@@ -283,18 +283,16 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
             value={data.cancellationCharges === 0 ? '' : data.cancellationCharges}
             onChange={(e) => handleInputChange('cancellationCharges', parseFloat(e.target.value) || 0)}
             placeholder="Enter cancellation charges"
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
-
-
 
         <div>
           <label className="block text-sm font-medium mb-1">Payment Method:</label>
           <select
             value={data.paymentMethod}
             onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="Cash">Cash</option>
             <option value="Card">Card</option>
@@ -309,7 +307,7 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
           <select
             value={data.cancellationReason}
             onChange={(e) => handleInputChange('cancellationReason', e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="Customer Request">Customer Request</option>
             <option value="Emergency">Emergency</option>

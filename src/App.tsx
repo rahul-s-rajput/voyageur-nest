@@ -209,77 +209,86 @@ function App() {
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">Hotel Invoice Generator</h1>
-            <div className="flex space-x-4">
+          <div className="flex flex-col space-y-4 py-4 md:flex-row md:justify-between md:items-center md:space-y-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Hotel Invoice Generator</h1>
+            
+            {/* Mobile: Stacked layout, Desktop: Horizontal layout */}
+            <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-2 lg:space-x-4">
               {/* Invoice Type Toggle */}
-              <div className="flex bg-gray-200 rounded-md p-1">
+              <div className="flex bg-gray-200 rounded-md p-1 w-full sm:w-auto">
                 <button
                   onClick={() => setInvoiceType('regular')}
-                  className={`flex items-center px-3 py-1 rounded transition-colors ${
+                  className={`flex items-center justify-center px-3 py-2 rounded transition-colors flex-1 sm:flex-none ${
                     invoiceType === 'regular'
                       ? 'bg-white text-blue-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-800'
                   }`}
                 >
                   <FileText className="w-4 h-4 mr-1" />
-                  Regular
+                  <span className="text-sm sm:text-base">Regular</span>
                 </button>
                 <button
                   onClick={() => setInvoiceType('cancellation')}
-                  className={`flex items-center px-3 py-1 rounded transition-colors ${
+                  className={`flex items-center justify-center px-3 py-2 rounded transition-colors flex-1 sm:flex-none ${
                     invoiceType === 'cancellation'
                       ? 'bg-white text-red-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-800'
                   }`}
                 >
                   <XCircle className="w-4 h-4 mr-1" />
-                  Cancellation
+                  <span className="text-sm sm:text-base">Cancellation</span>
                 </button>
               </div>
               
-              <button
-                onClick={handleNewInvoice}
-                className={`flex items-center px-4 py-2 text-white rounded-md transition-colors ${
-                  invoiceType === 'regular' 
-                    ? 'bg-purple-500 hover:bg-purple-600' 
-                    : 'bg-red-500 hover:bg-red-600'
-                }`}
-              >
-                {invoiceType === 'regular' ? <FileText className="w-4 h-4 mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
-                New {invoiceType === 'regular' ? 'Invoice' : 'Cancellation'}
-              </button>
-              <button
-                onClick={() => setActiveTab('form')}
-                className={`flex items-center px-4 py-2 rounded-md transition-colors ${
-                  activeTab === 'form'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <Edit3 className="w-4 h-4 mr-2" />
-                Edit Form
-              </button>
-              <button
-                onClick={() => setActiveTab('preview')}
-                className={`flex items-center px-4 py-2 rounded-md transition-colors ${
-                  activeTab === 'preview'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                Preview
-              </button>
-              {activeTab === 'preview' && (
+              {/* Action Buttons */}
+              <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
                 <button
-                  onClick={handlePrint}
-                  className="flex items-center px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+                  onClick={handleNewInvoice}
+                  className={`flex items-center justify-center px-4 py-2 text-white rounded-md transition-colors text-sm sm:text-base ${
+                    invoiceType === 'regular' 
+                      ? 'bg-purple-500 hover:bg-purple-600' 
+                      : 'bg-red-500 hover:bg-red-600'
+                  }`}
                 >
-                  <Printer className="w-4 h-4 mr-2" />
-                  Print {invoiceType === 'regular' ? 'Invoice' : 'Cancellation'}
+                  {invoiceType === 'regular' ? <FileText className="w-4 h-4 mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
+                  <span>New {invoiceType === 'regular' ? 'Invoice' : 'Cancellation'}</span>
                 </button>
-              )}
+                
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setActiveTab('form')}
+                    className={`flex items-center justify-center px-4 py-2 rounded-md transition-colors flex-1 sm:flex-none text-sm sm:text-base ${
+                      activeTab === 'form'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <Edit3 className="w-4 h-4 mr-2" />
+                    <span>Edit Form</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('preview')}
+                    className={`flex items-center justify-center px-4 py-2 rounded-md transition-colors flex-1 sm:flex-none text-sm sm:text-base ${
+                      activeTab === 'preview'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    <span>Preview</span>
+                  </button>
+                </div>
+                
+                {activeTab === 'preview' && (
+                  <button
+                    onClick={handlePrint}
+                    className="flex items-center justify-center px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-sm sm:text-base"
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    <span>Print {invoiceType === 'regular' ? 'Invoice' : 'Cancellation'}</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
