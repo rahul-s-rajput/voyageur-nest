@@ -10,20 +10,24 @@ interface CancellationInvoiceFormProps {
 export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = ({ data: initialData, onDataChange, folioNumber }) => {
   const getCurrentISTTime = () => {
     const now = new Date();
-    const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
     
-    const day = istTime.getDate().toString().padStart(2, '0');
-    const month = (istTime.getMonth() + 1).toString().padStart(2, '0');
-    const year = istTime.getFullYear();
+    // Get IST time using Intl.DateTimeFormat for more reliable formatting
+    const istDate = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(now);
     
-    const timeString = istTime.toLocaleTimeString('en-US', {
+    const istTime = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
       hour12: true
-    });
+    }).format(now);
     
-    return `${day}/${month}/${year} ${timeString}`;
+    return `${istDate} ${istTime}`;
   };
 
   const [data, setData] = useState<CancellationInvoiceData>(initialData);
@@ -158,9 +162,9 @@ export const CancellationInvoiceForm: React.FC<CancellationInvoiceFormProps> = (
         <div>
           <label className="block text-sm font-medium mb-1">Booking Date:</label>
           <input
-            type="datetime-local"
-            value={data.cancellationDate.includes('/') ? '' : data.cancellationDate}
-            onChange={(e) => handleInputChange('cancellationDate', e.target.value)}
+            type="date"
+            value={data.bookingDate}
+            onChange={(e) => handleInputChange('bookingDate', e.target.value)}
             className="w-full p-2 sm:p-3 border rounded text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>

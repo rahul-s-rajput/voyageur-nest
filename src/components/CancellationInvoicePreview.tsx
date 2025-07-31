@@ -8,10 +8,25 @@ interface CancellationInvoicePreviewProps {
 export const CancellationInvoicePreview: React.FC<CancellationInvoicePreviewProps> = ({ data }) => {
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
+    
+    // If it's already in DD/MM/YYYY format (from datetime string), extract just the date part
+    if (dateString.includes('/') && dateString.includes(' ')) {
+      return dateString.split(' ')[0]; // Extract just the date part before the space
+    }
+    
+    // If it's already in DD/MM/YYYY format without time, return as is
+    if (dateString.includes('/') && !dateString.includes(' ')) {
+      return dateString;
+    }
+    
     // Parse the date string directly without timezone conversion
     // Assuming dateString is in YYYY-MM-DD format from date input
-    const [year, month, day] = dateString.split('-');
-    return `${day}/${month}/${year}`;
+    if (dateString.includes('-') && dateString.length === 10) {
+      const [year, month, day] = dateString.split('-');
+      return `${day}/${month}/${year}`;
+    }
+    
+    return dateString;
   };
 
   const formatDateTime = (dateTimeString: string) => {
@@ -43,20 +58,24 @@ export const CancellationInvoicePreview: React.FC<CancellationInvoicePreviewProp
     
     // Fallback: parse as date and format to IST format (for legacy data)
     const date = new Date(dateTimeString);
-    const istTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
     
-    const day = istTime.getDate().toString().padStart(2, '0');
-    const month = (istTime.getMonth() + 1).toString().padStart(2, '0');
-    const year = istTime.getFullYear();
+    // Get IST time using Intl.DateTimeFormat for more reliable formatting
+    const istDate = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(date);
     
-    const timeString = istTime.toLocaleTimeString('en-US', {
+    const istTime = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
       hour12: true
-    });
+    }).format(date);
     
-    return `${day}/${month}/${year} ${timeString}`;
+    return `${istDate} ${istTime}`;
   };
 
   const formatTime = (timeString: string) => {
@@ -166,11 +185,11 @@ export const CancellationInvoicePreview: React.FC<CancellationInvoicePreviewProp
             <div className="space-y-1">
               <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '2px' }}>
                 <span className="font-semibold" style={{fontWeight: 'bold'}}>Date</span>
-                <span>: {formatDateTime(data.date)}</span>
+                <span>: {data.date}</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '2px' }}>
                 <span className="font-semibold" style={{fontWeight: 'bold'}}>Booking Date</span>
-                <span>: {formatDateTime(data.cancellationDate)}</span>
+                <span>: {formatDate(data.bookingDate)}</span>
               </div>
               <div className="opacity-0">
                 <span>&nbsp;</span>
@@ -210,7 +229,7 @@ export const CancellationInvoicePreview: React.FC<CancellationInvoicePreviewProp
                 <td className="border-r border-black p-2">India</td>
                 <td className="border-r border-black p-2 text-center">{data.noOfPax}</td>
                 <td className="border-r border-black p-2 text-center">{data.adultChild}</td>
-                <td className="border-r border-black p-2 text-center">{data.grCardNo || '-'}</td>
+                <td className="border-r border-black p-2 text-center">{data.numberOfRooms}</td>
                 <td className="p-2 text-center">{data.roomNo}</td>
               </tr>
             </tbody>

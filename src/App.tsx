@@ -1,94 +1,38 @@
 import React, { useState, useEffect } from 'react';
+import { HomePage } from './components/HomePage';
 import { InvoiceForm } from './components/InvoiceForm';
 import { InvoicePreview } from './components/InvoicePreview';
-import { CancellationInvoiceForm } from './components/CancellationInvoiceForm';
 import { CancellationInvoicePreview } from './components/CancellationInvoicePreview';
+import { BookingDetails } from './components/BookingDetails';
+import { Booking, ViewMode } from './types/booking';
 import { InvoiceData, CancellationInvoiceData } from './types/invoice';
-import { Printer, Edit3, Eye, FileText, XCircle } from 'lucide-react';
-import { invoiceCounterService } from './lib/supabase';
+import { invoiceCounterService, bookingService } from './lib/supabase';
+import { NewBookingModal } from './components/NewBookingModal';
+import { InvoiceTemplate } from './components/InvoiceTemplate';
 
 function App() {
-  const [invoiceType, setInvoiceType] = useState<'regular' | 'cancellation'>('regular');
-  const [activeTab, setActiveTab] = useState<'form' | 'preview'>('form');
+  const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview'>('home');
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [showBookingDetails, setShowBookingDetails] = useState(false);
+  const [showNewBookingModal, setShowNewBookingModal] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [showCancellationInvoice, setShowCancellationInvoice] = useState(false);
+  const [invoiceBooking, setInvoiceBooking] = useState<Booking | null>(null);
+  const [cancellationInvoiceData, setCancellationInvoiceData] = useState<CancellationInvoiceData | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState<number>(391);
+  const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar');
   
-  // Initialize invoice counter from Supabase
-  const [invoiceCounter, setInvoiceCounter] = useState(391);
+  // Invoice related state
   const [isCounterLoaded, setIsCounterLoaded] = useState(false);
-
-  // Load counter from Supabase on app start
-  useEffect(() => {
-    const loadCounter = async () => {
-      try {
-        const counter = await invoiceCounterService.getCounter();
-        setInvoiceCounter(counter);
-        setIsCounterLoaded(true);
-      } catch (error) {
-        console.error('Failed to load counter:', error);
-        // Fallback to localStorage if Supabase fails
-        const savedCounter = localStorage.getItem('invoiceCounter');
-        setInvoiceCounter(savedCounter ? parseInt(savedCounter, 10) : 391);
-        setIsCounterLoaded(true);
-      }
-    };
-
-    loadCounter();
-  }, []);
-
-  // Update invoice numbers when counter changes
-  useEffect(() => {
-    if (!isCounterLoaded) return;
-
-    // Update regular invoice number
-    setInvoiceData(prev => ({
-      ...prev,
-      invoiceNumber: `520/${invoiceCounter}`
-    }));
-
-    // Update cancellation invoice number
-    setCancellationData(prev => ({
-      ...prev,
-      invoiceNumber: `520/${invoiceCounter}`
-    }));
-  }, [invoiceCounter, isCounterLoaded]);
-
-  // Set up real-time subscription to counter changes
-  useEffect(() => {
-    if (!isCounterLoaded) return;
-
-    const subscription = invoiceCounterService.subscribeToCounter((newValue) => {
-      setInvoiceCounter(newValue);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [isCounterLoaded]);
-  
-  // Function to get current IST date and time formatted as dd/mm/yyyy hh:mm:ss AM/PM
-  const getCurrentISTTime = () => {
-    const now = new Date();
-    const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
-    
-    const day = istTime.getDate().toString().padStart(2, '0');
-    const month = (istTime.getMonth() + 1).toString().padStart(2, '0');
-    const year = istTime.getFullYear();
-    
-    const timeString = istTime.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
-    
-    return `${day}/${month}/${year} ${timeString}`;
-  };
-
+  const [activeTab, setActiveTab] = useState<'form' | 'preview'>('form');
   const [invoiceData, setInvoiceData] = useState<InvoiceData>({
     companyName: 'Voyageur Nest',
     companyAddress: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
     companyPhone: '+919876161215',
     companyEmail: 'voyageur.nest@gmail.com',
-    invoiceNumber: `520/${invoiceCounter}`,
+    invoiceNumber: `520/${391}`,
     guestName: '',
     billTo: '',
     address: '',
@@ -109,279 +53,461 @@ function App() {
     paymentMethod: 'UPI'
   });
 
-  const [cancellationData, setCancellationData] = useState<CancellationInvoiceData>({
-    companyName: 'Voyageur Nest',
-    companyAddress: 'Manali, Himachal Pradesh, 175131, India',
-    companyPhone: '+919876161215',
-    companyEmail: 'voyageur.nest@gmail.com',
-    invoiceNumber: `520/${invoiceCounter}`,
-    guestName: '',
-    billTo: '',
-    address: '',
-    companyNameBillTo: '',
-    billToRegNo: '',
-    date: getCurrentISTTime(),
-    noOfPax: 1,
-    adultChild: '1/0',
-    grCardNo: '',
-    roomNo: '',
-    dateOfArrival: '',
-    dateOfDeparture: '',
-    timeOfArrival: '12:00',
-    timeOfDeparture: '11:00',
-    noOfDays: 1,
-    originalBookingAmount: 0,
-    totalPaid: 0,
-    cancellationCharges: 0,
-    paymentMethod: 'Cash',
-    cancellationDate: getCurrentISTTime(),
-    cancellationReason: 'Customer Request'
-  });
+  // Function to get current IST date and time formatted as dd/mm/yyyy hh:mm:ss AM/PM
+  function getCurrentISTTime() {
+    const now = new Date();
+    
+    // Get IST time using Intl.DateTimeFormat for more reliable formatting
+    const istDate = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(now);
+    
+    const istTime = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }).format(now);
+    
+    return `${istDate} ${istTime}`;
+  }
 
-  const handleNewInvoice = async () => {
-    const newCounter = invoiceCounter + 1;
-    
-    try {
-      // Update counter in Supabase
-      const success = await invoiceCounterService.updateCounter(newCounter);
-      
-      if (success) {
-        setInvoiceCounter(newCounter);
-      } else {
-        // Fallback to localStorage if Supabase fails
-        localStorage.setItem('invoiceCounter', newCounter.toString());
-        setInvoiceCounter(newCounter);
+  // Load bookings and invoice counter
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        // Load bookings
+        const bookingsData = await bookingService.getBookings();
+        setBookings(bookingsData);
+
+        // Load counter
+        const counter = await invoiceCounterService.getCounter();
+        setInvoiceNumber(counter);
+        setIsCounterLoaded(true);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to update counter:', error);
-      // Fallback to localStorage
-      localStorage.setItem('invoiceCounter', newCounter.toString());
-      setInvoiceCounter(newCounter);
+    };
+
+    loadData();
+  }, []);
+
+  // Update invoice number when counter changes
+  useEffect(() => {
+    if (isCounterLoaded) {
+      setInvoiceData(prev => ({
+        ...prev,
+        invoiceNumber: `520/${invoiceNumber}`
+      }));
     }
-    
-    if (invoiceType === 'regular') {
-      setInvoiceData({
-        ...invoiceData,
-        invoiceNumber: `520/${newCounter}`,
-        date: getCurrentISTTime(),
-        guestName: '',
-        billTo: '',
-        address: '',
-        companyNameBillTo: '',
-        billToRegNo: '',
-        grCardNo: '',
-        roomNo: '',
-        dateOfArrival: '',
-        dateOfDeparture: '',
-        timeOfArrival: '',
-        timeOfDeparture: '',
-        noOfDays: 0,
-        noOfPax: 0,
-        adultChild: '',
-        grandTotal: 0,
-        paymentAmount: 0
-      });
-    } else {
-      setCancellationData({
+  }, [invoiceNumber, isCounterLoaded]);
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    if (!isCounterLoaded) return;
+
+    const counterSubscription = invoiceCounterService.subscribeToCounter((newValue) => {
+      setInvoiceNumber(newValue);
+    });
+
+    const bookingsSubscription = bookingService.subscribeToBookings((booking, eventType) => {
+      if (eventType === 'INSERT') {
+        setBookings(prev => [booking, ...prev]);
+      } else if (eventType === 'UPDATE') {
+        setBookings(prev => prev.map(b => b.id === booking.id ? booking : b));
+      } else if (eventType === 'DELETE') {
+        setBookings(prev => prev.filter(b => b.id !== booking.id));
+      }
+    });
+
+    return () => {
+      counterSubscription.unsubscribe();
+      bookingsSubscription.unsubscribe();
+    };
+  }, [isCounterLoaded]);
+
+  const handleCreateInvoice = async (booking: Booking) => {
+    try {
+      setInvoiceBooking(booking);
+      setShowInvoice(true);
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+    }
+  };
+
+  const handleCreateCancellationInvoice = async (booking: Booking) => {
+    try {
+      const noOfDays = Math.ceil(
+        (new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Create cancellation invoice data
+      const cancellationData: CancellationInvoiceData = {
         companyName: 'Voyageur Nest',
         companyAddress: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
         companyPhone: '+919876161215',
         companyEmail: 'voyageur.nest@gmail.com',
-        invoiceNumber: `520/${newCounter}`,
-        date: getCurrentISTTime(),
-        cancellationDate: getCurrentISTTime(),
-        guestName: '',
-        billTo: '',
+        invoiceNumber: booking.folioNumber || `520/${invoiceNumber}`,
+        guestName: booking.guestName,
+        billTo: booking.guestName,
         address: '',
         companyNameBillTo: '',
         billToRegNo: '',
-        noOfPax: 1,
-        adultChild: '1/0',
+        date: getCurrentISTTime(),
+        noOfPax: booking.noOfPax,
+        adultChild: booking.adultChild,
         grCardNo: '',
-        roomNo: '',
-        dateOfArrival: '',
-        dateOfDeparture: '',
+        roomNo: booking.roomNo,
+        numberOfRooms: booking.numberOfRooms,
+        dateOfArrival: booking.checkIn,
+        dateOfDeparture: booking.checkOut,
         timeOfArrival: '12:00',
         timeOfDeparture: '11:00',
-        noOfDays: 1,
-        originalBookingAmount: 0,
-        totalPaid: 0,
-        cancellationCharges: 0,
-        paymentMethod: 'Cash',
-        cancellationReason: 'Customer Request'
-      });
+        noOfDays: noOfDays,
+        originalBookingAmount: booking.totalAmount,
+        totalPaid: booking.paymentStatus === 'paid' ? booking.totalAmount : 
+                   booking.paymentStatus === 'partial' ? booking.totalAmount * 0.5 : 0,
+        cancellationCharges: booking.totalAmount, // Full amount as cancellation charge (no refund)
+        paymentMethod: 'UPI',
+        bookingDate: booking.bookingDate || '',
+        cancellationDate: getCurrentISTTime(),
+        cancellationReason: 'Guest requested cancellation'
+      };
+
+      setCancellationInvoiceData(cancellationData);
+      setShowCancellationInvoice(true);
+    } catch (error) {
+      console.error('Error creating cancellation invoice:', error);
     }
-    setActiveTab('form'); // Switch to form tab for new invoice
   };
 
-  const handlePrint = () => {
-    // Get all the stylesheets from the current page
-    const styles = Array.from(document.styleSheets)
-      .map(styleSheet => {
-        try {
-          return Array.from(styleSheet.cssRules)
-            .map(rule => rule.cssText)
-            .join('\n');
-        } catch (e) {
-          // Handle cross-origin stylesheets
-          return '';
-        }
-      })
-      .join('\n');
+  const handleCloseInvoice = () => {
+    setShowInvoice(false);
+    setInvoiceBooking(null);
+  };
 
-    const printContentId = invoiceType === 'regular' ? 'invoice-preview' : 'cancellation-invoice-preview';
-    const printContent = document.getElementById(printContentId);
-    const currentData = invoiceType === 'regular' ? invoiceData : cancellationData;
-    
-    if (printContent) {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>${invoiceType === 'regular' ? 'Invoice' : 'Cancellation Invoice'} - ${currentData.invoiceNumber}</title>
-              <style>
-                ${styles}
-                @media print {
-                  body { 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                  }
-                  .invoice-preview { 
-                    box-shadow: none !important; 
-                    max-width: none !important;
-                    margin: 0 !important;
-                  }
-                  @page { 
-                    margin: 0.5in !important; 
-                    size: A4 !important;
-                  }
-                  * {
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                  }
-                }
-              </style>
-            </head>
-            <body>
-              ${printContent.outerHTML}
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-        printWindow.print();
+  const handleCloseCancellationInvoice = () => {
+    setShowCancellationInvoice(false);
+    setCancellationInvoiceData(null);
+  };
+
+  const handleSelectBooking = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setShowBookingDetails(true);
+  };
+
+  const handleEditBooking = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setShowBookingDetails(true);
+  };
+
+  const handleUpdateBooking = async (id: string, updates: Partial<Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>>) => {
+    try {
+      const updatedBooking = await bookingService.updateBooking(id, updates);
+      if (updatedBooking) {
+        setBookings(prev => prev.map(b => b.id === id ? updatedBooking : b));
+        setSelectedBooking(updatedBooking);
+      }
+    } catch (error) {
+      console.error('Error updating booking:', error);
+    }
+  };
+
+  const handleDeleteBooking = async (bookingId: string) => {
+    if (window.confirm('Are you sure you want to delete this booking?')) {
+      try {
+        const success = await bookingService.deleteBooking(bookingId);
+        if (success) {
+          setBookings(prev => prev.filter(b => b.id !== bookingId));
+          setShowBookingDetails(false);
+          setSelectedBooking(null);
+        }
+      } catch (error) {
+        console.error('Error deleting booking:', error);
       }
     }
   };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    try {
+      const success = await bookingService.cancelBooking(bookingId);
+      if (success) {
+        setBookings(prev => prev.map(b => 
+          b.id === bookingId ? { ...b, cancelled: true } : b
+        ));
+        if (selectedBooking?.id === bookingId) {
+          setSelectedBooking(prev => prev ? { ...prev, cancelled: true } : null);
+        }
+      }
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+    }
+  };
+
+  const handleNewBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const newBooking = await bookingService.createBooking(bookingData);
+      if (newBooking) {
+        setShowNewBookingModal(false);
+      }
+    } catch (error) {
+      console.error('Error creating booking:', error);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleBackToHome = () => {
+    setCurrentView('home');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading booking management system...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentView === 'home') {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <h1 className="text-2xl font-bold text-gray-900">Booking Management System</h1>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <HomePage
+            bookings={bookings}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onNewBooking={() => setShowNewBookingModal(true)}
+            onSelectBooking={handleSelectBooking}
+            onEditBooking={handleEditBooking}
+            onDeleteBooking={handleDeleteBooking}
+            onCreateInvoice={handleCreateInvoice}
+            onCancelBooking={handleCancelBooking}
+            onCreateCancellationInvoice={handleCreateCancellationInvoice}
+          />
+              </div>
+              
+        {/* Modals */}
+        <BookingDetails
+          booking={selectedBooking}
+          isOpen={showBookingDetails}
+          onClose={() => {
+            setShowBookingDetails(false);
+            setSelectedBooking(null);
+          }}
+          onUpdate={(updatedBooking) => {
+            setBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
+            setSelectedBooking(updatedBooking);
+          }}
+          onCancel={handleCancelBooking}
+        />
+
+        <NewBookingModal
+          isOpen={showNewBookingModal}
+          onClose={() => setShowNewBookingModal(false)}
+          onBookingCreated={(booking) => {
+            setBookings(prev => [...prev, booking]);
+            setShowNewBookingModal(false);
+          }}
+        />
+
+        {showInvoice && invoiceBooking && (
+          <InvoiceTemplate
+            booking={invoiceBooking}
+            invoiceNumber={invoiceNumber}
+            onClose={handleCloseInvoice}
+          />
+        )}
+
+        {showCancellationInvoice && cancellationInvoiceData && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b print:hidden">
+                <h2 className="text-xl font-semibold text-gray-900">Cancellation Invoice</h2>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                  >
+                    Print
+                  </button>
+                  <button
+                    onClick={handleCloseCancellationInvoice}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <CancellationInvoicePreview data={cancellationInvoiceData} />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (currentView === 'invoice-form') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <h1 className="text-2xl font-bold text-gray-900">Invoice Generator</h1>
+                  <button
+                onClick={handleBackToHome}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                  >
+                Back to Bookings
+                  </button>
+              </div>
+            <div className="flex space-x-1">
+              <button
+                onClick={() => setActiveTab('form')}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg ${
+                  activeTab === 'form'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Form
+              </button>
+              <button
+                onClick={() => setActiveTab('preview')}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg ${
+                  activeTab === 'preview'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Preview
+              </button>
+          </div>
+        </div>
+      </div>
+
+        <div className="max-w-4xl mx-auto p-4">
+        {activeTab === 'form' ? (
+            <InvoiceForm 
+              data={invoiceData}
+              onChange={setInvoiceData}
+            />
+          ) : (
+            <InvoicePreview 
+              data={invoiceData}
+              onPrint={handlePrint}
+            />
+        )}
+      </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col space-y-4 py-4 md:flex-row md:justify-between md:items-center md:space-y-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Hotel Invoice Generator</h1>
-            
-            {/* Mobile: Stacked layout, Desktop: Horizontal layout */}
-            <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-2 lg:space-x-4">
-              {/* Invoice Type Toggle */}
-              <div className="flex bg-gray-200 rounded-md p-1 w-full sm:w-auto">
-                <button
-                  onClick={() => setInvoiceType('regular')}
-                  className={`flex items-center justify-center px-3 py-2 rounded transition-colors flex-1 sm:flex-none ${
-                    invoiceType === 'regular'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  <FileText className="w-4 h-4 mr-1" />
-                  <span className="text-sm sm:text-base">Regular</span>
-                </button>
-                <button
-                  onClick={() => setInvoiceType('cancellation')}
-                  className={`flex items-center justify-center px-3 py-2 rounded transition-colors flex-1 sm:flex-none ${
-                    invoiceType === 'cancellation'
-                      ? 'bg-white text-red-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  <XCircle className="w-4 h-4 mr-1" />
-                  <span className="text-sm sm:text-base">Cancellation</span>
-                </button>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
-                <button
-                  onClick={handleNewInvoice}
-                  className={`flex items-center justify-center px-4 py-2 text-white rounded-md transition-colors text-sm sm:text-base ${
-                    invoiceType === 'regular' 
-                      ? 'bg-purple-500 hover:bg-purple-600' 
-                      : 'bg-red-500 hover:bg-red-600'
-                  }`}
-                >
-                  {invoiceType === 'regular' ? <FileText className="w-4 h-4 mr-2" /> : <XCircle className="w-4 h-4 mr-2" />}
-                  <span>New {invoiceType === 'regular' ? 'Invoice' : 'Cancellation'}</span>
-                </button>
-                
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => setActiveTab('form')}
-                    className={`flex items-center justify-center px-4 py-2 rounded-md transition-colors flex-1 sm:flex-none text-sm sm:text-base ${
-                      activeTab === 'form'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    <Edit3 className="w-4 h-4 mr-2" />
-                    <span>Edit Form</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('preview')}
-                    className={`flex items-center justify-center px-4 py-2 rounded-md transition-colors flex-1 sm:flex-none text-sm sm:text-base ${
-                      activeTab === 'preview'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    <span>Preview</span>
-                  </button>
-                </div>
-                
-                {activeTab === 'preview' && (
-                  <button
-                    onClick={handlePrint}
-                    className="flex items-center justify-center px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-sm sm:text-base"
-                  >
-                    <Printer className="w-4 h-4 mr-2" />
-                    <span>Print {invoiceType === 'regular' ? 'Invoice' : 'Cancellation'}</span>
-                  </button>
-                )}
-              </div>
-            </div>
+          <div className="flex justify-between items-center py-4">
+            <h1 className="text-2xl font-bold text-gray-900">Booking Management System</h1>
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'form' ? (
-          invoiceType === 'regular' ? (
-            <InvoiceForm data={invoiceData} onChange={setInvoiceData} />
-          ) : (
-            <CancellationInvoiceForm data={cancellationData} onDataChange={setCancellationData} folioNumber={`520/${invoiceCounter}`} />
-          )
-        ) : (
-          invoiceType === 'regular' ? (
-            <InvoicePreview data={invoiceData} />
-          ) : (
-            <CancellationInvoicePreview data={cancellationData} />
-          )
-        )}
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <HomePage
+          bookings={bookings}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onNewBooking={() => setShowNewBookingModal(true)}
+          onSelectBooking={handleSelectBooking}
+          onEditBooking={handleEditBooking}
+          onDeleteBooking={handleDeleteBooking}
+          onCreateInvoice={handleCreateInvoice}
+          onCancelBooking={handleCancelBooking}
+          onCreateCancellationInvoice={handleCreateCancellationInvoice}
+        />
       </div>
+
+      {/* Modals */}
+      <BookingDetails
+        booking={selectedBooking}
+        isOpen={showBookingDetails}
+        onClose={() => {
+          setShowBookingDetails(false);
+          setSelectedBooking(null);
+        }}
+        onUpdate={(updatedBooking) => {
+          setBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
+          setSelectedBooking(updatedBooking);
+        }}
+        onCancel={handleCancelBooking}
+      />
+
+      <NewBookingModal
+        isOpen={showNewBookingModal}
+        onClose={() => setShowNewBookingModal(false)}
+        onBookingCreated={(booking) => {
+          setBookings(prev => [...prev, booking]);
+          setShowNewBookingModal(false);
+        }}
+      />
+
+      {showInvoice && invoiceBooking && (
+        <InvoiceTemplate
+          booking={invoiceBooking}
+          invoiceNumber={invoiceNumber}
+          onClose={handleCloseInvoice}
+        />
+      )}
+
+      {showCancellationInvoice && cancellationInvoiceData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b print:hidden">
+              <h2 className="text-xl font-semibold text-gray-900">Cancellation Invoice</h2>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                >
+                  Print
+                </button>
+                <button
+                  onClick={handleCloseCancellationInvoice}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <CancellationInvoicePreview data={cancellationInvoiceData} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

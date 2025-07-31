@@ -14,6 +14,7 @@ export interface InvoiceData {
   adultChild: string;
   grCardNo: string;
   roomNo: string;
+  numberOfRooms: number;
   dateOfArrival: string;
   dateOfDeparture: string;
   timeOfArrival: string;
@@ -40,6 +41,7 @@ export interface CancellationInvoiceData {
   adultChild: string;
   grCardNo: string;
   roomNo: string;
+  numberOfRooms: number;
   dateOfArrival: string;
   dateOfDeparture: string;
   timeOfArrival: string;
@@ -49,6 +51,7 @@ export interface CancellationInvoiceData {
   totalPaid: number;
   cancellationCharges: number;
   paymentMethod: string;
+  bookingDate: string;
   cancellationDate: string;
   cancellationReason: string;
 }
