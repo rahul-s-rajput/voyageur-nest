@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus } from 'lucide-react';
+import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, Mail, MapPin, CreditCard, Users, Calendar, Clock } from 'lucide-react';
 import { Booking } from '../types/booking';
+import { CheckInData } from '../types/checkin';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
-import { updateBookingWithValidation, invoiceCounterService } from '../lib/supabase';
+import { updateBookingWithValidation, invoiceCounterService, checkInService } from '../lib/supabase';
 import { InvoicePreview } from './InvoicePreview';
 import { CancellationInvoicePreview } from './CancellationInvoicePreview';
+import { QRCodeGenerator } from './QRCodeGenerator';
 
 interface BookingDetailsProps {
   booking: Booking | null;
@@ -26,13 +28,33 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showInvoice, setShowInvoice] = useState(false);
   const [showCancellationInvoice, setShowCancellationInvoice] = useState(false);
+  const [showQRCode, setShowQRCode] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState(391);
   const [cancellationInvoiceData, setCancellationInvoiceData] = useState<CancellationInvoiceData | null>(null);
   const [editData, setEditData] = useState<Partial<Booking>>({});
+  const [checkInData, setCheckInData] = useState<CheckInData | null>(null);
+  const [loadingCheckIn, setLoadingCheckIn] = useState(false);
 
   useEffect(() => {
     if (booking) {
       setEditData(booking);
+      setValidationErrors([]);
+      
+      // Fetch check-in data for this booking
+      const fetchCheckInData = async () => {
+        setLoadingCheckIn(true);
+        try {
+          const data = await checkInService.getCheckInDataByBookingId(booking.id);
+          setCheckInData(data);
+        } catch (error) {
+          console.error('Error fetching check-in data:', error);
+          setCheckInData(null);
+        } finally {
+          setLoadingCheckIn(false);
+        }
+      };
+      
+      fetchCheckInData();
     }
   }, [booking]);
 
@@ -94,6 +116,49 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     } catch {
       return dateString; // Return original if parsing fails
     }
+  };
+
+  const formatCheckInDataForDisplay = (data: CheckInData) => {
+    return {
+      personalInfo: {
+        name: `${data.firstName} ${data.lastName}`,
+        email: data.email,
+        phone: data.phone,
+        dateOfBirth: data.dateOfBirth,
+        nationality: data.nationality,
+        idType: data.idType,
+        idNumber: data.idNumber
+      },
+      address: {
+        street: data.address,
+        city: data.city,
+        state: data.state,
+        country: data.country,
+        zipCode: data.zipCode
+      },
+      emergencyContact: {
+        name: data.emergencyContactName,
+        phone: data.emergencyContactPhone,
+        relationship: data.emergencyContactRelation
+      },
+      visitInfo: {
+        purpose: data.purposeOfVisit,
+        arrivalDate: data.arrivalDate,
+        departureDate: data.departureDate,
+        roomNumber: data.roomNumber,
+        numberOfGuests: data.numberOfGuests,
+        specialRequests: data.specialRequests
+      },
+      preferences: {
+        wakeUpCall: data.preferences.wakeUpCall,
+        newspaper: data.preferences.newspaper,
+        extraTowels: data.preferences.extraTowels,
+        extraPillows: data.preferences.extraPillows,
+        roomService: data.preferences.roomService,
+        doNotDisturb: data.preferences.doNotDisturb
+      },
+      additionalGuests: data.additionalGuests
+    };
   };
 
   const handleEdit = () => {
@@ -158,7 +223,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     const { name, value } = e.target;
     
     setEditData(prev => {
-      let newData = {
+      const newData = {
         ...prev,
         [name]: name === 'noOfPax' || name === 'totalAmount' || name === 'paymentAmount' || name === 'numberOfRooms'
           ? parseFloat(value) || 0 
@@ -862,6 +927,246 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               </div>
             </div>
 
+            {/* Check-in Data Section */}
+            <div className="mt-8 border-t pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <User className="w-5 h-5 mr-2" />
+                  Digital Check-in Information
+                </h3>
+                {loadingCheckIn && (
+                  <div className="flex items-center text-sm text-gray-500">
+                    <Clock className="w-4 h-4 mr-1 animate-spin" />
+                    Loading...
+                  </div>
+                )}
+              </div>
+
+              {!loadingCheckIn && !checkInData && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Check-in form not completed yet.</strong> Guest can access the check-in form using the QR code or direct link.
+                  </p>
+                </div>
+              )}
+
+              {!loadingCheckIn && checkInData && (
+                <div className="space-y-6">
+                  {(() => {
+                    const formattedData = formatCheckInDataForDisplay(checkInData);
+                    return (
+                      <>
+                        {/* Personal Information */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <h4 className="font-medium text-blue-900 mb-3 flex items-center">
+                            <User className="w-4 h-4 mr-2" />
+                            Personal Information
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="font-medium text-gray-700">Name:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.personalInfo.name}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Email:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.personalInfo.email}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Phone:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.personalInfo.phone}</span>
+                            </div>
+                            {formattedData.personalInfo.dateOfBirth && (
+                              <div>
+                                <span className="font-medium text-gray-700">Date of Birth:</span>
+                                <span className="ml-2 text-gray-900">{formatDateForDisplay(formattedData.personalInfo.dateOfBirth)}</span>
+                              </div>
+                            )}
+                            {formattedData.personalInfo.nationality && (
+                              <div>
+                                <span className="font-medium text-gray-700">Nationality:</span>
+                                <span className="ml-2 text-gray-900">{formattedData.personalInfo.nationality}</span>
+                              </div>
+                            )}
+                            <div>
+                              <span className="font-medium text-gray-700">ID Type:</span>
+                              <span className="ml-2 text-gray-900 capitalize">{formattedData.personalInfo.idType.replace('_', ' ')}</span>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <span className="font-medium text-gray-700">ID Number:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.personalInfo.idNumber}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Address Information */}
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <h4 className="font-medium text-green-900 mb-3 flex items-center">
+                            <MapPin className="w-4 h-4 mr-2" />
+                            Address Information
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            <div className="sm:col-span-2">
+                              <span className="font-medium text-gray-700">Street:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.address.street}</span>
+                            </div>
+                            {formattedData.address.city && (
+                              <div>
+                                <span className="font-medium text-gray-700">City:</span>
+                                <span className="ml-2 text-gray-900">{formattedData.address.city}</span>
+                              </div>
+                            )}
+                            {formattedData.address.state && (
+                              <div>
+                                <span className="font-medium text-gray-700">State:</span>
+                                <span className="ml-2 text-gray-900">{formattedData.address.state}</span>
+                              </div>
+                            )}
+                            {formattedData.address.country && (
+                              <div>
+                                <span className="font-medium text-gray-700">Country:</span>
+                                <span className="ml-2 text-gray-900">{formattedData.address.country}</span>
+                              </div>
+                            )}
+                            {formattedData.address.zipCode && (
+                              <div>
+                                <span className="font-medium text-gray-700">Zip Code:</span>
+                                <span className="ml-2 text-gray-900">{formattedData.address.zipCode}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Emergency Contact */}
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <h4 className="font-medium text-red-900 mb-3 flex items-center">
+                            <Phone className="w-4 h-4 mr-2" />
+                            Emergency Contact
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="font-medium text-gray-700">Name:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.emergencyContact.name}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Phone:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.emergencyContact.phone}</span>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <span className="font-medium text-gray-700">Relationship:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.emergencyContact.relationship}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Visit Information */}
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                          <h4 className="font-medium text-purple-900 mb-3 flex items-center">
+                            <Calendar className="w-4 h-4 mr-2" />
+                            Visit Information
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="font-medium text-gray-700">Purpose:</span>
+                              <span className="ml-2 text-gray-900 capitalize">{formattedData.visitInfo.purpose}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Arrival Date:</span>
+                              <span className="ml-2 text-gray-900">{formatDateForDisplay(formattedData.visitInfo.arrivalDate)}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Departure Date:</span>
+                              <span className="ml-2 text-gray-900">{formatDateForDisplay(formattedData.visitInfo.departureDate)}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Room Number:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.visitInfo.roomNumber}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-700">Number of Guests:</span>
+                              <span className="ml-2 text-gray-900">{formattedData.visitInfo.numberOfGuests}</span>
+                            </div>
+                            {formattedData.visitInfo.specialRequests && (
+                              <div className="sm:col-span-2">
+                                <span className="font-medium text-gray-700">Special Requests:</span>
+                                <span className="ml-2 text-gray-900">{formattedData.visitInfo.specialRequests}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Additional Guests */}
+                        {formattedData.additionalGuests && formattedData.additionalGuests.length > 0 && (
+                          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                            <h4 className="font-medium text-indigo-900 mb-3 flex items-center">
+                              <Users className="w-4 h-4 mr-2" />
+                              Additional Guests
+                            </h4>
+                            <div className="space-y-2">
+                              {formattedData.additionalGuests.map((guest, index) => (
+                                <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
+                                  <span className="text-sm text-gray-900">{guest.name}</span>
+                                  <div className="text-xs text-gray-600">
+                                    {guest.age && <span>Age: {guest.age}</span>}
+                                    {guest.relation && <span className="ml-2">({guest.relation})</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Preferences */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Service Preferences
+                          </h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                            <div className="flex items-center">
+                              <span className="font-medium text-gray-700">Wake-up Call:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs ${formattedData.preferences.wakeUpCall ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {formattedData.preferences.wakeUpCall ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium text-gray-700">Newspaper:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs ${formattedData.preferences.newspaper ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {formattedData.preferences.newspaper ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium text-gray-700">Extra Towels:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs ${formattedData.preferences.extraTowels ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {formattedData.preferences.extraTowels ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium text-gray-700">Extra Pillows:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs ${formattedData.preferences.extraPillows ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {formattedData.preferences.extraPillows ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium text-gray-700">Room Service:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs ${formattedData.preferences.roomService ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {formattedData.preferences.roomService ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium text-gray-700">Do Not Disturb:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs ${formattedData.preferences.doNotDisturb ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {formattedData.preferences.doNotDisturb ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3 mt-6">
               {isEditing ? (
                 <>
@@ -890,6 +1195,13 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                   >
                     <FileText className="w-4 h-4 mr-2" />
                     Print Invoice
+                  </button>
+                  <button
+                    onClick={() => setShowQRCode(true)}
+                    className="flex-1 flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                  >
+                    <QrCode className="w-4 h-4 mr-2" />
+                    Check-in QR
                   </button>
                   {booking.cancelled && (
                     <button
@@ -980,6 +1292,26 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
           </div>
         </div>
       )}
+
+      {/* QR Code Modal */}
+      {showQRCode && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Check-in QR Code</h2>
+              <button
+                onClick={() => setShowQRCode(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <QRCodeGenerator bookingId={booking.id} />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
-}; 
+};

@@ -3,7 +3,7 @@ import { Calendar, Views, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Booking } from '../types/booking';
-import { Filter, X } from 'lucide-react';
+import { Filter } from 'lucide-react';
 
 const localizer = momentLocalizer(moment);
 
@@ -375,4 +375,4 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
       </div>
     </>
   );
-}; 
+};

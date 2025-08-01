@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { HomePage } from './components/HomePage';
 import { InvoiceForm } from './components/InvoiceForm';
 import { InvoicePreview } from './components/InvoicePreview';
 import { CancellationInvoicePreview } from './components/CancellationInvoicePreview';
 import { BookingDetails } from './components/BookingDetails';
+import { CheckInPage } from './pages/CheckInPage';
+import AdminPage from './pages/AdminPage';
 import { Booking, ViewMode } from './types/booking';
 import { InvoiceData, CancellationInvoiceData } from './types/invoice';
 import { invoiceCounterService, bookingService } from './lib/supabase';
 import { NewBookingModal } from './components/NewBookingModal';
 import { InvoiceTemplate } from './components/InvoiceTemplate';
 
-function App() {
+function MainApp() {
   const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview'>('home');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -43,6 +46,7 @@ function App() {
     adultChild: '',
     grCardNo: '',
     roomNo: '',
+    numberOfRooms: 1,
     dateOfArrival: '',
     dateOfDeparture: '',
     timeOfArrival: '',
@@ -208,18 +212,6 @@ function App() {
     setShowBookingDetails(true);
   };
 
-  const handleUpdateBooking = async (id: string, updates: Partial<Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>>) => {
-    try {
-      const updatedBooking = await bookingService.updateBooking(id, updates);
-      if (updatedBooking) {
-        setBookings(prev => prev.map(b => b.id === id ? updatedBooking : b));
-        setSelectedBooking(updatedBooking);
-      }
-    } catch (error) {
-      console.error('Error updating booking:', error);
-    }
-  };
-
   const handleDeleteBooking = async (bookingId: string) => {
     if (window.confirm('Are you sure you want to delete this booking?')) {
       try {
@@ -248,17 +240,6 @@ function App() {
       }
     } catch (error) {
       console.error('Error cancelling booking:', error);
-    }
-  };
-
-  const handleNewBooking = async (bookingData: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>) => {
-    try {
-      const newBooking = await bookingService.createBooking(bookingData);
-      if (newBooking) {
-        setShowNewBookingModal(false);
-      }
-    } catch (error) {
-      console.error('Error creating booking:', error);
     }
   };
 
@@ -509,6 +490,29 @@ function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        {/* Guest routes - Check-in only */}
+        <Route path="/checkin/:bookingId" element={<CheckInPage language="en" />} />
+        <Route path="/checkin/:bookingId/hi" element={<CheckInPage language="hi" />} />
+        
+        {/* Admin routes - Protected booking management system */}
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/*" element={<AdminPage />} />
+        
+        {/* Legacy routes - redirect to admin */}
+        <Route path="/" element={<Navigate to="/admin" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
+        
+        {/* Redirect any unknown routes to admin */}
+        <Route path="*" element={<Navigate to="/admin" replace />} />
+      </Routes>
+    </Router>
   );
 }
 

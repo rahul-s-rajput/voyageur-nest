@@ -1,6 +1,8 @@
-import React from 'react';
-import { Eye, Edit, CreditCard, FileText, Trash2, XCircle, Receipt } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Eye, Edit, CreditCard, FileText, Trash2, XCircle, Receipt, CheckCircle, Clock } from 'lucide-react';
 import { Booking } from '../types/booking';
+import { CheckInData } from '../types/checkin';
+import { checkInService } from '../lib/supabase';
 import { format } from 'date-fns';
 
 interface BookingListProps {
@@ -22,6 +24,66 @@ export const BookingList: React.FC<BookingListProps> = ({
   onCancelBooking,
   onCreateCancellationInvoice
 }) => {
+  const [checkInData, setCheckInData] = useState<Record<string, CheckInData>>({});
+  const [loadingCheckIns, setLoadingCheckIns] = useState(true);
+
+  // Fetch check-in data for all bookings
+  useEffect(() => {
+    const fetchCheckInData = async () => {
+      setLoadingCheckIns(true);
+      const checkInMap: Record<string, CheckInData> = {};
+      
+      try {
+        await Promise.all(
+          bookings.map(async (booking) => {
+            const checkIn = await checkInService.getCheckInDataByBookingId(booking.id);
+            if (checkIn) {
+              checkInMap[booking.id] = checkIn;
+            }
+          })
+        );
+        setCheckInData(checkInMap);
+      } catch (error) {
+        console.error('Error fetching check-in data:', error);
+      } finally {
+        setLoadingCheckIns(false);
+      }
+    };
+
+    if (bookings.length > 0) {
+      fetchCheckInData();
+    } else {
+      setLoadingCheckIns(false);
+    }
+  }, [bookings]);
+  const getCheckInStatusBadge = (bookingId: string) => {
+    if (loadingCheckIns) {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+          <Clock className="w-3 h-3 mr-1" />
+          Loading...
+        </span>
+      );
+    }
+
+    const hasCheckIn = checkInData[bookingId];
+    if (hasCheckIn) {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Completed
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+        <Clock className="w-3 h-3 mr-1" />
+        Pending
+      </span>
+    );
+  };
+
   const getStatusBadge = (status: Booking['status'], cancelled: boolean) => {
     if (cancelled) {
       return (
@@ -115,10 +177,19 @@ export const BookingList: React.FC<BookingListProps> = ({
                 </div>
               </div>
               
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex flex-col space-y-2">
                   {getPaymentStatusBadge(booking.paymentStatus)}
+                  <div>
+                    <span className="text-gray-500 text-xs">Digital Check-in:</span>
+                    <div className="mt-1">
+                      {getCheckInStatusBadge(booking.id)}
+                    </div>
+                  </div>
                 </div>
+              </div>
+              
+              <div className="flex items-center justify-end">
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => onSelectBooking(booking)}
@@ -211,6 +282,9 @@ export const BookingList: React.FC<BookingListProps> = ({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Payment
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Check-in Status
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -249,6 +323,9 @@ export const BookingList: React.FC<BookingListProps> = ({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {getPaymentStatusBadge(booking.paymentStatus)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {getCheckInStatusBadge(booking.id)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex items-center justify-end space-x-2">
@@ -319,4 +396,4 @@ export const BookingList: React.FC<BookingListProps> = ({
       </div>
     </div>
   );
-}; 
+};

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { Booking, BookingFilters } from '../types/booking'
+import { CheckInData, CheckInFormData } from '../types/checkin'
 
 // Replace these with your actual Supabase project credentials
 // You'll get these after creating your Supabase project
@@ -519,6 +520,530 @@ export const validateBooking = async (
       errors: ['An error occurred while validating the booking']
     };
   }
+}; 
+
+// Database functions for check-in data management
+export const checkInService = {
+  // Create check-in data for a booking
+  async createCheckInData(bookingId: string, formData: CheckInFormData): Promise<CheckInData | null> {
+    try {
+      // Transform camelCase to snake_case for database compatibility
+      const checkInData = {
+        booking_id: bookingId,
+        // Personal Details
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        date_of_birth: formData.dateOfBirth,
+        nationality: formData.nationality,
+        id_type: formData.idType,
+        id_number: formData.idNumber,
+        // Address
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        country: formData.country,
+        zip_code: formData.zipCode,
+        // Emergency Contact
+        emergency_contact_name: formData.emergencyContactName,
+        emergency_contact_phone: formData.emergencyContactPhone,
+        emergency_contact_relation: formData.emergencyContactRelation,
+        // Visit Details
+        purpose_of_visit: formData.purposeOfVisit,
+        arrival_date: formData.arrivalDate,
+        departure_date: formData.departureDate,
+        room_number: formData.roomNumber,
+        number_of_guests: formData.numberOfGuests,
+        // Additional Guests (use snake_case)
+        additional_guests: formData.additionalGuests,
+        // Special Requests
+        special_requests: formData.specialRequests,
+        // Preferences
+        preferences: formData.preferences,
+        // Agreement
+        terms_accepted: formData.termsAccepted,
+        marketing_consent: formData.marketingConsent,
+        // Metadata
+        form_completed_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('checkin_data')
+        .insert(checkInData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating check-in data:', error);
+        return null;
+      }
+
+      // Transform database fields to match interface
+      return {
+        id: data.id,
+        booking_id: data.booking_id,
+        guest_profile_id: data.guest_profile_id,
+        firstName: data.first_name,
+        lastName: data.last_name,
+        email: data.email,
+        phone: data.phone,
+        dateOfBirth: data.date_of_birth,
+        nationality: data.nationality,
+        idType: data.id_type,
+        idNumber: data.id_number,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        country: data.country,
+        zipCode: data.zip_code,
+        emergencyContactName: data.emergency_contact_name,
+        emergencyContactPhone: data.emergency_contact_phone,
+        emergencyContactRelation: data.emergency_contact_relation,
+        purposeOfVisit: data.purpose_of_visit,
+        arrivalDate: data.arrival_date,
+        departureDate: data.departure_date,
+        roomNumber: data.room_number,
+        numberOfGuests: data.number_of_guests,
+        additionalGuests: data.additional_guests || [],
+        specialRequests: data.special_requests,
+        preferences: data.preferences || {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: data.terms_accepted || false,
+        marketingConsent: data.marketing_consent || false,
+        id_document_urls: data.id_document_urls,
+        form_completed_at: data.form_completed_at,
+        created_at: data.created_at
+      };
+    } catch (error) {
+      console.error('Error in createCheckInData:', error);
+      return null;
+    }
+  },
+
+  // Get check-in data by booking ID
+  async getCheckInDataByBookingId(bookingId: string): Promise<CheckInData | null> {
+    try {
+      const { data, error } = await supabase
+        .from('checkin_data')
+        .select('*')
+        .eq('booking_id', bookingId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No check-in data found
+          return null;
+        }
+        console.error('Error fetching check-in data:', error);
+        return null;
+      }
+
+      // Transform database fields to match interface
+      return {
+        id: data.id,
+        booking_id: data.booking_id,
+        guest_profile_id: data.guest_profile_id,
+        firstName: data.first_name,
+        lastName: data.last_name,
+        email: data.email,
+        phone: data.phone,
+        dateOfBirth: data.date_of_birth,
+        nationality: data.nationality,
+        idType: data.id_type,
+        idNumber: data.id_number,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        country: data.country,
+        zipCode: data.zip_code,
+        emergencyContactName: data.emergency_contact_name,
+        emergencyContactPhone: data.emergency_contact_phone,
+        emergencyContactRelation: data.emergency_contact_relation,
+        purposeOfVisit: data.purpose_of_visit,
+        arrivalDate: data.arrival_date,
+        departureDate: data.departure_date,
+        roomNumber: data.room_number,
+        numberOfGuests: data.number_of_guests,
+        additionalGuests: data.additional_guests || [],
+        specialRequests: data.special_requests,
+        preferences: data.preferences || {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: data.terms_accepted || false,
+        marketingConsent: data.marketing_consent || false,
+        id_document_urls: data.id_document_urls,
+        form_completed_at: data.form_completed_at,
+        created_at: data.created_at
+      };
+    } catch (error) {
+      console.error('Error in getCheckInDataByBookingId:', error);
+      return null;
+    }
+  },
+
+  // Update check-in data
+  async updateCheckInData(id: string, updates: Partial<CheckInFormData>): Promise<CheckInData | null> {
+    try {
+      // Transform camelCase to snake_case for database compatibility
+      const updateData: any = {
+        form_completed_at: new Date().toISOString()
+      };
+
+      // Transform each field if it exists in updates
+      if (updates.firstName !== undefined) updateData.first_name = updates.firstName;
+      if (updates.lastName !== undefined) updateData.last_name = updates.lastName;
+      if (updates.email !== undefined) updateData.email = updates.email;
+      if (updates.phone !== undefined) updateData.phone = updates.phone;
+      if (updates.dateOfBirth !== undefined) updateData.date_of_birth = updates.dateOfBirth;
+      if (updates.nationality !== undefined) updateData.nationality = updates.nationality;
+      if (updates.idType !== undefined) updateData.id_type = updates.idType;
+      if (updates.idNumber !== undefined) updateData.id_number = updates.idNumber;
+      if (updates.address !== undefined) updateData.address = updates.address;
+      if (updates.city !== undefined) updateData.city = updates.city;
+      if (updates.state !== undefined) updateData.state = updates.state;
+      if (updates.country !== undefined) updateData.country = updates.country;
+      if (updates.zipCode !== undefined) updateData.zip_code = updates.zipCode;
+      if (updates.emergencyContactName !== undefined) updateData.emergency_contact_name = updates.emergencyContactName;
+      if (updates.emergencyContactPhone !== undefined) updateData.emergency_contact_phone = updates.emergencyContactPhone;
+      if (updates.emergencyContactRelation !== undefined) updateData.emergency_contact_relation = updates.emergencyContactRelation;
+      if (updates.purposeOfVisit !== undefined) updateData.purpose_of_visit = updates.purposeOfVisit;
+      if (updates.arrivalDate !== undefined) updateData.arrival_date = updates.arrivalDate;
+      if (updates.departureDate !== undefined) updateData.departure_date = updates.departureDate;
+      if (updates.roomNumber !== undefined) updateData.room_number = updates.roomNumber;
+      if (updates.numberOfGuests !== undefined) updateData.number_of_guests = updates.numberOfGuests;
+      if (updates.additionalGuests !== undefined) updateData.additional_guests = updates.additionalGuests;
+      if (updates.specialRequests !== undefined) updateData.special_requests = updates.specialRequests;
+      if (updates.preferences !== undefined) updateData.preferences = updates.preferences;
+      if (updates.termsAccepted !== undefined) updateData.terms_accepted = updates.termsAccepted;
+      if (updates.marketingConsent !== undefined) updateData.marketing_consent = updates.marketingConsent;
+
+      const { data, error } = await supabase
+        .from('checkin_data')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating check-in data:', error);
+        return null;
+      }
+
+      // Transform database fields to match interface
+      return {
+        id: data.id,
+        booking_id: data.booking_id,
+        guest_profile_id: data.guest_profile_id,
+        firstName: data.first_name,
+        lastName: data.last_name,
+        email: data.email,
+        phone: data.phone,
+        dateOfBirth: data.date_of_birth,
+        nationality: data.nationality,
+        idType: data.id_type,
+        idNumber: data.id_number,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        country: data.country,
+        zipCode: data.zip_code,
+        emergencyContactName: data.emergency_contact_name,
+        emergencyContactPhone: data.emergency_contact_phone,
+        emergencyContactRelation: data.emergency_contact_relation,
+        purposeOfVisit: data.purpose_of_visit,
+        arrivalDate: data.arrival_date,
+        departureDate: data.departure_date,
+        roomNumber: data.room_number,
+        numberOfGuests: data.number_of_guests,
+        additionalGuests: data.additional_guests || [],
+        specialRequests: data.special_requests,
+        preferences: data.preferences || {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: data.terms_accepted || false,
+        marketingConsent: data.marketing_consent || false,
+        id_document_urls: data.id_document_urls,
+        form_completed_at: data.form_completed_at,
+        created_at: data.created_at
+      };
+    } catch (error) {
+      console.error('Error in updateCheckInData:', error);
+      return null;
+    }
+  },
+
+  // Get all check-in data with optional filters
+  async getAllCheckInData(filters?: { 
+    dateRange?: { start: string; end: string };
+    completed?: boolean;
+  }): Promise<CheckInData[]> {
+    try {
+      let query = supabase
+        .from('checkin_data')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (filters?.dateRange) {
+        query = query
+          .gte('created_at', filters.dateRange.start)
+          .lte('created_at', filters.dateRange.end);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching check-in data:', error);
+        return [];
+      }
+
+      // Transform database fields to match interface
+      return (data || []).map(item => ({
+        id: item.id,
+        booking_id: item.booking_id,
+        guest_profile_id: item.guest_profile_id,
+        firstName: item.firstName || item.first_name || '',
+        lastName: item.lastName || item.last_name || '',
+        email: item.email || '',
+        phone: item.phone || '',
+        dateOfBirth: item.dateOfBirth || item.date_of_birth,
+        nationality: item.nationality,
+        idType: item.idType || item.id_type || 'passport',
+        idNumber: item.idNumber || item.id_number || '',
+        address: item.address || '',
+        city: item.city,
+        state: item.state,
+        country: item.country,
+        zipCode: item.zipCode || item.zip_code,
+        emergencyContactName: item.emergencyContactName || item.emergency_contact_name || '',
+        emergencyContactPhone: item.emergencyContactPhone || item.emergency_contact_phone || '',
+        emergencyContactRelation: item.emergencyContactRelation || item.emergency_contact_relation || '',
+        purposeOfVisit: item.purposeOfVisit || item.purpose_of_visit || 'leisure',
+        arrivalDate: item.arrivalDate || item.arrival_date || '',
+        departureDate: item.departureDate || item.departure_date || '',
+        roomNumber: item.roomNumber || item.room_number || '',
+        numberOfGuests: item.numberOfGuests || item.number_of_guests || 1,
+        additionalGuests: item.additionalGuests || item.additional_guests || [],
+        specialRequests: item.specialRequests || item.special_requests,
+        preferences: item.preferences || {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: item.termsAccepted || item.terms_accepted || false,
+        marketingConsent: item.marketingConsent || item.marketing_consent || false,
+        id_document_urls: item.id_document_urls,
+        form_completed_at: item.form_completed_at,
+        created_at: item.created_at
+      }));
+    } catch (error) {
+      console.error('Error in getAllCheckInData:', error);
+      return [];
+    }
+  },
+
+  // Auto-populate form data from booking
+  async getBookingDataForCheckIn(bookingId: string): Promise<Partial<CheckInFormData> | null> {
+    try {
+      const booking = await bookingService.getBookingById(bookingId);
+      if (!booking) {
+        return null;
+      }
+
+      // Auto-populate what we can from booking data
+      return {
+        firstName: booking.guestName?.split(' ')[0] || '',
+        lastName: booking.guestName?.split(' ').slice(1).join(' ') || '',
+        email: booking.contactEmail || '',
+        phone: booking.contactPhone || '',
+        dateOfBirth: '',
+        nationality: '',
+        idType: 'passport',
+        idNumber: '',
+        address: '', // This will need to be filled by guest
+        city: '',
+        state: '',
+        country: '',
+        zipCode: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+        emergencyContactRelation: '',
+        purposeOfVisit: 'leisure',
+        arrivalDate: booking.checkIn || '',
+        departureDate: booking.checkOut || '',
+        roomNumber: booking.roomNo || '',
+        numberOfGuests: booking.noOfPax || 1,
+        additionalGuests: [],
+        specialRequests: booking.specialRequests || '',
+        preferences: {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: false,
+        marketingConsent: false
+      };
+    } catch (error) {
+      console.error('Error in getBookingDataForCheckIn:', error);
+      return null;
+    }
+  },
+
+  // Get default form data structure
+  getDefaultCheckInFormData(): CheckInFormData {
+    try {
+      return {
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        dateOfBirth: '',
+        nationality: '',
+        idType: 'passport',
+        idNumber: '',
+        address: '',
+        city: '',
+        state: '',
+        country: '',
+        zipCode: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+        emergencyContactRelation: '',
+        purposeOfVisit: 'leisure',
+        arrivalDate: '',
+        departureDate: '',
+        roomNumber: '',
+        numberOfGuests: 1,
+        additionalGuests: [],
+        specialRequests: '',
+        preferences: {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: false,
+        marketingConsent: false
+      };
+    } catch (error) {
+      console.error('Error in getDefaultCheckInFormData:', error);
+      return {
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        idType: 'passport',
+        idNumber: '',
+        address: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+        emergencyContactRelation: '',
+        purposeOfVisit: 'leisure',
+        arrivalDate: '',
+        departureDate: '',
+        roomNumber: '',
+        numberOfGuests: 1,
+        additionalGuests: [],
+        preferences: {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: false,
+        marketingConsent: false
+      };
+    }
+  },
+
+  // Real-time subscription to check-in data changes
+  subscribeToCheckInData(callback: (checkInData: CheckInData, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void) {
+    return supabase
+      .channel('checkin_data_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'checkin_data' 
+        }, 
+        (payload) => {
+          const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+          
+          if (payload.new && typeof payload.new === 'object') {
+            const checkInData = payload.new as any;
+            const transformedData: CheckInData = {
+              id: checkInData.id,
+              booking_id: checkInData.booking_id,
+              guest_profile_id: checkInData.guest_profile_id,
+              firstName: checkInData.firstName || checkInData.first_name,
+              lastName: checkInData.lastName || checkInData.last_name,
+              email: checkInData.email,
+              phone: checkInData.phone,
+              dateOfBirth: checkInData.dateOfBirth || checkInData.date_of_birth,
+              nationality: checkInData.nationality,
+              idType: checkInData.idType || checkInData.id_type,
+              idNumber: checkInData.idNumber || checkInData.id_number,
+              address: checkInData.address,
+              city: checkInData.city,
+              state: checkInData.state,
+              country: checkInData.country,
+              zipCode: checkInData.zipCode || checkInData.zip_code,
+              emergencyContactName: checkInData.emergencyContactName || checkInData.emergency_contact_name,
+              emergencyContactPhone: checkInData.emergencyContactPhone || checkInData.emergency_contact_phone,
+              emergencyContactRelation: checkInData.emergencyContactRelation || checkInData.emergency_contact_relation,
+              purposeOfVisit: checkInData.purposeOfVisit || checkInData.purpose_of_visit,
+              arrivalDate: checkInData.arrivalDate || checkInData.arrival_date,
+              departureDate: checkInData.departureDate || checkInData.departure_date,
+              roomNumber: checkInData.roomNumber || checkInData.room_number,
+              numberOfGuests: checkInData.numberOfGuests || checkInData.number_of_guests,
+              additionalGuests: checkInData.additionalGuests || checkInData.additional_guests || [],
+              specialRequests: checkInData.specialRequests || checkInData.special_requests,
+              preferences: checkInData.preferences || {
+                wakeUpCall: false,
+                newspaper: false,
+                extraTowels: false,
+                extraPillows: false,
+                roomService: false,
+                doNotDisturb: false
+              },
+              termsAccepted: checkInData.termsAccepted || checkInData.terms_accepted || false,
+              marketingConsent: checkInData.marketingConsent || checkInData.marketing_consent || false,
+              id_document_urls: checkInData.id_document_urls,
+              form_completed_at: checkInData.form_completed_at,
+              created_at: checkInData.created_at
+            };
+            callback(transformedData, eventType);
+          }
+        }
+      )
+      .subscribe();
+  }
 };
 
 export const checkRoomConflict = async (
@@ -786,4 +1311,4 @@ export const getSchedulingConflicts = async (
     console.error('Error getting scheduling conflicts:', error);
     return { conflicts: [] };
   }
-}; 
+};
