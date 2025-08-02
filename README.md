@@ -28,6 +28,14 @@ This project has been transformed from an invoice generator into a comprehensive
 - Maintains existing invoice generation functionality
 - Automatic counter management
 
+### ✅ Translation Service
+- Google Gemini API with Gemma 3 model integration
+- Support for 140+ languages with advanced contextual understanding
+- 14,400 free requests per day
+- Intelligent caching system for improved performance
+- Batch translation capabilities for efficiency
+- Multilingual check-in forms and UI components
+
 ## Features To Be Completed
 
 ### 🔄 Components Needing Implementation
@@ -62,10 +70,15 @@ The `bookings` table includes:
    npm install
    ```
 
-2. Set up your Supabase credentials in `.env.local`:
+2. Set up your environment variables in `.env.local`:
    ```
+   # Supabase Configuration
    VITE_SUPABASE_URL=your_supabase_url
    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   
+   # Google Gemini API for Translation (14,400 free requests/day)
+   # Get your API key from: https://aistudio.google.com/app/apikey
+   VITE_GEMINI_API_KEY=your_gemini_api_key
    ```
 
 3. Run the database migrations:
@@ -95,4 +108,4 @@ The application now loads with a booking management dashboard instead of the inv
 4. Add booking status management
 5. Create booking reports and analytics
 
-The foundation is solid with full backend support and type safety throughout the application. 
+The foundation is solid with full backend support and type safety throughout the application.

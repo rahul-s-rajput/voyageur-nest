@@ -9,8 +9,8 @@ export interface CheckInData {
   phone: string;
   dateOfBirth?: string;
   nationality?: string;
-  idType: 'passport' | 'license' | 'national_id' | 'other';
-  idNumber: string;
+  idType: 'passport' | 'aadhaar' | 'pan_card' | 'driving_license' | 'voter_id' | 'ration_card' | 'other';
+  idNumber?: string;
   
   // Address
   address: string;
@@ -55,7 +55,15 @@ export interface CheckInData {
   termsAccepted: boolean;
   marketingConsent: boolean;
   
+  // ID Verification
   id_document_urls?: string[];
+  id_photo_urls?: string[];
+  id_verification_status?: 'pending' | 'verified' | 'rejected' | 'requires_review';
+  verification_notes?: string;
+  verified_by?: string;
+  verified_at?: string;
+  extracted_id_data?: Record<string, any>;
+  
   form_completed_at: string;
   created_at: string;
   updated_at?: string;
@@ -69,8 +77,8 @@ export interface CheckInFormData {
   phone: string;
   dateOfBirth?: string;
   nationality?: string;
-  idType: 'passport' | 'license' | 'national_id' | 'other';
-  idNumber: string;
+  idType: 'passport' | 'aadhaar' | 'pan_card' | 'driving_license' | 'voter_id' | 'ration_card' | 'other';
+  idNumber?: string;
   
   // Address
   address: string;
@@ -114,6 +122,10 @@ export interface CheckInFormData {
   // Agreement
   termsAccepted: boolean;
   marketingConsent: boolean;
+  
+  // ID Photos (for form submission)
+  idPhotos?: File[];
+  id_photo_urls?: string[];
 }
 
 export interface CheckInFormProps {
@@ -121,8 +133,8 @@ export interface CheckInFormProps {
   onSubmit: (data: CheckInFormData) => Promise<void>;
   initialData?: CheckInFormData;
   isSubmitting?: boolean;
-  language?: 'en' | 'hi';
-  onLanguageChange?: (language: 'en' | 'hi') => void;
+  language?: string; // Any language code (e.g., 'en-US', 'hi-IN', 'fr-FR', 'es-ES', etc.)
+  onLanguageChange?: (language: string) => void;
   externalErrorHandling?: boolean; // When true, parent handles errors
 }
 
@@ -150,6 +162,9 @@ export interface CheckInFormTranslations {
     invalidEmail: string;
     invalidPhone: string;
     languageSwitch: string;
+    idVerification: string;
+    idType: string;
+    uploadIdPhotos: string;
   };
   hi: {
     title: string;
@@ -174,5 +189,8 @@ export interface CheckInFormTranslations {
     invalidEmail: string;
     invalidPhone: string;
     languageSwitch: string;
+    idVerification: string;
+    idType: string;
+    uploadIdPhotos: string;
   };
 }

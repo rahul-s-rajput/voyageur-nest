@@ -564,6 +564,9 @@ export const checkInService = {
         // Agreement
         terms_accepted: formData.termsAccepted,
         marketing_consent: formData.marketingConsent,
+        // ID Verification
+        id_photo_urls: formData.id_photo_urls || [],
+        id_verification_status: 'pending',
         // Metadata
         form_completed_at: new Date().toISOString()
       };
@@ -618,6 +621,12 @@ export const checkInService = {
         termsAccepted: data.terms_accepted || false,
         marketingConsent: data.marketing_consent || false,
         id_document_urls: data.id_document_urls,
+        id_photo_urls: data.id_photo_urls || [],
+        id_verification_status: data.id_verification_status || 'pending',
+        verification_notes: data.verification_notes,
+        verified_by: data.verified_by,
+        verified_at: data.verified_at,
+        extracted_id_data: data.extracted_id_data,
         form_completed_at: data.form_completed_at,
         created_at: data.created_at
       };
@@ -684,6 +693,12 @@ export const checkInService = {
         termsAccepted: data.terms_accepted || false,
         marketingConsent: data.marketing_consent || false,
         id_document_urls: data.id_document_urls,
+        id_photo_urls: data.id_photo_urls || [],
+        id_verification_status: data.id_verification_status || 'pending',
+        verification_notes: data.verification_notes,
+        verified_by: data.verified_by,
+        verified_at: data.verified_at,
+        extracted_id_data: data.extracted_id_data,
         form_completed_at: data.form_completed_at,
         created_at: data.created_at
       };
@@ -780,6 +795,12 @@ export const checkInService = {
         termsAccepted: data.terms_accepted || false,
         marketingConsent: data.marketing_consent || false,
         id_document_urls: data.id_document_urls,
+        id_photo_urls: data.id_photo_urls || [],
+        id_verification_status: data.id_verification_status || 'pending',
+        verification_notes: data.verification_notes,
+        verified_by: data.verified_by,
+        verified_at: data.verified_at,
+        extracted_id_data: data.extracted_id_data,
         form_completed_at: data.form_completed_at,
         created_at: data.created_at
       };
@@ -852,6 +873,12 @@ export const checkInService = {
         termsAccepted: item.termsAccepted || item.terms_accepted || false,
         marketingConsent: item.marketingConsent || item.marketing_consent || false,
         id_document_urls: item.id_document_urls,
+        id_photo_urls: item.id_photo_urls || [],
+        id_verification_status: item.id_verification_status || 'pending',
+        verification_notes: item.verification_notes,
+        verified_by: item.verified_by,
+        verified_at: item.verified_at,
+        extracted_id_data: item.extracted_id_data,
         form_completed_at: item.form_completed_at,
         created_at: item.created_at
       }));
@@ -1310,5 +1337,217 @@ export const getSchedulingConflicts = async (
   } catch (error) {
     console.error('Error getting scheduling conflicts:', error);
     return { conflicts: [] };
+  }
+};
+
+// ID Verification Service
+export const verificationService = {
+  // Update verification status
+  async updateVerificationStatus(
+    checkInId: string,
+    status: 'pending' | 'verified' | 'rejected',
+    notes?: string,
+    verifiedBy?: string
+  ): Promise<boolean> {
+    try {
+      const updateData: any = {
+        id_verification_status: status,
+        verification_notes: notes,
+        verified_by: verifiedBy
+      };
+
+      if (status === 'verified' || status === 'rejected') {
+        updateData.verified_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('checkin_data')
+        .update(updateData)
+        .eq('id', checkInId);
+
+      if (error) {
+        console.error('Error updating verification status:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in updateVerificationStatus:', error);
+      return false;
+    }
+  },
+
+  // Get pending verifications
+  async getPendingVerifications(): Promise<CheckInData[]> {
+    try {
+      const { data, error } = await supabase
+        .from('checkin_data')
+        .select('*')
+        .eq('id_verification_status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pending verifications:', error);
+        return [];
+      }
+
+      // Transform database fields to match interface
+      return (data || []).map(item => ({
+        id: item.id,
+        booking_id: item.booking_id,
+        guest_profile_id: item.guest_profile_id,
+        firstName: item.first_name || '',
+        lastName: item.last_name || '',
+        email: item.email || '',
+        phone: item.phone || '',
+        dateOfBirth: item.date_of_birth,
+        nationality: item.nationality,
+        idType: item.id_type || 'passport',
+        idNumber: item.id_number || '',
+        address: item.address || '',
+        city: item.city,
+        state: item.state,
+        country: item.country,
+        zipCode: item.zip_code,
+        emergencyContactName: item.emergency_contact_name || '',
+        emergencyContactPhone: item.emergency_contact_phone || '',
+        emergencyContactRelation: item.emergency_contact_relation || '',
+        purposeOfVisit: item.purpose_of_visit || 'leisure',
+        arrivalDate: item.arrival_date || '',
+        departureDate: item.departure_date || '',
+        roomNumber: item.room_number || '',
+        numberOfGuests: item.number_of_guests || 1,
+        additionalGuests: item.additional_guests || [],
+        specialRequests: item.special_requests,
+        preferences: item.preferences || {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: item.terms_accepted || false,
+        marketingConsent: item.marketing_consent || false,
+        id_document_urls: item.id_document_urls,
+        id_photo_urls: item.id_photo_urls || [],
+        id_verification_status: item.id_verification_status || 'pending',
+        verification_notes: item.verification_notes,
+        verified_by: item.verified_by,
+        verified_at: item.verified_at,
+        extracted_id_data: item.extracted_id_data,
+        form_completed_at: item.form_completed_at,
+        created_at: item.created_at
+      }));
+    } catch (error) {
+      console.error('Error in getPendingVerifications:', error);
+      return [];
+    }
+  },
+
+  // Get verification statistics
+  async getVerificationStats(): Promise<{
+    total: number;
+    pending: number;
+    verified: number;
+    rejected: number;
+  }> {
+    try {
+      const { data, error } = await supabase
+        .from('checkin_data')
+        .select('id_verification_status');
+
+      if (error) {
+        console.error('Error fetching verification stats:', error);
+        return { total: 0, pending: 0, verified: 0, rejected: 0 };
+      }
+
+      const stats = {
+        total: data?.length || 0,
+        pending: 0,
+        verified: 0,
+        rejected: 0
+      };
+
+      data?.forEach(item => {
+        const status = item.id_verification_status || 'pending';
+        if (status === 'pending') stats.pending++;
+        else if (status === 'verified') stats.verified++;
+        else if (status === 'rejected') stats.rejected++;
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('Error in getVerificationStats:', error);
+      return { total: 0, pending: 0, verified: 0, rejected: 0 };
+    }
+  },
+
+  // Search check-ins for verification
+  async searchCheckIns(query: string): Promise<CheckInData[]> {
+    try {
+      const { data, error } = await supabase
+        .from('checkin_data')
+        .select('*')
+        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,id_number.ilike.%${query}%`)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error searching check-ins:', error);
+        return [];
+      }
+
+      // Transform database fields to match interface
+      return (data || []).map(item => ({
+        id: item.id,
+        booking_id: item.booking_id,
+        guest_profile_id: item.guest_profile_id,
+        firstName: item.first_name || '',
+        lastName: item.last_name || '',
+        email: item.email || '',
+        phone: item.phone || '',
+        dateOfBirth: item.date_of_birth,
+        nationality: item.nationality,
+        idType: item.id_type || 'passport',
+        idNumber: item.id_number || '',
+        address: item.address || '',
+        city: item.city,
+        state: item.state,
+        country: item.country,
+        zipCode: item.zip_code,
+        emergencyContactName: item.emergency_contact_name || '',
+        emergencyContactPhone: item.emergency_contact_phone || '',
+        emergencyContactRelation: item.emergency_contact_relation || '',
+        purposeOfVisit: item.purpose_of_visit || 'leisure',
+        arrivalDate: item.arrival_date || '',
+        departureDate: item.departure_date || '',
+        roomNumber: item.room_number || '',
+        numberOfGuests: item.number_of_guests || 1,
+        additionalGuests: item.additional_guests || [],
+        specialRequests: item.special_requests,
+        preferences: item.preferences || {
+          wakeUpCall: false,
+          newspaper: false,
+          extraTowels: false,
+          extraPillows: false,
+          roomService: false,
+          doNotDisturb: false
+        },
+        termsAccepted: item.terms_accepted || false,
+        marketingConsent: item.marketing_consent || false,
+        id_document_urls: item.id_document_urls,
+        id_photo_urls: item.id_photo_urls || [],
+        id_verification_status: item.id_verification_status || 'pending',
+        verification_notes: item.verification_notes,
+        verified_by: item.verified_by,
+        verified_at: item.verified_at,
+        extracted_id_data: item.extracted_id_data,
+        form_completed_at: item.form_completed_at,
+        created_at: item.created_at
+      }));
+    } catch (error) {
+      console.error('Error in searchCheckIns:', error);
+      return [];
+    }
   }
 };

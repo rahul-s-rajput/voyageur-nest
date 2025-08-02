@@ -7,6 +7,7 @@ import { CancellationInvoicePreview } from './components/CancellationInvoicePrev
 import { BookingDetails } from './components/BookingDetails';
 import { CheckInPage } from './pages/CheckInPage';
 import AdminPage from './pages/AdminPage';
+import TestIDVerification from './pages/test-id-verification';
 import { Booking, ViewMode } from './types/booking';
 import { InvoiceData, CancellationInvoiceData } from './types/invoice';
 import { invoiceCounterService, bookingService } from './lib/supabase';
@@ -500,6 +501,9 @@ function App() {
         {/* Guest routes - Check-in only */}
         <Route path="/checkin/:bookingId" element={<CheckInPage language="en" />} />
         <Route path="/checkin/:bookingId/hi" element={<CheckInPage language="hi" />} />
+        
+        {/* Test routes - ID Verification Demo */}
+        <Route path="/test-id-verification" element={<TestIDVerification />} />
         
         {/* Admin routes - Protected booking management system */}
         <Route path="/admin" element={<AdminPage />} />

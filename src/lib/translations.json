@@ -1,0 +1,132 @@
+{
+  "en-US": {
+    "app": {
+      "title": "ID Verification System Demo",
+      "subtitle": "Guest Check-in"
+    },
+    "form": {
+      "title": "Digital Check-in Form",
+      "sections": {
+        "personalDetails": "Personal Details",
+        "idVerification": "ID Verification",
+        "emergencyContact": "Emergency Contact",
+        "purposeOfVisit": "Purpose of Visit",
+        "additionalGuests": "Additional Guests"
+      },
+      "fields": {
+         "firstName": "First Name",
+         "lastName": "Last Name",
+         "email": "Email Address",
+         "phone": "Phone Number",
+         "address": "Address",
+         "idType": "ID Type",
+         "selectIdType": "Select ID Type",
+         "uploadIdPhotos": "Upload ID Photos",
+         "emergencyContactName": "Emergency Contact Name",
+         "emergencyContactPhone": "Emergency Contact Phone",
+         "relationship": "Relationship",
+         "purposeOfVisit": "Purpose of Visit",
+         "termsAccepted": "I accept the terms and conditions",
+         "marketingConsent": "I consent to receive marketing communications"
+       },
+       "purposeOptions": {
+         "leisure": "Tourism / Vacation",
+         "business": "Business",
+         "family": "Family Visit",
+         "medical": "Medical",
+         "other": "Other"
+       },
+      "idTypes": {
+        "passport": "Passport",
+        "aadhaar": "Aadhaar Card",
+        "panCard": "PAN Card",
+        "drivingLicense": "Driving License",
+        "voterId": "Voter ID Card",
+        "rationCard": "Ration Card",
+        "other": "Other"
+      },
+      "buttons": {
+        "addGuest": "Add Guest",
+        "removeGuest": "Remove",
+        "submitting": "Submitting...",
+        "submitCheckIn": "Submit Check-In"
+      },
+      "validation": {
+      "required": "This field is required",
+      "emailInvalid": "Please enter a valid email address",
+      "invalidEmail": "Please enter a valid email address",
+      "phoneInvalid": "Please enter a valid phone number",
+      "invalidPhone": "Please enter a valid phone number",
+      "termsRequired": "You must accept the terms and conditions"
+    }
+    },
+    "placeholders": {
+       "enterFirstName": "Enter your first name",
+       "enterLastName": "Enter your last name",
+       "enterEmail": "Enter your email address",
+       "enterPhone": "Enter your phone number",
+       "enterAddress": "Enter your address",
+       "selectIdType": "Select ID Type",
+       "selectPurpose": "Select purpose",
+       "enterEmergencyName": "Enter emergency contact name",
+       "enterEmergencyPhone": "Enter emergency contact phone",
+       "enterRelationship": "Enter relationship",
+       "guestName": "Guest {{number}} name"
+     },
+    "options": {
+      "purposes": {
+        "tourism": "Tourism / Vacation",
+        "business": "Business",
+        "medical": "Medical",
+        "education": "Education",
+        "family": "Family Visit",
+        "other": "Other"
+      },
+      "relationships": {
+        "spouse": "Spouse",
+        "parent": "Parent",
+        "child": "Child",
+        "sibling": "Sibling",
+        "friend": "Friend",
+        "colleague": "Colleague",
+        "other": "Other"
+      }
+    },
+    "terms": {
+      "agreeToTerms": "I agree to the terms and conditions",
+      "consentToDataProcessing": "I consent to data processing requirements"
+    },
+    "messages": {
+      "checkInSuccess": "Check-in completed successfully!",
+      "checkInError": "An error occurred during check-in. Please try again.",
+      "translationUnavailable": "Translation service temporarily unavailable. Showing English text.",
+      "noAdditionalGuests": "No additional guests added"
+    },
+    "languageSelector": {
+      "loading": "Loading..."
+    },
+    "idUpload": {
+      "frontSide": "Front Side",
+      "backSide": "Back Side",
+      "uploadFront": "Upload Front",
+      "uploadBack": "Upload Back",
+      "dragDropText": "Drag and drop your ID photo here, or click to select",
+      "fileTypeSupport": "Supports: JPG, PNG, PDF (Max 5MB)"
+    },
+    "checkInPage": {
+      "loading": "Loading...",
+      "error": "Error",
+      "digitalCheckIn": "Digital Check-in",
+      "bookingId": "Booking ID:",
+      "guest": "Guest:",
+      "room": "Room:",
+      "checkInDate": "Check-in Date:",
+      "checkInComplete": "Check-in Complete!",
+      "checkInSuccess": "Your check-in form has been submitted successfully.",
+      "alreadyCompleted": "You have already completed the check-in form. You can update it below.",
+      "canClosePageNow": "You can now close this page.",
+      "processCompleted": "Check-in process completed.",
+      "errorPrefix": "Error: "
+    }
+  }
+}

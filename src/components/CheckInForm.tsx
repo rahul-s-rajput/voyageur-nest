@@ -1,70 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { CheckInFormData, CheckInFormProps, CheckInFormTranslations } from '../types/checkin';
-
-const translations: CheckInFormTranslations = {
-  en: {
-    title: 'Digital Check-in Form',
-    personalDetails: 'Personal Details',
-    name: 'Full Name',
-    email: 'Email Address',
-    phone: 'Phone Number',
-    address: 'Address',
-    emergencyContact: 'Emergency Contact',
-    emergencyName: 'Emergency Contact Name',
-    emergencyPhone: 'Emergency Contact Phone',
-    relationship: 'Relationship',
-    purposeOfVisit: 'Purpose of Visit',
-    additionalGuests: 'Additional Guests',
-    addGuest: 'Add Guest',
-    removeGuest: 'Remove',
-    submit: 'Complete Check-in',
-    submitting: 'Submitting...',
-    success: 'Check-in completed successfully!',
-    error: 'Error submitting form. Please try again.',
-    required: 'This field is required',
-    invalidEmail: 'Please enter a valid email address',
-    invalidPhone: 'Please enter a valid phone number',
-    languageSwitch: 'हिंदी'
-  },
-  hi: {
-    title: 'डिजिटल चेक-इन फॉर्म',
-    personalDetails: 'व्यक्तिगत विवरण',
-    name: 'पूरा नाम',
-    email: 'ईमेल पता',
-    phone: 'फोन नंबर',
-    address: 'पता',
-    emergencyContact: 'आपातकालीन संपर्क',
-    emergencyName: 'आपातकालीन संपर्क का नाम',
-    emergencyPhone: 'आपातकालीन संपर्क फोन',
-    relationship: 'रिश्ता',
-    purposeOfVisit: 'यात्रा का उद्देश्य',
-    additionalGuests: 'अतिरिक्त मेहमान',
-    addGuest: 'मेहमान जोड़ें',
-    removeGuest: 'हटाएं',
-    submit: 'चेक-इन पूरा करें',
-    submitting: 'जमा कर रहे हैं...',
-    success: 'चेक-इन सफलतापूर्वक पूरा हुआ!',
-    error: 'फॉर्म जमा करने में त्रुटि। कृपया पुनः प्रयास करें।',
-    required: 'यह फील्ड आवश्यक है',
-    invalidEmail: 'कृपया एक वैध ईमेल पता दर्ज करें',
-    invalidPhone: 'कृपया एक वैध फोन नंबर दर्ज करें',
-    languageSwitch: 'English'
-  }
-};
+import { CheckInFormData, CheckInFormProps } from '../types/checkin';
+import IDPhotoUpload from './IDPhotoUpload';
+import { StorageService } from '../lib/storage';
+import { useTranslation } from '../hooks/useTranslation';
+import LanguageSelector from './LanguageSelector';
 
 export const CheckInForm: React.FC<CheckInFormProps> = ({
   bookingId,
   onSubmit,
   initialData,
   isSubmitting = false,
-  language = 'en',
+  language = 'en-US',
   onLanguageChange,
   externalErrorHandling = false
 }) => {
-  const [currentLanguage, setCurrentLanguage] = useState<'en' | 'hi'>(language);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const t = translations[currentLanguage];
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showErrorMessage, setShowErrorMessage] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  
+  // Initialize translation hook with the current language
+  const { t, isLoading: isTranslating, error: translationError, setLanguage, currentLanguage } = useTranslation(language || 'en-US');
 
   const {
     register,
@@ -82,7 +41,6 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
       dateOfBirth: '',
       nationality: '',
       idType: 'passport',
-      idNumber: '',
       address: '',
       city: '',
       state: '',
@@ -116,10 +74,9 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
     name: 'additionalGuests'
   });
 
-  const handleLanguageToggle = () => {
-    const newLanguage = currentLanguage === 'en' ? 'hi' : 'en';
-    setCurrentLanguage(newLanguage);
-    onLanguageChange?.(newLanguage);
+  const handleLanguageChange = async (languageCode: string) => {
+    await setLanguage(languageCode);
+    onLanguageChange?.(languageCode);
   };
 
   const onFormSubmit = async (data: CheckInFormData) => {
@@ -127,7 +84,23 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
       // Let parent component handle errors, but still catch them to prevent form success state
       try {
         setSubmitStatus('idle');
-        await onSubmit(data);
+        
+        // Handle ID photo uploads if present
+        let idPhotoUrls: string[] = [];
+        if (data.idPhotos && data.idPhotos.length > 0) {
+          const tempCheckInId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const uploadResults = await StorageService.uploadFiles(data.idPhotos, tempCheckInId);
+          idPhotoUrls = uploadResults.filter(result => result.success && result.url).map(result => result.url!);
+        }
+        
+        // Prepare data for submission (remove File objects, add URLs)
+        const submissionData = {
+          ...data,
+          idPhotos: undefined, // Remove File objects
+          id_photo_urls: idPhotoUrls, // Add uploaded URLs
+        };
+        
+        await onSubmit(submissionData);
         setSubmitStatus('success');
         // Reset form after successful submission
         setTimeout(() => {
@@ -143,7 +116,23 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
       // Handle errors internally (original behavior)
       try {
         setSubmitStatus('idle');
-        await onSubmit(data);
+        
+        // Handle ID photo uploads if present
+        let idPhotoUrls: string[] = [];
+        if (data.idPhotos && data.idPhotos.length > 0) {
+          const tempCheckInId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const uploadResults = await StorageService.uploadFiles(data.idPhotos, tempCheckInId);
+          idPhotoUrls = uploadResults.filter(result => result.success && result.url).map(result => result.url!);
+        }
+        
+        // Prepare data for submission (remove File objects, add URLs)
+        const submissionData = {
+          ...data,
+          idPhotos: undefined, // Remove File objects
+          id_photo_urls: idPhotoUrls, // Add uploaded URLs
+        };
+        
+        await onSubmit(submissionData);
         setSubmitStatus('success');
         // Reset form after successful submission
         setTimeout(() => {
@@ -170,8 +159,8 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full text-center">
           <div className="text-green-500 text-6xl mb-4">✓</div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">{t.success}</h2>
-          <p className="text-gray-600">Thank you for completing your check-in.</p>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">{t('messages.checkInSuccess')}</h2>
+          <p className="text-gray-600">{t('messages.thankYou')}</p>
         </div>
       </div>
     );
@@ -180,22 +169,29 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        {/* Header with language toggle */}
+        {/* Header with language selector */}
         <div className="bg-white rounded-lg shadow-lg mb-6 p-6">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">{t.title}</h1>
-            <button
-              type="button"
-              onClick={handleLanguageToggle}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              {t.languageSwitch}
-            </button>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">{t('form.title')}</h1>
+            <LanguageSelector
+              currentLanguage={currentLanguage}
+              onLanguageChange={handleLanguageChange}
+              isLoading={isTranslating}
+              className="w-48"
+            />
           </div>
           
+          {/* Translation error */}
+          {translationError && (
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-lg mb-4">
+              {t('messages.translationUnavailable')}
+            </div>
+          )}
+          
+          {/* Form submission error */}
           {submitStatus === 'error' && !externalErrorHandling && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-              {t.error}
+              {t('messages.submitError')}
             </div>
           )}
         </div>
@@ -204,21 +200,21 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
           {/* Personal Details Section */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-              {t.personalDetails}
+              {t('form.sections.personalDetails')}
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  First Name *
+                  {t('form.fields.firstName')} *
                 </label>
                 <input
                   type="text"
                   {...register('firstName', { 
-                    required: t.required 
+                    required: t('form.validation.required')
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="First Name"
+                  placeholder={t('form.fields.firstName')}
                 />
                 {errors.firstName && (
                   <p className="text-red-500 text-sm mt-1">{errors.firstName.message}</p>
@@ -227,15 +223,15 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Last Name *
+                  {t('form.fields.lastName')} *
                 </label>
                 <input
                   type="text"
                   {...register('lastName', { 
-                    required: t.required 
+                    required: t('form.validation.required')
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Last Name"
+                  placeholder={t('form.fields.lastName')}
                 />
                 {errors.lastName && (
                   <p className="text-red-500 text-sm mt-1">{errors.lastName.message}</p>
@@ -244,19 +240,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t.email} *
+                  {t('form.fields.email')} *
                 </label>
                 <input
                   type="email"
                   {...register('email', { 
-                    required: t.required,
+                    required: t('form.validation.required'),
                     pattern: {
                       value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: t.invalidEmail
+                      message: t('form.validation.invalidEmail')
                     }
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t.email}
+                  placeholder={t('form.fields.email')}
                 />
                 {errors.email && (
                   <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
@@ -265,19 +261,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t.phone} *
+                  {t('form.fields.phone')} *
                 </label>
                 <input
                   type="tel"
                   {...register('phone', { 
-                    required: t.required,
+                    required: t('form.validation.required'),
                     pattern: {
                       value: /^[+]?[\d\s\-()]{10,}$/,
-                      message: t.invalidPhone
+                      message: t('form.validation.invalidPhone')
                     }
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t.phone}
+                  placeholder={t('form.fields.phone')}
                 />
                 {errors.phone && (
                   <p className="text-red-500 text-sm mt-1">{errors.phone.message}</p>
@@ -286,15 +282,15 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t.address} *
+                  {t('form.fields.address')} *
                 </label>
                 <textarea
                   {...register('address', { 
-                    required: t.required 
+                    required: t('form.validation.required')
                   })}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t.address}
+                  placeholder={t('form.fields.address')}
                 />
                 {errors.address && (
                   <p className="text-red-500 text-sm mt-1">{errors.address.message}</p>
@@ -303,24 +299,66 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
             </div>
           </div>
 
+          {/* ID Verification Section */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
+              {t('form.sections.idVerification')}
+            </h2>
+            
+            <div className="mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t('form.fields.idType')} *
+                </label>
+                <select
+                  {...register('idType', { 
+                    required: t('form.validation.required')
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">{t('placeholders.selectIdType')}</option>
+                  <option value="passport">{t('form.idTypes.passport')}</option>
+                  <option value="aadhaar">{t('form.idTypes.aadhaar')}</option>
+                  <option value="pan_card">{t('form.idTypes.panCard')}</option>
+                  <option value="driving_license">{t('form.idTypes.drivingLicense')}</option>
+                  <option value="voter_id">{t('form.idTypes.voterId')}</option>
+                  <option value="ration_card">{t('form.idTypes.rationCard')}</option>
+                  <option value="other">{t('form.idTypes.other')}</option>
+                </select>
+                {errors.idType && (
+                  <p className="text-red-500 text-sm mt-1">{errors.idType.message}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {t('form.fields.uploadIdPhotos')} *
+              </label>
+              <IDPhotoUpload
+                onPhotosChange={(photos) => setValue('idPhotos', photos)}
+              />
+            </div>
+          </div>
+
           {/* Emergency Contact Section */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-              {t.emergencyContact}
+              {t('form.sections.emergencyContact')}
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t.emergencyName} *
+                  {t('form.fields.emergencyContactName')} *
                 </label>
                 <input
                   type="text"
                   {...register('emergencyContactName', { 
-                    required: t.required 
+                    required: t('form.validation.required')
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t.emergencyName}
+                  placeholder={t('form.fields.emergencyContactName')}
                 />
                 {errors.emergencyContactName && (
                   <p className="text-red-500 text-sm mt-1">{errors.emergencyContactName.message}</p>
@@ -329,19 +367,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t.emergencyPhone} *
+                  {t('form.fields.emergencyContactPhone')} *
                 </label>
                 <input
                   type="tel"
                   {...register('emergencyContactPhone', { 
-                    required: t.required,
+                    required: t('form.validation.required'),
                     pattern: {
                       value: /^[+]?[\d\s\-()]{10,}$/,
-                      message: t.invalidPhone
+                      message: t('form.validation.invalidPhone')
                     }
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t.emergencyPhone}
+                  placeholder={t('form.fields.emergencyContactPhone')}
                 />
                 {errors.emergencyContactPhone && (
                   <p className="text-red-500 text-sm mt-1">{errors.emergencyContactPhone.message}</p>
@@ -350,15 +388,15 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t.relationship} *
+                  {t('form.fields.relationship')} *
                 </label>
                 <input
                   type="text"
                   {...register('emergencyContactRelation', { 
-                    required: t.required 
+                    required: t('form.validation.required')
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={t.relationship}
+                  placeholder={t('form.fields.relationship')}
                 />
                 {errors.emergencyContactRelation && (
                   <p className="text-red-500 text-sm mt-1">{errors.emergencyContactRelation.message}</p>
@@ -370,25 +408,25 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
           {/* Purpose of Visit Section */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-              {t.purposeOfVisit}
+              {t('form.sections.purposeOfVisit')}
             </h2>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.purposeOfVisit} *
+                {t('form.fields.purposeOfVisit')} *
               </label>
               <select
                 {...register('purposeOfVisit', { 
-                  required: t.required 
+                  required: t('form.validation.required')
                 })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="">Select purpose</option>
-                <option value="leisure">Tourism / Vacation</option>
-                <option value="business">Business</option>
-                <option value="family">Family Visit</option>
-                <option value="medical">Medical</option>
-                <option value="other">Other</option>
+                <option value="">{t('placeholders.selectPurpose')}</option>
+                <option value="leisure">{t('form.purposeOptions.leisure')}</option>
+                <option value="business">{t('form.purposeOptions.business')}</option>
+                <option value="family">{t('form.purposeOptions.family')}</option>
+                <option value="medical">{t('form.purposeOptions.medical')}</option>
+                <option value="other">{t('form.purposeOptions.other')}</option>
               </select>
               {errors.purposeOfVisit && (
                 <p className="text-red-500 text-sm mt-1">{errors.purposeOfVisit.message}</p>
@@ -400,19 +438,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
               <h2 className="text-xl font-semibold text-gray-800">
-                {t.additionalGuests}
+                {t('form.sections.additionalGuests')}
               </h2>
               <button
                 type="button"
                 onClick={() => append({ name: '', age: undefined, relation: '' })}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
               >
-                {t.addGuest}
+                {t('form.buttons.addGuest')}
               </button>
             </div>
             
             {fields.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No additional guests added</p>
+              <p className="text-gray-500 text-center py-4">{t('messages.noAdditionalGuests')}</p>
             ) : (
               <div className="space-y-3">
                 {fields.map((field, index) => (
@@ -421,14 +459,14 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                       type="text"
                       {...register(`additionalGuests.${index}.name` as const)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder={`Guest ${index + 1} name`}
+                      placeholder={t('placeholders.guestName', { number: (index + 1).toString() })}
                     />
                     <button
                       type="button"
                       onClick={() => remove(index)}
                       className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
                     >
-                      {t.removeGuest}
+                      {t('form.buttons.removeGuest')}
                     </button>
                   </div>
                 ))}
@@ -442,11 +480,11 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  {...register('termsAccepted', { required: 'You must accept the terms and conditions' })}
+                  {...register('termsAccepted', { required: t('form.validation.termsRequired') })}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label className="ml-2 block text-sm text-gray-900">
-                  I accept the terms and conditions *
+                  {t('form.fields.termsAccepted')} *
                 </label>
               </div>
               {errors.termsAccepted && (
@@ -460,7 +498,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label className="ml-2 block text-sm text-gray-900">
-                  I consent to receive marketing communications
+                  {t('form.fields.marketingConsent')}
                 </label>
               </div>
             </div>
@@ -473,7 +511,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
               disabled={isSubmitting}
               className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium text-lg"
             >
-              {isSubmitting ? t.submitting : t.submit}
+              {isSubmitting ? t('form.buttons.submitting') : t('form.buttons.submitCheckIn')}
             </button>
           </div>
         </form>

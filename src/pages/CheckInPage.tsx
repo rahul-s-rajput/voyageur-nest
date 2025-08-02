@@ -4,14 +4,16 @@ import { CheckInForm } from '../components/CheckInForm';
 import { checkInService, bookingService } from '../lib/supabase';
 import { CheckInFormData, CheckInData } from '../types/checkin';
 import { Booking } from '../types/booking';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface CheckInPageProps {
-  language?: 'en' | 'hi';
+  language?: string;
 }
 
-export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en' }) => {
+export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en-US' }) => {
   const { bookingId } = useParams<{ bookingId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation(language);
   
   const [booking, setBooking] = useState<Booking | null>(null);
   const [existingCheckIn, setExistingCheckIn] = useState<CheckInData | null>(null);
@@ -159,7 +161,7 @@ export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en' }) => 
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-gray-600">
-            {language === 'hi' ? 'लोड हो रहा है...' : 'Loading...'}
+            {t('checkInPage.loading')}
           </p>
         </div>
       </div>
@@ -172,21 +174,15 @@ export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en' }) => 
         <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
           <div className="text-red-500 text-5xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
-            {language === 'hi' ? 'त्रुटि' : 'Error'}
+            {t('checkInPage.error')}
           </h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <div className="text-center">
             <p className="text-sm text-gray-500 mb-2">
-              {language === 'hi' 
-                ? 'आप अब इस पेज को बंद कर सकते हैं।'
-                : 'You can now close this page.'
-              }
+              {t('checkInPage.canClosePageNow')}
             </p>
             <p className="text-xs text-gray-400">
-              {language === 'hi' 
-                ? 'चेक-इन पूरा हो गया है।'
-                : 'Check-in process completed.'
-              }
+              {t('checkInPage.processCompleted')}
             </p>
           </div>
         </div>
@@ -200,41 +196,32 @@ export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en' }) => 
         <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
           <div className="text-green-500 text-5xl mb-4">✅</div>
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
-            {language === 'hi' ? 'चेक-इन पूरा हुआ!' : 'Check-in Complete!'}
+            {t('checkInPage.checkInComplete')}
           </h2>
           <p className="text-gray-600 mb-4">
-            {language === 'hi' 
-              ? 'आपका चेक-इन फॉर्म सफलतापूर्वक जमा हो गया है।'
-              : 'Your check-in form has been submitted successfully.'
-            }
+            {t('checkInPage.checkInSuccess')}
           </p>
           <div className="bg-gray-50 rounded-lg p-4 mb-4">
             <p className="text-sm text-gray-600">
-              <strong>{language === 'hi' ? 'बुकिंग ID:' : 'Booking ID:'}</strong> {bookingId}
+              <strong>{t('checkInPage.bookingId')}</strong> {bookingId}
             </p>
             {booking && (
               <>
                 <p className="text-sm text-gray-600">
-                  <strong>{language === 'hi' ? 'अतिथि:' : 'Guest:'}</strong> {booking.guestName}
+                  <strong>{t('checkInPage.guest')}</strong> {booking.guestName}
                 </p>
                 <p className="text-sm text-gray-600">
-                  <strong>{language === 'hi' ? 'कमरा:' : 'Room:'}</strong> {booking.roomNo}
+                  <strong>{t('checkInPage.room')}</strong> {booking.roomNo}
                 </p>
               </>
             )}
           </div>
           <div className="text-center">
             <p className="text-sm text-gray-500 mb-2">
-              {language === 'hi' 
-                ? 'आप अब इस पेज को बंद कर सकते हैं।'
-                : 'You can now close this page.'
-              }
+              {t('checkInPage.canClosePageNow')}
             </p>
             <p className="text-xs text-gray-400">
-              {language === 'hi' 
-                ? 'चेक-इन प्रक्रिया पूरी हो गई है।'
-                : 'Check-in process completed.'
-              }
+              {t('checkInPage.processCompleted')}
             </p>
           </div>
         </div>
@@ -248,21 +235,21 @@ export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en' }) => 
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h1 className="text-2xl font-bold text-gray-800 mb-2">
-            {language === 'hi' ? 'डिजिटल चेक-इन' : 'Digital Check-in'}
+            {t('checkInPage.digitalCheckIn')}
           </h1>
           {booking && (
             <div className="text-sm text-gray-600">
               <p>
-                <strong>{language === 'hi' ? 'बुकिंग ID:' : 'Booking ID:'}</strong> {bookingId}
+                <strong>{t('checkInPage.bookingId')}</strong> {bookingId}
               </p>
               <p>
-                <strong>{language === 'hi' ? 'अतिथि:' : 'Guest:'}</strong> {booking.guestName}
+                <strong>{t('checkInPage.guest')}</strong> {booking.guestName}
               </p>
               <p>
-                <strong>{language === 'hi' ? 'कमरा:' : 'Room:'}</strong> {booking.roomNo}
+                <strong>{t('checkInPage.room')}</strong> {booking.roomNo}
               </p>
               <p>
-                <strong>{language === 'hi' ? 'चेक-इन तिथि:' : 'Check-in Date:'}</strong>{' '}
+                <strong>{t('checkInPage.checkInDate')}</strong>{' '}
                 {new Date(booking.checkIn).toLocaleDateString()}
               </p>
             </div>
@@ -270,17 +257,14 @@ export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en' }) => 
           {existingCheckIn && (
             <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
               <p className="text-sm text-yellow-800">
-                {language === 'hi' 
-                  ? 'आपने पहले से ही चेक-इन फॉर्म भरा है। आप इसे अपडेट कर सकते हैं।'
-                  : 'You have already completed the check-in form. You can update it below.'
-                }
+                {t('checkInPage.alreadyCompleted')}
               </p>
             </div>
           )}
           {submissionError && (
             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded">
               <p className="text-sm text-red-800">
-                {language === 'hi' ? 'त्रुटि: ' : 'Error: '}{submissionError}
+                {t('checkInPage.errorPrefix')}{submissionError}
               </p>
             </div>
           )}

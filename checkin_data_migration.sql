@@ -20,10 +20,8 @@ CREATE TABLE public.checkin_data (
   dateOfBirth TEXT,
   date_of_birth TEXT, -- Alternative field name for compatibility
   nationality TEXT,
-  idType TEXT NOT NULL CHECK (idType IN ('passport', 'license', 'national_id', 'other')),
+  idType TEXT NOT NULL CHECK (idType IN ('passport', 'aadhaar', 'pan_card', 'driving_license', 'voter_id', 'ration_card', 'other')),
   id_type TEXT, -- Alternative field name for compatibility
-  idNumber TEXT NOT NULL,
-  id_number TEXT, -- Alternative field name for compatibility
   
   -- Address
   address TEXT NOT NULL,
@@ -120,7 +118,6 @@ INSERT INTO public.checkin_data (
   email,
   phone,
   idType,
-  idNumber,
   address,
   emergencyContactName,
   emergencyContactPhone,
@@ -139,7 +136,6 @@ INSERT INTO public.checkin_data (
   'john.doe@example.com',
   '+1234567890',
   'passport',
-  'P123456789',
   '123 Main St, City, Country',
   'Jane Doe',
   '+1234567891',
