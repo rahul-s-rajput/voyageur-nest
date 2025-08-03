@@ -4,9 +4,11 @@ import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
 import { updateBookingWithValidation, invoiceCounterService, checkInService } from '../lib/supabase';
+import { StorageService } from '../lib/storage';
 import { InvoicePreview } from './InvoicePreview';
 import { CancellationInvoicePreview } from './CancellationInvoicePreview';
 import { QRCodeGenerator } from './QRCodeGenerator';
+import { useNotification } from './NotificationContainer';
 
 interface BookingDetailsProps {
   booking: Booking | null;
@@ -23,6 +25,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   onUpdate,
   onCancel,
 }) => {
+  const { showSuccess, showError, showWarning } = useNotification();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -34,6 +37,16 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [editData, setEditData] = useState<Partial<Booking>>({});
   const [checkInData, setCheckInData] = useState<CheckInData | null>(null);
   const [loadingCheckIn, setLoadingCheckIn] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
+  
+  // Additional guests and photo upload states
+  const [additionalGuests, setAdditionalGuests] = useState<Array<{name: string, age?: number, relation?: string}>>(
+    checkInData?.additionalGuests || []
+  );
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const [isSavingGuests, setIsSavingGuests] = useState(false);
 
   useEffect(() => {
     if (booking) {
@@ -58,6 +71,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     }
   }, [booking]);
 
+
+
   useEffect(() => {
     const loadInvoiceNumber = async () => {
       try {
@@ -69,6 +84,15 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     };
     loadInvoiceNumber();
   }, []);
+
+  // Initialize additional guests when checkInData changes
+  useEffect(() => {
+    if (checkInData?.additionalGuests) {
+      setAdditionalGuests(checkInData.additionalGuests);
+    }
+  }, [checkInData]);
+
+
 
   const getCurrentISTTime = () => {
     const now = new Date();
@@ -351,6 +375,98 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         noOfPax: Math.max(totalGuests, prev.numberOfRooms || 1)
       };
     });
+  };
+
+  // Additional guests management handlers
+  const handleAddGuest = () => {
+    setAdditionalGuests(prev => [...prev, { name: '', age: undefined, relation: '' }]);
+  };
+
+  const handleRemoveGuest = (index: number) => {
+    setAdditionalGuests(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGuestNameChange = (index: number, name: string) => {
+    setAdditionalGuests(prev => prev.map((guest, i) => 
+      i === index ? { ...guest, name } : guest
+    ));
+  };
+
+  const handleGuestAgeChange = (index: number, age: string) => {
+    setAdditionalGuests(prev => prev.map((guest, i) => 
+      i === index ? { ...guest, age: age ? parseInt(age) : undefined } : guest
+    ));
+  };
+
+  const handleGuestRelationChange = (index: number, relation: string) => {
+    setAdditionalGuests(prev => prev.map((guest, i) => 
+      i === index ? { ...guest, relation } : guest
+    ));
+  };
+
+  const handleSaveAdditionalGuests = async () => {
+    if (!checkInData) return;
+
+    setIsSavingGuests(true);
+    try {
+      const validGuests = additionalGuests.filter(guest => guest.name.trim() !== '');
+      const updates = {
+        additionalGuests: validGuests
+      };
+
+      const updatedData = await checkInService.updateCheckInData(checkInData.id, updates);
+      if (updatedData) {
+        setCheckInData(updatedData);
+        showSuccess('Guests saved successfully!', `${validGuests.length} additional guest(s) have been saved.`);
+      }
+    } catch (error) {
+      console.error('Error saving additional guests:', error);
+      showError('Save failed', 'Failed to save additional guests. Please try again.');
+    } finally {
+      setIsSavingGuests(false);
+    }
+  };
+
+  // Additional photos upload handler
+  const handleAdditionalPhotosUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !checkInData) return;
+
+    setIsUploadingPhotos(true);
+    try {
+      const uploadResults = await StorageService.uploadFiles(Array.from(files), checkInData.id);
+      
+      if (uploadResults.length > 0) {
+        const successfulUploads = uploadResults.filter(result => result.success);
+        const newPhotoUrls = successfulUploads.map(result => result.url).filter(url => url);
+        
+        if (newPhotoUrls.length > 0) {
+          const existingUrls = checkInData.id_photo_urls || [];
+          const updatedUrls = [...existingUrls, ...newPhotoUrls].filter((url): url is string => url !== undefined);
+
+          const updates = {
+            id_photo_urls: updatedUrls
+          };
+
+          const updatedData = await checkInService.updateCheckInData(checkInData.id, updates);
+          if (updatedData) {
+            setCheckInData(updatedData);
+            showSuccess('Photos uploaded successfully!', `${newPhotoUrls.length} photo(s) added to ID verification documents.`);
+          }
+        } else {
+          showWarning('Upload incomplete', 'No photos were uploaded successfully. Please try again.');
+        }
+      } else {
+        showError('Upload failed', 'Failed to upload photos. Please check your files and try again.');
+      }
+    } catch (error) {
+      console.error('Error uploading additional photos:', error);
+      showError('Upload error', 'Failed to upload photos. Please try again.');
+    } finally {
+      setIsUploadingPhotos(false);
+      // Reset the file input
+      event.target.value = '';
+    }
   };
 
   const handleCancelBooking = () => {
@@ -1160,6 +1276,129 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                             </div>
                           </div>
                         </div>
+
+                        {/* ID Verification Images */}
+                        {checkInData.id_photo_urls && checkInData.id_photo_urls.length > 0 && (
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                            <h4 className="font-medium text-orange-900 mb-3 flex items-center">
+                              <CreditCard className="w-4 h-4 mr-2" />
+                              ID Verification Documents
+                            </h4>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {checkInData.id_photo_urls.map((url, index) => (
+                                <div key={index} className="relative group">
+                                  <img
+                                    src={url}
+                                    alt={`ID Document ${index + 1}`}
+                                    className="w-full h-24 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-all duration-200 shadow-sm hover:shadow-md"
+                                    onClick={() => {
+                                      setSelectedImageIndex(index);
+                                      setShowImageModal(true);
+                                    }}
+                                    onError={(e) => {
+                                      console.error('Error loading ID image thumbnail:', url);
+                                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y3ZjdmNyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+';
+                                    }}
+                                  />
+                                  <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs">
+                                    Photo {index + 1}
+                                  </div>
+                                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 rounded-lg flex items-center justify-center pointer-events-none">
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white bg-opacity-90 rounded-full p-2">
+                                      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                      </svg>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-orange-200">
+                              <div className="space-y-3">
+                                <div className="space-y-4">
+                                  {/* Add More ID Photos Section */}
+                                  <div className="border-t pt-4">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-3">Add Additional ID Photos</h4>
+                                    <div className="space-y-3">
+                                      <input
+                                        type="file"
+                                        multiple
+                                        accept="image/*,application/pdf"
+                                        onChange={handleAdditionalPhotosUpload}
+                                        className="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                        disabled={isUploadingPhotos}
+                                      />
+                                      {isUploadingPhotos && (
+                                        <div className="flex items-center space-x-2 text-xs text-blue-600">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                                          <span>Uploading photos...</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Additional Guests Management */}
+                                  <div className="border-t pt-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h4 className="text-sm font-medium text-gray-700">Additional Guests</h4>
+                                      <button
+                                        onClick={handleAddGuest}
+                                        className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                      >
+                                        + Add Guest
+                                      </button>
+                                    </div>
+                                    
+                                    {additionalGuests.length > 0 ? (
+                                      <div className="space-y-2">
+                                        {additionalGuests.map((guest, index) => (
+                                          <div key={index} className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
+                                            <input
+                                              type="text"
+                                              value={guest.name}
+                                              onChange={(e) => handleGuestNameChange(index, e.target.value)}
+                                              placeholder="Guest name"
+                                              className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                            />
+                                            <input
+                                              type="number"
+                                              value={guest.age || ''}
+                                              onChange={(e) => handleGuestAgeChange(index, e.target.value)}
+                                              placeholder="Age"
+                                              className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                            />
+                                            <input
+                                              type="text"
+                                              value={guest.relation || ''}
+                                              onChange={(e) => handleGuestRelationChange(index, e.target.value)}
+                                              placeholder="Relation"
+                                              className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                            />
+                                            <button
+                                              onClick={() => handleRemoveGuest(index)}
+                                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                            >
+                                              ×
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <button
+                                          onClick={handleSaveAdditionalGuests}
+                                          disabled={isSavingGuests}
+                                          className="w-full px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                          {isSavingGuests ? 'Saving...' : 'Save Additional Guests'}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-gray-500 italic">No additional guests added</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </>
                     );
                   })()}
@@ -1309,6 +1548,81 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
             <div className="p-6">
               <QRCodeGenerator bookingId={booking.id} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ID Verification Image Modal */}
+      {showImageModal && checkInData?.id_photo_urls && checkInData.id_photo_urls.length > 0 && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[9999] p-4"
+          onClick={() => setShowImageModal(false)}
+        >
+          <div 
+            className="relative max-w-5xl max-h-[90vh] w-full h-full flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={checkInData.id_photo_urls?.[selectedImageIndex] || ''}
+              alt={`ID Document ${selectedImageIndex + 1}`}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+              onError={(e) => {
+                console.error('Error loading image:', checkInData.id_photo_urls?.[selectedImageIndex]);
+                e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y3ZjdmNyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+';
+              }}
+            />
+            
+            {/* Close button */}
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="absolute top-4 right-4 bg-white bg-opacity-90 text-black rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-100 transition-all duration-200 shadow-lg"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            {/* Navigation arrows for multiple images */}
+            {(checkInData.id_photo_urls?.length || 0) > 1 && (
+              <>
+                <button
+                  onClick={() => setSelectedImageIndex(prev => prev > 0 ? prev - 1 : (checkInData.id_photo_urls?.length || 1) - 1)}
+                  className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 text-black rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-100 transition-all duration-200 shadow-lg"
+                  title="Previous image"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={() => setSelectedImageIndex(prev => prev < (checkInData.id_photo_urls?.length || 1) - 1 ? prev + 1 : 0)}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-90 text-black rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-100 transition-all duration-200 shadow-lg"
+                  title="Next image"
+                >
+                  →
+                </button>
+              </>
+            )}
+            
+            {/* Image counter and dots */}
+            {(checkInData.id_photo_urls?.length || 0) > 1 && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 rounded-full px-4 py-2">
+                <div className="flex items-center space-x-3">
+                  <span className="text-white text-sm font-medium">
+                    {selectedImageIndex + 1} of {checkInData.id_photo_urls?.length || 0}
+                  </span>
+                  <div className="flex space-x-2">
+                    {checkInData.id_photo_urls?.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedImageIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                          index === selectedImageIndex ? 'bg-white' : 'bg-gray-400 hover:bg-gray-300'
+                        }`}
+                        title={`View image ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

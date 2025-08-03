@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { CheckInForm } from '../components/CheckInForm';
 import StaffDashboard from '../components/StaffDashboard';
 import { CheckInFormData } from '../types/checkin';
+import { useNotification } from '../components/NotificationContainer';
 
 const TestIDVerification: React.FC = () => {
+  const { showSuccess } = useNotification();
   const [activeTab, setActiveTab] = useState<'guest' | 'staff'>('guest');
   const [mockBookingId] = useState('test-booking-123');
 
   const handleCheckInSubmit = async (data: CheckInFormData) => {
     console.log('Check-in form submitted:', data);
     // In a real app, this would submit to the backend
-    alert('Check-in form submitted successfully! ID verification is pending.');
+    showSuccess('Form submitted!', 'Check-in form submitted successfully! ID verification is pending.');
   };
 
   return (

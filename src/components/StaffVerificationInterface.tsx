@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CheckInData } from '../types/checkin';
+import { useNotification } from './NotificationContainer';
 
 interface StaffVerificationInterfaceProps {
   checkInData: CheckInData;
@@ -18,6 +19,7 @@ export const StaffVerificationInterface: React.FC<StaffVerificationInterfaceProp
   staffId,
   staffName
 }) => {
+  const { showSuccess, showError, showWarning } = useNotification();
   const [verificationStatus, setVerificationStatus] = useState<'pending' | 'verified' | 'rejected' | 'requires_review'>(
     checkInData.id_verification_status || 'pending'
   );
@@ -28,17 +30,17 @@ export const StaffVerificationInterface: React.FC<StaffVerificationInterfaceProp
 
   const handleVerificationSubmit = async () => {
     if (!verificationStatus || verificationStatus === 'pending') {
-      alert('Please select a verification status');
+      showWarning('Selection required', 'Please select a verification status');
       return;
     }
 
     setIsSubmitting(true);
     try {
       await onVerificationUpdate(checkInData.id, verificationStatus, notes);
-      alert('Verification status updated successfully');
+      showSuccess('Updated successfully', 'Verification status updated successfully');
     } catch (error) {
       console.error('Error updating verification:', error);
-      alert('Error updating verification status');
+      showError('Update failed', 'Error updating verification status');
     } finally {
       setIsSubmitting(false);
     }

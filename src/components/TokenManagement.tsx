@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useNotification } from './NotificationContainer';
 
 interface DeviceToken {
   id: string;
@@ -13,6 +14,7 @@ interface DeviceToken {
 }
 
 const TokenManagement: React.FC = () => {
+  const { showSuccess, showError, showWarning } = useNotification();
   const [tokens, setTokens] = useState<DeviceToken[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -72,7 +74,7 @@ const TokenManagement: React.FC = () => {
       await loadTokens();
     } catch (error) {
       console.error('Error generating token:', error);
-      alert('Failed to generate token. Please try again.');
+      showError('Generation failed', 'Failed to generate token. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -89,7 +91,7 @@ const TokenManagement: React.FC = () => {
       await loadTokens();
     } catch (error) {
       console.error('Error updating token status:', error);
-      alert('Failed to update token status.');
+      showError('Update failed', 'Failed to update token status.');
     }
   };
 
@@ -108,13 +110,13 @@ const TokenManagement: React.FC = () => {
       await loadTokens();
     } catch (error) {
       console.error('Error deleting token:', error);
-      alert('Failed to delete token.');
+      showError('Delete failed', 'Failed to delete token.');
     }
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('Token copied to clipboard!');
+    showSuccess('Copied!', 'Token copied to clipboard!');
   };
 
   const formatDate = (dateString: string) => {

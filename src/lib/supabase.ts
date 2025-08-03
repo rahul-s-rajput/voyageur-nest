@@ -743,6 +743,7 @@ export const checkInService = {
       if (updates.preferences !== undefined) updateData.preferences = updates.preferences;
       if (updates.termsAccepted !== undefined) updateData.terms_accepted = updates.termsAccepted;
       if (updates.marketingConsent !== undefined) updateData.marketing_consent = updates.marketingConsent;
+      if (updates.id_photo_urls !== undefined) updateData.id_photo_urls = updates.id_photo_urls;
 
       const { data, error } = await supabase
         .from('checkin_data')

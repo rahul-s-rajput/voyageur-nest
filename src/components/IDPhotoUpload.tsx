@@ -128,38 +128,33 @@ const IDPhotoUpload: React.FC<IDPhotoUploadProps> = ({
 
   const openFileDialog = () => {
     if (!disabled && !uploading) {
-      fileInputRef.current?.click();
-    }
-  };
-
-  const openCameraDialog = () => {
-    if (!disabled && !uploading) {
-      cameraInputRef.current?.click();
+      // On mobile devices, use camera input which provides camera/gallery options
+      if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        cameraInputRef.current?.click();
+      } else {
+        // On desktop, use regular file input
+        fileInputRef.current?.click();
+      }
     }
   };
 
   return (
     <div className="w-full space-y-4">
-      {/* Upload Buttons */}
-      <div className="flex justify-center space-x-4">
-        <button
-          type="button"
-          onClick={openCameraDialog}
-          disabled={disabled || uploading}
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-        >
-          <Camera className="h-4 w-4 mr-2" />
-          {t('idUpload.takePhoto')}
-        </button>
-        
+      {/* Upload Button */}
+      <div className="flex justify-center">
         <button
           type="button"
           onClick={openFileDialog}
           disabled={disabled || uploading}
-          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          className="ethereal-button inline-flex items-center px-6 py-3 text-white font-semibold rounded-2xl hover:transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none transition-all duration-300 shadow-lg"
         >
-          <Upload className="h-4 w-4 mr-2" />
-          {t('idUpload.chooseFiles')}
+          <Upload className="h-5 w-5 mr-3" />
+          <span className="text-base">
+            {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+              ? t('form.fields.uploadIdPhotos') || 'Upload ID Photos'
+              : t('idUpload.chooseFiles') || 'Choose Files'
+            }
+          </span>
         </button>
       </div>
 
@@ -185,7 +180,8 @@ const IDPhotoUpload: React.FC<IDPhotoUploadProps> = ({
       <input
         ref={cameraInputRef}
         type="file"
-        accept="image/*"
+        multiple
+        accept="image/*,application/pdf"
         capture="environment"
         onChange={handleFileSelect}
         className="hidden"

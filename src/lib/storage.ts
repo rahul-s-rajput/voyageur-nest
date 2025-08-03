@@ -16,7 +16,7 @@ export interface UploadProgress {
 export class StorageService {
   private static readonly BUCKET_NAME = 'id-documents';
   private static readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-  private static readonly ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  private static readonly ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
   /**
    * Initialize the storage bucket with proper policies
@@ -77,8 +77,10 @@ export class StorageService {
       const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${checkInId}/${timestamp}-${randomId}.${fileExtension}`;
 
-      // Compress image if needed
-      const processedFile = await this.compressImage(file);
+      // Compress image if needed (skip compression for PDFs)
+      const processedFile = file.type === 'application/pdf' 
+        ? file 
+        : await this.compressImage(file);
 
       // Upload file
       const { data, error } = await supabase.storage
@@ -194,7 +196,7 @@ export class StorageService {
     if (!this.ALLOWED_TYPES.includes(file.type)) {
       return { 
         valid: false, 
-        error: 'Only JPEG, PNG, and WebP images are allowed' 
+        error: 'Only JPEG, PNG, WebP images and PDF files are allowed' 
       };
     }
 

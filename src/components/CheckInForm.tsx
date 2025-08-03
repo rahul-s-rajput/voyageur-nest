@@ -156,92 +156,136 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
   if (submitStatus === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full text-center">
-          <div className="text-green-500 text-6xl mb-4">✓</div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">{t('messages.checkInSuccess')}</h2>
-          <p className="text-gray-600">{t('messages.thankYou')}</p>
+      <div className="text-center py-12">
+        <div className="floating-element text-6xl mb-8">✨</div>
+        <h2 className="dancing-script text-4xl font-bold text-[var(--text-secondary)] mb-4">{t('messages.checkInSuccess')}</h2>
+        <p className="text-xl text-[var(--text-primary)] mb-8 leading-relaxed">{t('messages.thankYou')}</p>
+        
+        <div className="ethereal-card rounded-3xl p-8 max-w-md mx-auto">
+          <div className="flex items-center justify-center mb-4">
+            <div className="ethereal-section-icon p-3 mr-3">
+              <svg className="w-6 h-6 text-[var(--mist-blue)]" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 2L3 7v11a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V7l-7-5z"/>
+              </svg>
+            </div>
+            <span className="text-lg font-semibold text-[var(--text-secondary)]">Welcome to Your Stay!</span>
+          </div>
+          <p className="text-[var(--text-primary)] leading-relaxed">
+            Your check-in is complete. We hope you enjoy your experience with us.
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Header with language selector */}
-        <div className="bg-white rounded-lg shadow-lg mb-6 p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">{t('form.title')}</h1>
-            <LanguageSelector
-              currentLanguage={currentLanguage}
-              onLanguageChange={handleLanguageChange}
-              isLoading={isTranslating}
-              className="w-48"
-            />
-          </div>
-          
-          {/* Translation error */}
-          {translationError && (
-            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-lg mb-4">
-              {t('messages.translationUnavailable')}
-            </div>
-          )}
-          
-          {/* Form submission error */}
-          {submitStatus === 'error' && !externalErrorHandling && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-              {t('messages.submitError')}
-            </div>
-          )}
+    <>
+      {/* Header with language selector */}
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
+        <div>
+          <h2 className="dancing-script text-3xl font-bold text-[var(--text-secondary)] mb-2">{t('form.title')}</h2>
+          <p className="text-[var(--text-primary)] text-lg">Please fill in all required information</p>
         </div>
+        <div className="ethereal-glass rounded-2xl p-2">
+          <LanguageSelector
+            currentLanguage={currentLanguage}
+            onLanguageChange={handleLanguageChange}
+            isLoading={isTranslating}
+            className="w-48"
+          />
+        </div>
+      </div>
+      
+      {/* Translation error */}
+      {translationError && (
+        <div className="bg-gradient-to-r from-[var(--gentle-purple)]/20 to-[var(--mist-blue)]/20 border border-[var(--gentle-purple)]/30 text-[var(--text-primary)] px-6 py-4 rounded-2xl mb-8">
+          <div className="flex items-center">
+            <div className="ethereal-section-icon p-2 mr-3">
+              <svg className="w-5 h-5 text-[var(--gentle-purple)]" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <span className="font-medium">{t('messages.translationUnavailable')}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Form submission error */}
+      {submitStatus === 'error' && !externalErrorHandling && (
+        <div className="ethereal-error border border-red-200 text-red-700 px-6 py-4 rounded-2xl mb-8">
+          <div className="flex items-center">
+            <div className="ethereal-section-icon p-2 mr-3">
+              <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <span className="font-medium">{t('messages.submitError')}</span>
+          </div>
+        </div>
+      )}
 
-        <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
-          {/* Personal Details Section */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-              {t('form.sections.personalDetails')}
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.firstName')} *
-                </label>
+      <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6 sm:space-y-8">
+        {/* Personal Details Section */}
+        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
+          <div className="ethereal-section-header">
+            <div className="flex items-center text-white">
+              <div className="ethereal-section-icon mr-3">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <h2 className="text-lg sm:text-xl font-semibold">
+                {t('form.sections.personalDetails')}
+              </h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-8">
+            <div className="space-y-6">
+              <div className="relative">
                 <input
                   type="text"
                   {...register('firstName', { 
                     required: t('form.validation.required')
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-input peer placeholder-transparent"
                   placeholder={t('form.fields.firstName')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
+                  {t('form.fields.firstName')} *
+                </label>
                 {errors.firstName && (
-                  <p className="text-red-500 text-sm mt-1">{errors.firstName.message}</p>
+                  <p className="text-red-500 text-sm mt-2 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {errors.firstName.message}
+                  </p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.lastName')} *
-                </label>
+              <div className="relative">
                 <input
                   type="text"
                   {...register('lastName', { 
                     required: t('form.validation.required')
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-input peer placeholder-transparent"
                   placeholder={t('form.fields.lastName')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
+                  {t('form.fields.lastName')} *
+                </label>
                 {errors.lastName && (
-                  <p className="text-red-500 text-sm mt-1">{errors.lastName.message}</p>
+                  <p className="text-red-500 text-sm mt-2 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {errors.lastName.message}
+                  </p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.email')} *
-                </label>
+              <div className="relative">
                 <input
                   type="email"
                   {...register('email', { 
@@ -251,18 +295,23 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                       message: t('form.validation.invalidEmail')
                     }
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-input peer placeholder-transparent"
                   placeholder={t('form.fields.email')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
+                  {t('form.fields.email')} *
+                </label>
                 {errors.email && (
-                  <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+                  <p className="text-red-500 text-sm mt-2 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {errors.email.message}
+                  </p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.phone')} *
-                </label>
+              <div className="relative">
                 <input
                   type="tel"
                   {...register('phone', { 
@@ -272,49 +321,68 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                       message: t('form.validation.invalidPhone')
                     }
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-input peer placeholder-transparent"
                   placeholder={t('form.fields.phone')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
+                  {t('form.fields.phone')} *
+                </label>
                 {errors.phone && (
-                  <p className="text-red-500 text-sm mt-1">{errors.phone.message}</p>
+                  <p className="text-red-500 text-sm mt-2 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {errors.phone.message}
+                  </p>
                 )}
               </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.address')} *
-                </label>
+              <div className="relative">
                 <textarea
                   {...register('address', { 
                     required: t('form.validation.required')
                   })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-textarea peer placeholder-transparent resize-none h-24"
                   placeholder={t('form.fields.address')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
+                  {t('form.fields.address')} *
+                </label>
                 {errors.address && (
-                  <p className="text-red-500 text-sm mt-1">{errors.address.message}</p>
+                  <p className="text-red-500 text-sm mt-2 flex items-center">
+                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    {errors.address.message}
+                  </p>
                 )}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* ID Verification Section */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-              {t('form.sections.idVerification')}
-            </h2>
-            
+        {/* ID Verification Section */}
+        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
+          <div className="ethereal-section-header bg-gradient-to-r from-[var(--mist-blue)] to-[var(--sky-blue)]">
+            <div className="flex items-center text-white">
+              <div className="ethereal-section-icon mr-3">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <h2 className="text-lg sm:text-xl font-semibold">
+                {t('form.sections.idVerification')}
+              </h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-8">
             <div className="mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.idType')} *
-                </label>
+              <div className="relative">
                 <select
                   {...register('idType', { 
                     required: t('form.validation.required')
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-select peer"
                 >
                   <option value="">{t('placeholders.selectIdType')}</option>
                   <option value="passport">{t('form.idTypes.passport')}</option>
@@ -325,50 +393,80 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   <option value="ration_card">{t('form.idTypes.rationCard')}</option>
                   <option value="other">{t('form.idTypes.other')}</option>
                 </select>
+                <label className="absolute left-4 top-2 text-xs font-medium text-[var(--sky-blue)] transition-all duration-200">
+                  {t('form.fields.idType')} *
+                </label>
                 {errors.idType && (
-                  <p className="text-red-500 text-sm mt-1">{errors.idType.message}</p>
+                  <div className="mt-2 flex items-center text-red-600">
+                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-sm">{errors.idType.message}</p>
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-primary)] mb-3">
                 {t('form.fields.uploadIdPhotos')} *
               </label>
-              <IDPhotoUpload
-                onPhotosChange={(photos) => setValue('idPhotos', photos)}
-              />
+              <div className="ethereal-upload-area">
+                <IDPhotoUpload
+                  onPhotosChange={(files: File[]) => setValue('idPhotos', files)}
+                />
+              </div>
+              {errors.idPhotos && (
+                <div className="mt-2 flex items-center text-red-600">
+                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-sm">{errors.idPhotos.message}</p>
+                </div>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Emergency Contact Section */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-              {t('form.sections.emergencyContact')}
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.emergencyContactName')} *
-                </label>
+        {/* Emergency Contact Section */}
+        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
+          <div className="ethereal-section-header bg-gradient-to-r from-[var(--gentle-purple)] to-[var(--mist-blue)]">
+            <div className="flex items-center text-white">
+              <div className="ethereal-section-icon mr-3">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                </svg>
+              </div>
+              <h2 className="text-lg sm:text-xl font-semibold">
+                {t('form.sections.emergencyContact')}
+              </h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-8">
+            <div className="space-y-6">
+              <div className="relative">
                 <input
                   type="text"
                   {...register('emergencyContactName', { 
                     required: t('form.validation.required')
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-input peer placeholder-transparent"
                   placeholder={t('form.fields.emergencyContactName')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--gentle-purple)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--gentle-purple)]">
+                  {t('form.fields.emergencyContactName')} *
+                </label>
                 {errors.emergencyContactName && (
-                  <p className="text-red-500 text-sm mt-1">{errors.emergencyContactName.message}</p>
+                  <div className="mt-2 flex items-center text-red-600">
+                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-sm">{errors.emergencyContactName.message}</p>
+                  </div>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.emergencyContactPhone')} *
-                </label>
+              <div className="relative">
                 <input
                   type="tel"
                   {...register('emergencyContactPhone', { 
@@ -378,144 +476,179 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                       message: t('form.validation.invalidPhone')
                     }
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-input peer placeholder-transparent"
                   placeholder={t('form.fields.emergencyContactPhone')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--gentle-purple)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--gentle-purple)]">
+                  {t('form.fields.emergencyContactPhone')} *
+                </label>
                 {errors.emergencyContactPhone && (
-                  <p className="text-red-500 text-sm mt-1">{errors.emergencyContactPhone.message}</p>
+                  <div className="mt-2 flex items-center text-red-600">
+                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-sm">{errors.emergencyContactPhone.message}</p>
+                  </div>
                 )}
               </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('form.fields.relationship')} *
-                </label>
+              <div className="relative">
                 <input
                   type="text"
                   {...register('emergencyContactRelation', { 
                     required: t('form.validation.required')
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="ethereal-input peer placeholder-transparent"
                   placeholder={t('form.fields.relationship')}
                 />
+                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--gentle-purple)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--gentle-purple)]">
+                  {t('form.fields.relationship')} *
+                </label>
                 {errors.emergencyContactRelation && (
-                  <p className="text-red-500 text-sm mt-1">{errors.emergencyContactRelation.message}</p>
+                  <div className="mt-2 flex items-center text-red-600">
+                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-sm">{errors.emergencyContactRelation.message}</p>
+                  </div>
                 )}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Purpose of Visit Section */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-              {t('form.sections.purposeOfVisit')}
-            </h2>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('form.fields.purposeOfVisit')} *
-              </label>
+        {/* Purpose of Visit Section */}
+        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
+          <div className="ethereal-section-header bg-gradient-to-r from-[var(--sky-blue)] to-[var(--gentle-purple)]">
+            <div className="flex items-center text-white">
+              <div className="ethereal-section-icon mr-3">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <h2 className="text-lg sm:text-xl font-semibold">
+                {t('form.sections.purposeOfVisit')}
+              </h2>
+            </div>
+          </div>
+          <div className="p-4 sm:p-8">
+            <div className="relative">
               <select
-                {...register('purposeOfVisit', { 
-                  required: t('form.validation.required')
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                {...register('purposeOfVisit', { required: t('form.validation.required') })}
+                className="ethereal-select peer"
               >
                 <option value="">{t('placeholders.selectPurpose')}</option>
-                <option value="leisure">{t('form.purposeOptions.leisure')}</option>
                 <option value="business">{t('form.purposeOptions.business')}</option>
-                <option value="family">{t('form.purposeOptions.family')}</option>
+                <option value="leisure">{t('form.purposeOptions.leisure')}</option>
                 <option value="medical">{t('form.purposeOptions.medical')}</option>
                 <option value="other">{t('form.purposeOptions.other')}</option>
               </select>
+              <label className="absolute left-4 top-2 text-xs font-medium text-[var(--gentle-purple)] transition-all duration-200">
+                {t('form.fields.purposeOfVisit')} *
+              </label>
               {errors.purposeOfVisit && (
-                <p className="text-red-500 text-sm mt-1">{errors.purposeOfVisit.message}</p>
+                <div className="mt-2 flex items-center text-red-600">
+                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-sm">{errors.purposeOfVisit.message}</p>
+                </div>
               )}
             </div>
           </div>
+        </div>
 
-          {/* Additional Guests Section */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="flex justify-between items-center mb-4 border-b pb-2">
-              <h2 className="text-xl font-semibold text-gray-800">
-                {t('form.sections.additionalGuests')}
-              </h2>
+        {/* Additional Guests Section */}
+        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
+          <div className="ethereal-section-header">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-white space-y-3 sm:space-y-0">
+              <div className="flex items-center">
+                <div className="ethereal-section-icon mr-3">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+                  </svg>
+                </div>
+                <h2 className="text-lg sm:text-xl font-semibold">
+                  {t('form.sections.additionalGuests')}
+                </h2>
+              </div>
               <button
                 type="button"
                 onClick={() => append({ name: '', age: undefined, relation: '' })}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                className="bg-white/20 hover:bg-white/30 text-white px-3 sm:px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-sm sm:text-base"
               >
-                {t('form.buttons.addGuest')}
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                <span>{t('form.buttons.addGuest')}</span>
               </button>
             </div>
-            
+          </div>
+          <div className="p-4 sm:p-8">
             {fields.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">{t('messages.noAdditionalGuests')}</p>
+              <div className="text-center py-8">
+                <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
+                </svg>
+                <p className="text-gray-500">{t('messages.noAdditionalGuests')}</p>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {fields.map((field, index) => (
-                  <div key={field.id} className="flex gap-3 items-center">
-                    <input
-                      type="text"
-                      {...register(`additionalGuests.${index}.name` as const)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder={t('placeholders.guestName', { number: (index + 1).toString() })}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => remove(index)}
-                      className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-                    >
-                      {t('form.buttons.removeGuest')}
-                    </button>
+                  <div key={field.id} className="ethereal-glass rounded-xl p-4 border border-white/30">
+                    <div className="flex gap-3 items-center">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          {...register(`additionalGuests.${index}.name` as const)}
+                          className="ethereal-input peer placeholder-transparent"
+                          placeholder={`Guest ${index + 1} Name`}
+                        />
+                        <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
+                          Guest {index + 1} Name
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => remove(index)}
+                        className="px-4 py-3 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg transition-all duration-200 text-sm font-medium flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        <span>Remove</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+        </div>
 
-          {/* Terms and Conditions */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  {...register('termsAccepted', { required: t('form.validation.termsRequired') })}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label className="ml-2 block text-sm text-gray-900">
-                  {t('form.fields.termsAccepted')} *
-                </label>
-              </div>
-              {errors.termsAccepted && (
-                <p className="text-red-500 text-sm">{errors.termsAccepted.message}</p>
-              )}
-              
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  {...register('marketingConsent')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label className="ml-2 block text-sm text-gray-900">
-                  {t('form.fields.marketingConsent')}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium text-lg"
-            >
-              {isSubmitting ? t('form.buttons.submitting') : t('form.buttons.submitCheckIn')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {/* Submit Button */}
+        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0 p-4 sm:p-8">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="ethereal-button w-full py-3 sm:py-4 px-6 sm:px-8 text-base sm:text-lg font-semibold flex items-center justify-center space-x-3"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <span>{t('form.buttons.submitting')}</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <span>{t('form.buttons.submitCheckIn')}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </>
   );
 };

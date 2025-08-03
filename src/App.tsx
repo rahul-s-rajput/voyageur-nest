@@ -11,8 +11,10 @@ import TestIDVerification from './pages/test-id-verification';
 import { Booking, ViewMode } from './types/booking';
 import { InvoiceData, CancellationInvoiceData } from './types/invoice';
 import { invoiceCounterService, bookingService } from './lib/supabase';
+import { StorageService } from './lib/storage';
 import { NewBookingModal } from './components/NewBookingModal';
 import { InvoiceTemplate } from './components/InvoiceTemplate';
+import { NotificationProvider } from './components/NotificationContainer';
 
 function MainApp() {
   const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview'>('home');
@@ -80,6 +82,25 @@ function MainApp() {
     
     return `${istDate} ${istTime}`;
   }
+
+  // Initialize storage bucket on app startup
+  useEffect(() => {
+    const initializeStorage = async () => {
+      try {
+        console.log('🚀 Initializing storage bucket...');
+        const bucketInitialized = await StorageService.initializeBucket();
+        if (bucketInitialized) {
+          console.log('✅ Storage bucket initialized successfully');
+        } else {
+          console.warn('⚠️ Storage bucket initialization failed - this may cause issues with ID photo uploads');
+        }
+      } catch (error) {
+        console.error('❌ Error initializing storage bucket:', error);
+      }
+    };
+
+    initializeStorage();
+  }, []);
 
   // Load bookings and invoice counter
   useEffect(() => {
@@ -503,11 +524,11 @@ function App() {
         <Route path="/checkin/:bookingId/hi" element={<CheckInPage language="hi" />} />
         
         {/* Test routes - ID Verification Demo */}
-        <Route path="/test-id-verification" element={<TestIDVerification />} />
+        <Route path="/test-id-verification" element={<NotificationProvider><TestIDVerification /></NotificationProvider>} />
         
         {/* Admin routes - Protected booking management system */}
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/admin/*" element={<AdminPage />} />
+        <Route path="/admin" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
+        <Route path="/admin/*" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
         
         {/* Legacy routes - redirect to admin */}
         <Route path="/" element={<Navigate to="/admin" replace />} />

@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-In - Ethereal Alpine Lodge</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&family=Dancing+Script:wght@400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --mist-blue: #A8D0E6;
+            --sky-blue: #C8E6F5;
+            --cloud-white: #F8FBFF;
+            --soft-gray: #E8F0F5;
+            --gentle-purple: #D1C4E9;
+            --pearl-white: #FAFCFF;
+            --misty-gray: #B0C4D8;
+            --ethereal-blue: #E3F2FD;
+            --text-primary: #546E7A;
+            --text-secondary: #37474F;
+        }
+        
+        body {
+            font-family: 'Quicksand', sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, var(--cloud-white) 0%, var(--ethereal-blue) 100%);
+            min-height: 100vh;
+        }
+        
+        .hero-section {
+            height: 280px;
+            background: linear-gradient(135deg, var(--mist-blue) 0%, var(--sky-blue) 40%, var(--gentle-purple) 80%, #E1BEE7 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 200'%3E%3Cg fill='%23ffffff12'%3E%3Ccircle cx='80' cy='40' r='20'/%3E%3Ccircle cx='160' cy='25' r='15'/%3E%3Ccircle cx='240' cy='45' r='25'/%3E%3Ccircle cx='320' cy='35' r='18'/%3E%3Ccircle cx='40' cy='90' r='12'/%3E%3Ccircle cx='120' cy='100' r='22'/%3E%3Ccircle cx='200' cy='85' r='16'/%3E%3Ccircle cx='280' cy='95' r='20'/%3E%3Ccircle cx='360' cy='80' r='14'/%3E%3C/g%3E%3C/svg%3E");
+            background-repeat: repeat-x;
+            animation: cloudDrift 25s linear infinite;
+        }
+        
+        @keyframes cloudDrift {
+            0% { transform: translateX(0px); }
+            100% { transform: translateX(-400px); }
+        }
+        
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .hero-title {
+            font-family: 'Dancing Script', cursive;
+            font-size: 42px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            text-shadow: 0 2px 20px rgba(255,255,255,0.5);
+        }
+        
+        .hero-subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            font-weight: 400;
+            font-style: italic;
+        }
+        
+        .floating-elements {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+        
+        .floating-element {
+            position: absolute;
+            opacity: 0.08;
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        .floating-element:nth-child(1) {
+            top: 20%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+        
+        .floating-element:nth-child(2) {
+            top: 60%;
+            right: 15%;
+            animation-delay: 2s;
+        }
+        
+        .floating-element:nth-child(3) {
+            top: 40%;
+            left: 60%;
+            animation-delay: 4s;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(3deg); }
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 0 16px;
+        }
+        
+        .form-container {
+            background: linear-gradient(135deg, var(--pearl-white) 0%, var(--cloud-white) 100%);
+            margin: -40px 16px 24px;
+            border-radius: 32px;
+            box-shadow: 0 25px 50px rgba(168, 208, 230, 0.15);
+            overflow: hidden;
+            border: 1px solid rgba(200, 230, 245, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .form-content {
+            padding: 40px 28px;
+        }
+        
+        .welcome-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .welcome-title {
+            font-family: 'Dancing Script', cursive;
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        
+        .welcome-desc {
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 400;
+        }
+        
+        .form-section {
+            margin-bottom: 40px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--sky-blue);
+        }
+        
+        .section-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--mist-blue) 0%, var(--sky-blue) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 4px 12px rgba(168, 208, 230, 0.2);
+        }
+        
+        .section-title {
+            font-family: 'Dancing Script', cursive;
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 18px 20px;
+            border: 2px solid var(--sky-blue);
+            border-radius: 20px;
+            font-size: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(135deg, var(--pearl-white) 0%, var(--cloud-white) 100%);
+            font-family: 'Quicksand', sans-serif;
+            color: var(--text-secondary);
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--mist-blue);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(168, 208, 230, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .form-input::placeholder {
+            color: var(--misty-gray);
+            opacity: 0.8;
+        }
+        
+        .form-select {
+            width: 100%;
+            padding: 18px 20px;
+            border: 2px solid var(--sky-blue);
+            border-radius: 20px;
+            font-size: 16px;
+            background: linear-gradient(135deg, var(--pearl-white) 0%, var(--cloud-white) 100%);
+            transition: all 0.3s ease;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A8D0E6' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            background-size: 20px;
+            font-family: 'Quicksand', sans-serif;
+            color: var(--text-secondary);
+        }
+        
+        .form-textarea {
+            width: 100%;
+            padding: 18px 20px;
+            border: 2px solid var(--sky-blue);
+            border-radius: 20px;
+            font-size: 16px;
+            min-height: 120px;
+            resize: vertical;
+            font-family: 'Quicksand', sans-serif;
+            transition: all 0.3s ease;
+            background: linear-gradient(135deg, var(--pearl-white) 0%, var(--cloud-white) 100%);
+            color: var(--text-secondary);
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        .upload-area {
+            border: 3px dashed var(--mist-blue);
+            border-radius: 24px;
+            padding: 40px 20px;
+            text-align: center;
+            background: linear-gradient(135deg, var(--ethereal-blue) 0%, var(--pearl-white) 100%);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .upload-area::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, var(--sky-blue)08 1px, transparent 1px);
+            background-size: 20px 20px;
+            animation: mistPattern 15s linear infinite;
+            opacity: 0.3;
+        }
+        
+        @keyframes mistPattern {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(20px, 20px) rotate(360deg); }
+        }
+        
+        .upload-area:hover {
+            border-color: var(--text-secondary);
+            background: linear-gradient(135deg, var(--pearl-white) 0%, #F0F8FF 100%);
+            transform: translateY(-2px);
+        }
+        
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--mist-blue) 0%, var(--sky-blue) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .upload-text {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .upload-desc {
+            font-size: 12px;
+            color: var(--misty-gray);
+            position: relative;
+            z-index: 2;
+        }
+        
+        .checkbox-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, var(--ethereal-blue) 0%, var(--pearl-white) 100%);
+            border-radius: 16px;
+            border: 1px solid var(--sky-blue);
+        }
+        
+        .checkbox-input {
+            width: 22px;
+            height: 22px;
+            margin-top: 2px;
+            accent-color: var(--mist-blue);
+        }
+        
+        .checkbox-label {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+        
+        .submit-button {
+            width: 100%;
+            background: linear-gradient(135deg, var(--mist-blue) 0%, var(--sky-blue) 100%);
+            color: white;
+            border: none;
+            padding: 22px;
+            border-radius: 24px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: 'Quicksand', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 10px 30px rgba(168, 208, 230, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .submit-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(168, 208, 230, 0.4);
+        }
+        
+        .submit-button::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: rotate(45deg);
+            transition: all 0.6s;
+            opacity: 0;
+        }
+        
+        .submit-button:hover::before {
+            animation: shimmer 0.6s ease-in-out;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); opacity: 0; }
+        }
+        
+        .footer-info {
+            text-align: center;
+            padding: 32px;
+            background: linear-gradient(135deg, var(--pearl-white) 0%, var(--cloud-white) 100%);
+            margin: 16px;
+            border-radius: 20px;
+            border: 1px solid var(--sky-blue);
+        }
+        
+        .security-badges {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 16px;
+        }
+        
+        .security-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+        
+        .security-icon {
+            width: 16px;
+            height: 16px;
+            color: var(--mist-blue);
+        }
+        
+        .footer-note {
+            font-size: 12px;
+            color: var(--misty-gray);
+            line-height: 1.4;
+        }
+        
+        .required {
+            color: var(--gentle-purple);
+            font-weight: 600;
+        }
+        
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent 0%, var(--sky-blue) 20%, var(--sky-blue) 80%, transparent 100%);
+            margin: 32px 0;
+        }
+        
+        @media (max-width: 480px) {
+            .hero-title {
+                font-size: 32px;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-content {
+                padding: 32px 24px;
+            }
+            
+            .security-badges {
+                flex-direction: column;
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="hero-section">
+        <div class="floating-elements">
+            <svg class="floating-element" width="60" height="60" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M14,6L10.25,11L13.1,14.8L11.5,16C9.81,13.75 7,10 7,10L1,18H23L14,6Z"/>
+            </svg>
+            <svg class="floating-element" width="50" height="50" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6,2L10.5,7L15,2H6M16,8.5L21,13L16,17.5V8.5M8.5,16L13,21H3L8.5,16M2.5,8.5V17.5L7.5,13L2.5,8.5Z"/>
+            </svg>
+            <svg class="floating-element" width="40" height="40" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.5,12A1.5,1.5 0 0,1 16,10.5A1.5,1.5 0 0,1 17.5,9A1.5,1.5 0 0,1 19,10.5A1.5,1.5 0 0,1 17.5,12M14.5,8A1.5,1.5 0 0,1 13,6.5A1.5,1.5 0 0,1 14.5,5A1.5,1.5 0 0,1 16,6.5A1.5,1.5 0 0,1 14.5,8M9.5,8A1.5,1.5 0 0,1 8,6.5A1.5,1.5 0 0,1 9.5,5A1.5,1.5 0 0,1 11,6.5A1.5,1.5 0 0,1 9.5,8M6.5,12A1.5,1.5 0 0,1 5,10.5A1.5,1.5 0 0,1 6.5,9A1.5,1.5 0 0,1 8,10.5A1.5,1.5 0 0,1 6.5,12M12,3L2,12H5V20H10V16H14V20H19V12H22L12,3Z"/>
+            </svg>
+        </div>
+        <div class="hero-content">
+            <h1 class="hero-title">Ethereal Alpine</h1>
+            <p class="hero-subtitle">Where clouds touch dreams and mountains whisper serenity</p>
+        </div>
+    </div>
+    
+    <div class="container">
+        <form class="form-container">
+            <div class="form-content">
+                <div class="welcome-section">
+                    <h2 class="welcome-title">Welcome to Tranquil Heights</h2>
+                    <p class="welcome-desc">Complete your peaceful check-in journey</p>
+                </div>
+                
+                <!-- Personal Information -->
+                <div class="form-section">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                            </svg>
+                        </div>
+                        <h3 class="section-title">Personal Information</h3>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">First Name <span class="required">*</span></label>
+                            <input type="text" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Last Name <span class="required">*</span></label>
+                            <input type="text" class="form-input" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Email Address <span class="required">*</span></label>
+                        <input type="email" class="form-input" placeholder="your@email.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Phone Number <span class="required">*</span></label>
+                        <input type="tel" class="form-input" placeholder="+91 XXXXX XXXXX" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Complete Address <span class="required">*</span></label>
+                        <textarea class="form-textarea" placeholder="Street address, city, state, postal code..." required></textarea>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <!-- ID Verification -->
+                <div class="form-section">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M9,22A1,1 0 0,1 8,21V18H4A2,2 0 0,1 2,16V4C2,2.89 2.9,2 4,2H20A2,2 0 0,1 22,4V16A2,2 0 0,1 20,18H13.9L10.2,21.71C10,21.9 9.75,22 9.5,22H9Z"/>
+                            </svg>
+                        </div>
+                        <h3 class="section-title">ID Verification</h3>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">ID Document Type <span class="required">*</span></label>
+                        <select class="form-select" required>
+                            <option value="">Choose your ID type</option>
+                            <option value="passport">Passport</option>
+                            <option value="aadhaar">Aadhaar Card</option>
+                            <option value="driving_license">Driving License</option>
+                            <option value="pan_card">PAN Card</option>
+                            <option value="voter_id">Voter ID Card</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Upload ID Photos <span class="required">*</span></label>
+                        <div class="upload-area">
+                            <div class="upload-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
+                                </svg>
+                            </div>
+                            <div class="upload-text">Upload or Capture ID</div>
+                            <div class="upload-desc">Clear photos of both sides • Max 5MB each</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <!-- Emergency Contact -->
+                <div class="form-section">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M18.5,4A2.5,2.5 0 0,1 21,6.5C21,7.38 20.75,8.21 20.31,8.9L19.36,10.5C19.75,11.46 20,12.47 20,13.5C20,17.09 17.09,20 13.5,20C9.91,20 7,17.09 7,13.5C7,9.91 9.91,7 13.5,7C14.53,7 15.54,7.25 16.5,7.64L18.1,6.69C18.79,6.25 19.62,6 20.5,6H18.5M13.5,2A6.5,6.5 0 0,0 7,8.5H9A4.5,4.5 0 0,1 13.5,4A4.5,4.5 0 0,1 18,8.5H20A6.5,6.5 0 0,0 13.5,2Z"/>
+                            </svg>
+                        </div>
+                        <h3 class="section-title">Emergency Contact</h3>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Contact Person Name <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="Full name of emergency contact" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Phone Number <span class="required">*</span></label>
+                            <input type="tel" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Relationship <span class="required">*</span></label>
+                            <input type="text" class="form-input" placeholder="e.g., Spouse, Parent" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <!-- Visit Purpose -->
+                <div class="form-section">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M15,13H16.5V15.82L18.94,17.23L18.19,18.53L15,16.69V13M19,8H5V19H9.67C9.24,18.09 9,17.07 9,16A7,7 0 0,1 16,9C17.07,9 18.09,9.24 19,9.67V8M5,21C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H6V1H8V3H16V1H18V3H19A2,2 0 0,1 21,5V11.1C22.24,12.36 23,14.09 23,16A7,7 0 0,1 16,23C14.09,23 12.36,22.24 11.1,21H5M16,11.15A4.85,4.85 0 0,0 11.15,16C11.15,18.68 13.32,20.85 16,20.85A4.85,4.85 0 0,0 20.85,16C20.85,13.32 18.68,11.15 16,11.15Z"/>
+                            </svg>
+                        </div>
+                        <h3 class="section-title">Visit Details</h3>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Purpose of Visit <span class="required">*</span></label>
+                        <select class="form-select" required>
+                            <option value="">What calls you to the mountains?</option>
+                            <option value="leisure">Serenity & Leisure</option>
+                            <option value="business">Business Retreat</option>
+                            <option value="medical">Wellness & Healing</option>
+                            <option value="spiritual">Spiritual Journey</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Special Requests</label>
+                        <textarea class="form-textarea" placeholder="Share your dreams with us... dietary preferences, accessibility needs, meditation spaces, or any celestial wishes..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <!-- Terms -->
+                <div class="form-section">
+                    <div class="checkbox-container">
+                        <input type="checkbox" class="checkbox-input" required>
+                        <label class="checkbox-label">
+                            I have read and agree to the <strong>Terms of Service</strong> and <strong>Privacy Policy</strong>. I consent to the processing of my personal data for accommodation and wellness purposes. <span class="required">*</span>
+                        </label>
+                    </div>
+                    
+                    <div class="checkbox-container">
+                        <input type="checkbox" class="checkbox-input">
+                        <label class="checkbox-label">
+                            I would like to receive gentle updates about meditation sessions, sunrise yoga, and exclusive mountain retreat offerings.
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="submit-button">
+                        ☁️ Begin Serene Journey
+                    </button>
+                </div>
+            </div>
+        </form>
+        
+        <div class="footer-info">
+            <div class="security-badges">
+                <div class="security-badge">
+                    <svg class="security-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M10,17L6,13L7.41,11.59L10,14.17L16.59,7.58L18,9L10,17Z"/>
+                    </svg>
+                    Secure & Protected
+                </div>
+                <div class="security-badge">
+                    <svg class="security-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,16.5L6.5,12L7.91,10.59L11,13.67L16.59,8.09L18,9.5L11,16.5Z"/>
+                    </svg>
+                    Lightning Fast
+                </div>
+                <div class="security-badge">
+                    <svg class="security-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11C16.42,11 20,9.21 20,7C20,4.79 16.42,3 12,3M4,9V12C4,14.21 7.58,16 12,16C16.42,16 20,14.21 20,12V9C20,11.21 16.42,13 12,13C7.58,13 4,11.21 4,9M4,14V17C4,19.21 7.58,21 12,21C16.42,21 20,19.21 20,17V14C20,16.21 16.42,18 12,18C7.58,18 4,16.21 4,14Z"/>
+                    </svg>
+                    24/7 Care
+                </div>
+            </div>
+            <p class="footer-note">Your information floats safely in our cloud of protection. We honor your privacy as we honor the sacred mist.</p>
+        </div>
+    </div>
+</body>
+</html>

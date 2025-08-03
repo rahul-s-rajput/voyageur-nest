@@ -56,7 +56,15 @@ const FALLBACK_TRANSLATIONS = {
         "checkOutDate": "Check-out Date",
         "numberOfGuests": "Number of Guests",
         "roomType": "Room Type",
-        "specialRequests": "Special Requests"
+        "specialRequests": "Special Requests",
+        "emergencyContactName": "Emergency Contact Name",
+        "emergencyContactPhone": "Emergency Contact Phone",
+        "relationship": "Relationship",
+        "purposeOfVisit": "Purpose of Visit",
+        "uploadIdPhotos": "Upload ID Photos",
+        "termsAccepted": "I accept the terms and conditions",
+        "marketingConsent": "I agree to receive marketing communications",
+        "idNumber": "ID Number"
       },
       "sections": {
         "personalInfo": "Personal Information",
@@ -64,7 +72,12 @@ const FALLBACK_TRANSLATIONS = {
         "identification": "Identification",
         "emergencyInfo": "Emergency Contact",
         "stayDetails": "Stay Details",
-        "preferences": "Preferences & Requests"
+        "preferences": "Preferences & Requests",
+        "personalDetails": "Personal Details",
+        "idVerification": "ID Verification",
+        "emergencyContact": "Emergency Contact",
+        "purposeOfVisit": "Purpose of Visit",
+        "additionalGuests": "Additional Guests"
       },
       "buttons": {
         "next": "Next",
@@ -72,14 +85,19 @@ const FALLBACK_TRANSLATIONS = {
         "submit": "Submit Check-in",
         "addGuest": "Add Guest",
         "removeGuest": "Remove Guest",
-        "uploadId": "Upload ID Document"
+        "uploadId": "Upload ID Document",
+        "submitting": "Submitting...",
+        "submitCheckIn": "Submit Check-In"
       },
       "validation": {
         "required": "This field is required",
         "email": "Please enter a valid email address",
         "phone": "Please enter a valid phone number",
         "date": "Please enter a valid date",
-        "minAge": "Guest must be at least 18 years old"
+        "minAge": "Guest must be at least 18 years old",
+        "invalidEmail": "Please enter a valid email address",
+        "invalidPhone": "Please enter a valid phone number",
+        "termsRequired": "You must accept the terms and conditions"
       },
       "placeholders": {
         "firstName": "Enter your first name",
@@ -95,7 +113,9 @@ const FALLBACK_TRANSLATIONS = {
         "idNumber": "Enter your ID number",
         "emergencyContact": "Emergency contact name",
         "emergencyPhone": "Emergency contact phone",
-        "specialRequests": "Any special requests or preferences..."
+        "specialRequests": "Any special requests or preferences...",
+        "selectIdType": "Select ID Type",
+        "selectPurpose": "Select purpose"
       },
       "options": {
         "roomTypes": {
@@ -103,13 +123,21 @@ const FALLBACK_TRANSLATIONS = {
           "deluxe": "Deluxe Room",
           "suite": "Suite",
           "family": "Family Room"
-        }
+        },
+        "business": "Business",
+        "leisure": "Tourism / Vacation",
+        "conference": "Conference",
+        "other": "Other"
       },
       "idTypes": {
         "passport": "Passport",
         "drivingLicense": "Driving License",
         "nationalId": "National ID",
-        "other": "Other"
+        "other": "Other",
+        "aadhaar": "Aadhaar Card",
+        "panCard": "PAN Card",
+        "voterId": "Voter ID Card",
+        "rationCard": "Ration Card"
       },
       "terms": {
         "agreement": "I agree to the terms and conditions",
@@ -124,7 +152,11 @@ const FALLBACK_TRANSLATIONS = {
       "error": "An error occurred. Please try again.",
       "checkInSuccess": "Welcome! Your check-in has been completed successfully.",
       "uploadSuccess": "Document uploaded successfully",
-      "uploadError": "Failed to upload document. Please try again."
+      "uploadError": "Failed to upload document. Please try again.",
+      "translationUnavailable": "Translation service temporarily unavailable. Showing English text.",
+      "noAdditionalGuests": "No additional guests added",
+      "thankYou": "Thank you for completing the check-in process.",
+      "submitError": "Failed to submit check-in form. Please try again."
     },
     "languageSelector": {
       "loading": "Loading languages..."
@@ -150,12 +182,18 @@ const FALLBACK_TRANSLATIONS = {
       "loading": "Loading check-in details...",
       "error": "Error loading check-in information",
       "title": "Digital Check-in",
-      "bookingId": "Booking ID",
-      "guest": "Guest",
-      "room": "Room",
-      "checkInDate": "Check-in Date",
+      "bookingId": "Booking ID:",
+      "guest": "Guest:",
+      "room": "Room:",
+      "checkInDate": "Check-in Date:",
       "alreadyCompleted": "Check-in already completed",
-      "notFound": "Booking not found"
+      "notFound": "Booking not found",
+      "digitalCheckIn": "Digital Check-in",
+      "checkInComplete": "Check-in Complete!",
+      "checkInSuccess": "Your check-in form has been submitted successfully.",
+      "canClosePageNow": "You can now close this page.",
+      "processCompleted": "Check-in process completed.",
+      "errorPrefix": "Error: "
     }
   }
 };
@@ -794,6 +832,25 @@ class DatabaseTranslationService {
   }
 
   /**
+   * Force refresh the translation service (clears cache and reloads)
+   */
+  async forceRefresh(): Promise<void> {
+    console.log('[TranslationService] Force refresh initiated');
+    
+    // Clear all caches
+    this.cache.clear();
+    this.availableLanguages = [];
+    this.isInitialized = false;
+    this.useFallback = true;
+    
+    // Reinitialize
+    this.initializeFallbackForBootstrap();
+    await this.upgradeToDatabase();
+    
+    console.log('[TranslationService] Force refresh completed');
+  }
+
+  /**
    * Run database health check for diagnostics
    */
   async runHealthCheck(): Promise<void> {
@@ -812,14 +869,19 @@ export const databaseTranslationService = DatabaseTranslationService.getInstance
 // Export for backward compatibility
 export default databaseTranslationService;
 
-// // Add to global scope for debugging in development
-// if (typeof window !== 'undefined' && import.meta.env.DEV) {
-//   window.databaseTranslationService = databaseTranslationService;
-//   window.debugTranslationService = () => {
-//     console.group('🔍 Translation Service Debug');
-//     console.log('Service instance:', databaseTranslationService);
-//     console.log('Cache stats:', databaseTranslationService.getCacheStats());
-//     console.log('Available languages:', databaseTranslationService.getAvailableLanguages());
-//     console.groupEnd();
-//   };
-// }
+// Add to global scope for debugging in development
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  window.databaseTranslationService = databaseTranslationService;
+  window.debugTranslationService = () => {
+    console.group('🔍 Translation Service Debug');
+    console.log('Service instance:', databaseTranslationService);
+    console.log('Cache stats:', databaseTranslationService.getCacheStats());
+    console.log('Available languages:', databaseTranslationService.getAvailableLanguages());
+    console.groupEnd();
+  };
+  window.fixTranslations = async () => {
+    console.log('🔄 Forcing translation refresh...');
+    await databaseTranslationService.forceRefresh();
+    console.log('✅ Refresh complete! Try your dropdowns now.');
+  };
+}

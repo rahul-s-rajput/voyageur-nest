@@ -1,5 +1,6 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useNotification } from './NotificationContainer';
 
 interface QRCodeGeneratorProps {
   bookingId: string;
@@ -12,6 +13,7 @@ export const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
   size = 200,
   className = ''
 }) => {
+  const { showSuccess } = useNotification();
   // Generate the check-in URL
   const checkInUrl = `${window.location.origin}/checkin/${bookingId}`;
 
@@ -29,7 +31,7 @@ export const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(checkInUrl);
-      alert('Check-in link copied to clipboard!');
+      showSuccess('Copied!', 'Check-in link copied to clipboard!');
     } catch (error) {
       console.error('Failed to copy link:', error);
       // Fallback for older browsers
@@ -39,7 +41,7 @@ export const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
       textArea.select();
       document.execCommand('copy');
       document.body.removeChild(textArea);
-      alert('Check-in link copied to clipboard!');
+      showSuccess('Copied!', 'Check-in link copied to clipboard!');
     }
   };
 

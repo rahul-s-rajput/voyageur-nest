@@ -7,5 +7,7 @@ declare global {
     debugTranslationService?: () => void;
     quickDebug?: () => void;
     debugTranslations?: () => void;
+    fixTranslations?: () => Promise<void>;
+    testTranslations?: () => void;
   }
 }
