@@ -1,10 +1,15 @@
 import { supabase } from './supabase';
+import { EnhancedFileValidator, ValidationResult } from '../utils/fileValidator';
+import { RateLimiter } from '../utils/rateLimiter';
+import SecureLogger from '../utils/secureLogger';
+import ErrorHandler, { AppError } from '../utils/errorHandler';
 
 export interface UploadResult {
   success: boolean;
   url?: string;
   error?: string;
   path?: string;
+  validationDetails?: ValidationResult;
 }
 
 export interface UploadProgress {
@@ -17,6 +22,8 @@ export class StorageService {
   private static readonly BUCKET_NAME = 'id-documents';
   private static readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
   private static readonly ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  
+
 
   /**
    * Initialize the storage bucket with proper policies
@@ -57,23 +64,86 @@ export class StorageService {
   }
 
   /**
-   * Upload a single file to the storage bucket
+   * Upload a single file to the storage bucket with enhanced security
    */
   static async uploadFile(
     file: File, 
     checkInId: string,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<UploadResult> {
+    const context = 'StorageService.uploadFile';
+    
     try {
-      // Validate file
-      const validation = this.validateFile(file);
-      if (!validation.valid) {
-        return { success: false, error: validation.error };
+      // Check rate limiting for file uploads using static method
+      const rateLimitCheck = RateLimiter.checkRateLimit('file-upload', 'storage');
+      if (!rateLimitCheck.allowed) {
+        const error = ErrorHandler.handleRateLimit(
+          'file upload',
+          rateLimitCheck.retryAfter,
+          context
+        );
+        
+        SecureLogger.security('File upload rate limit exceeded', {
+          checkInId,
+          fileName: file.name,
+          fileSize: file.size,
+          retryAfter: rateLimitCheck.retryAfter
+        }, context);
+        
+        return { 
+          success: false, 
+          error: error.userMessage,
+          validationDetails: {
+            valid: false,
+            errors: [error.userMessage],
+            securityFlags: ['RATE_LIMITED']
+          }
+        };
       }
 
-      // Generate unique file path
+      // Record the upload attempt
+      RateLimiter.recordAttempt('file-upload', 'storage');
+
+      // Enhanced file validation
+      const validation = await EnhancedFileValidator.validateFile(file);
+      if (!validation.valid) {
+        const errorMessages = validation.errors?.length 
+          ? validation.errors.join(', ')
+          : validation.error || 'File validation failed';
+        
+        const error = ErrorHandler.handleFileUpload(
+          `File validation failed: ${errorMessages}`,
+          file.name,
+          file.size,
+          context
+        );
+        
+        SecureLogger.warn('File validation failed', {
+          checkInId,
+          fileName: file.name,
+          fileSize: file.size,
+          validationErrors: validation.errors,
+          securityFlags: validation.securityFlags
+        }, context);
+        
+        return { 
+          success: false, 
+          error: error.userMessage,
+          validationDetails: validation
+        };
+      }
+
+      // Log successful validation
+      SecureLogger.info('File validation passed', {
+        checkInId,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      }, context);
+
+      // Generate unique file path with additional security
       const timestamp = Date.now();
-      const randomId = Math.random().toString(36).substring(2, 15);
+      const randomId = crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
       const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${checkInId}/${timestamp}-${randomId}.${fileExtension}`;
 
@@ -82,7 +152,7 @@ export class StorageService {
         ? file 
         : await this.compressImage(file);
 
-      // Upload file
+      // Upload file with enhanced error handling
       const { data, error } = await supabase.storage
         .from(this.BUCKET_NAME)
         .upload(fileName, processedFile, {
@@ -91,51 +161,156 @@ export class StorageService {
         });
 
       if (error) {
-        console.error('Upload error:', error);
-        return { success: false, error: error.message };
+        const appError = ErrorHandler.handleFileUpload(
+          `Upload failed: ${error.message}`,
+          file.name,
+          file.size,
+          context
+        );
+        
+        SecureLogger.error('File upload failed', appError, context);
+        
+        return { 
+          success: false, 
+          error: appError.userMessage,
+          validationDetails: validation
+        };
       }
 
-      // Get public URL (signed URL for private bucket)
+      // Get signed URL for private bucket
       const { data: urlData } = await supabase.storage
         .from(this.BUCKET_NAME)
         .createSignedUrl(fileName, 60 * 60 * 24 * 365); // 1 year expiry
 
+      // Log successful upload (without sensitive data)
+      SecureLogger.info('File uploaded successfully', {
+        checkInId,
+        fileName: file.name,
+        fileSize: file.size,
+        uploadPath: fileName
+      }, context);
+
       return {
         success: true,
         url: urlData?.signedUrl,
-        path: fileName
+        path: fileName,
+        validationDetails: validation
       };
 
     } catch (error) {
-      console.error('Error uploading file:', error);
+      const appError = ErrorHandler.handle(error, context, {
+        checkInId,
+        fileName: file.name,
+        fileSize: file.size
+      });
+      
+      SecureLogger.error('Unexpected error during file upload', appError, context);
+      
       return { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Upload failed' 
+        error: appError.userMessage,
+        validationDetails: {
+          valid: false,
+          errors: ['An unexpected error occurred during upload'],
+          securityFlags: ['SYSTEM_ERROR']
+        }
       };
     }
   }
 
   /**
-   * Upload multiple files
+   * Upload multiple files with enhanced security
    */
   static async uploadFiles(
     files: File[], 
     checkInId: string,
     onProgress?: (fileIndex: number, progress: UploadProgress) => void
   ): Promise<UploadResult[]> {
+    const context = 'StorageService.uploadFiles';
     const results: UploadResult[] = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const result = await this.uploadFile(
-        file, 
-        checkInId, 
-        onProgress ? (progress) => onProgress(i, progress) : undefined
-      );
-      results.push(result);
-    }
+    // Log batch upload attempt
+    SecureLogger.info('Batch file upload started', {
+      checkInId,
+      fileCount: files.length,
+      totalSize: files.reduce((sum, file) => sum + file.size, 0)
+    }, context);
 
-    return results;
+    // Validate all files first using enhanced validator
+    const validationPromises = files.map(file => 
+      EnhancedFileValidator.validateFile(file)
+    );
+    
+    try {
+      const validations = await Promise.all(validationPromises);
+      
+      // Check if any files failed validation
+      const failedValidations = validations.filter(v => !v.valid);
+      if (failedValidations.length > 0) {
+        SecureLogger.warn('Batch validation failed for some files', {
+          checkInId,
+          failedCount: failedValidations.length,
+          totalCount: files.length
+        }, context);
+      }
+
+      // Upload files sequentially to avoid overwhelming the system
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const validation = validations[i];
+        
+        if (!validation.valid) {
+          // Skip invalid files but include them in results
+          const errorMessages = validation.errors?.length 
+            ? validation.errors.join(', ')
+            : validation.error || 'File validation failed';
+          
+          results.push({
+            success: false,
+            error: `File validation failed: ${errorMessages}`,
+            validationDetails: validation
+          });
+          continue;
+        }
+        
+        const result = await this.uploadFile(
+          file, 
+          checkInId, 
+          onProgress ? (progress) => onProgress(i, progress) : undefined
+        );
+        results.push(result);
+      }
+
+      // Log batch upload completion
+      const successCount = results.filter(r => r.success).length;
+      SecureLogger.info('Batch file upload completed', {
+        checkInId,
+        totalFiles: files.length,
+        successCount,
+        failureCount: files.length - successCount
+      }, context);
+
+      return results;
+      
+    } catch (error) {
+      const appError = ErrorHandler.handle(error, context, {
+        checkInId,
+        fileCount: files.length
+      });
+      
+      SecureLogger.error('Batch file upload failed', appError, context);
+      
+      // Return error for all files
+      return files.map(() => ({
+        success: false,
+        error: appError.userMessage,
+        validationDetails: {
+          valid: false,
+          errors: ['Batch upload failed'],
+          securityFlags: ['SYSTEM_ERROR']
+        }
+      }));
+    }
   }
 
   /**
@@ -181,10 +356,11 @@ export class StorageService {
   }
 
   /**
-   * Validate file before upload
+   * Legacy validation method - now using EnhancedFileValidator
+   * @deprecated Use EnhancedFileValidator.validateFile() instead
    */
   private static validateFile(file: File): { valid: boolean; error?: string } {
-    // Check file size
+    // Basic validation for backward compatibility
     if (file.size > this.MAX_FILE_SIZE) {
       return { 
         valid: false, 
@@ -192,7 +368,6 @@ export class StorageService {
       };
     }
 
-    // Check file type
     if (!this.ALLOWED_TYPES.includes(file.type)) {
       return { 
         valid: false, 

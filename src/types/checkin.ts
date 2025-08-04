@@ -70,6 +70,9 @@ export interface CheckInData {
 }
 
 export interface CheckInFormData {
+  // Unique identifier
+  id?: string;
+  
   // Personal Details
   firstName: string;
   lastName: string;

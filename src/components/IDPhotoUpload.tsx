@@ -1,6 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Camera, Upload, X, Check, AlertCircle } from 'lucide-react';
 import { useTranslation } from '../hooks/useTranslation';
+import { EnhancedFileValidator } from '../utils/fileValidator';
+import { useNotification } from './NotificationContainer';
 
 interface IDPhotoUploadProps {
   onPhotosChange: (photos: File[]) => void;
@@ -31,41 +33,29 @@ const IDPhotoUpload: React.FC<IDPhotoUploadProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const { t } = useTranslation();
+  const { showError, showWarning } = useNotification();
 
-  const validateFile = (file: File): string | null => {
-    if (!acceptedTypes.includes(file.type)) {
-      return 'Invalid file type';
+  const validateFile = async (file: File): Promise<string | null> => {
+    // Use EnhancedFileValidator for comprehensive validation including magic numbers
+    const validationResult = await EnhancedFileValidator.validateFile(file, {
+      maxFileSize: maxSizePerFile * 1024 * 1024,
+      allowedTypes: acceptedTypes
+    });
+
+    if (!validationResult.valid) {
+      return validationResult.error || 'File validation failed';
     }
-    if (file.size > maxSizePerFile * 1024 * 1024) {
-      return 'File too large';
-    }
+
     return null;
   };
 
   const processFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
-    const newErrors: string[] = [];
     const validFiles: File[] = [];
 
     // Check total file count
     if (photos.length + fileArray.length > maxFiles) {
-      newErrors.push('Too many files');
-      setErrors(newErrors);
-      return;
-    }
-
-    // Validate each file
-    for (const file of fileArray) {
-      const error = validateFile(file);
-      if (error) {
-        newErrors.push(`${file.name}: ${error}`);
-      } else {
-        validFiles.push(file);
-      }
-    }
-
-    if (newErrors.length > 0) {
-      setErrors(newErrors);
+      showError('Too Many Files', `Maximum ${maxFiles} files allowed. You selected ${fileArray.length} files but can only add ${maxFiles - photos.length} more.`);
       return;
     }
 
@@ -73,6 +63,27 @@ const IDPhotoUpload: React.FC<IDPhotoUploadProps> = ({
     setErrors([]);
 
     try {
+      // Validate each file with enhanced validation
+      for (const file of fileArray) {
+        const error = await validateFile(file);
+        if (error) {
+          showError('File Validation Failed', `${file.name}: ${error}`);
+        } else {
+          validFiles.push(file);
+        }
+      }
+
+      if (validFiles.length === 0) {
+        setUploading(false);
+        return;
+      }
+
+      // Show warning if some files were rejected
+      if (validFiles.length < fileArray.length) {
+        const rejectedCount = fileArray.length - validFiles.length;
+        showWarning('Some Files Rejected', `${rejectedCount} file(s) were rejected due to validation errors. ${validFiles.length} file(s) will be uploaded.`);
+      }
+
       const newPhotos: UploadedPhoto[] = [];
       
       for (const file of validFiles) {
@@ -95,11 +106,11 @@ const IDPhotoUpload: React.FC<IDPhotoUploadProps> = ({
       
     } catch (error) {
       console.error('Error processing files:', error);
-      setErrors(['Upload failed']);
+      showError('Upload Failed', 'An unexpected error occurred while processing your files. Please try again.');
     } finally {
       setUploading(false);
     }
-  }, [photos, maxFiles, maxSizePerFile, acceptedTypes, onPhotosChange]);
+  }, [photos, maxFiles, validateFile, onPhotosChange, showError, showWarning]);
 
 
 

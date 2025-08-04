@@ -5,6 +5,10 @@ import IDPhotoUpload from './IDPhotoUpload';
 import { StorageService } from '../lib/storage';
 import { useTranslation } from '../hooks/useTranslation';
 import LanguageSelector from './LanguageSelector';
+import { ServerRateLimiter } from '../services/serverRateLimiter';
+import { SecureLogger } from '../utils/secureLogger';
+import { ErrorHandler, ErrorType } from '../utils/errorHandler';
+import { useNotification } from './NotificationContainer';
 
 export const CheckInForm: React.FC<CheckInFormProps> = ({
   bookingId,
@@ -19,11 +23,17 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [showErrorMessage, setShowErrorMessage] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string>('');
+
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Initialize notification hook
+  const { showError, showWarning, showSuccess } = useNotification();
   
   // Initialize translation hook with the current language
   const { t, isLoading: isTranslating, error: translationError, setLanguage, currentLanguage } = useTranslation(language || 'en-US');
+  
+  // Initialize security utilities
+  // ServerRateLimiter and ErrorHandler are used statically, no instance needed
 
   const {
     register,
@@ -80,70 +90,98 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
   };
 
   const onFormSubmit = async (data: CheckInFormData) => {
-    if (externalErrorHandling) {
-      // Let parent component handle errors, but still catch them to prevent form success state
-      try {
-        setSubmitStatus('idle');
-        
-        // Handle ID photo uploads if present
-        let idPhotoUrls: string[] = [];
-        if (data.idPhotos && data.idPhotos.length > 0) {
-          const tempCheckInId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const uploadResults = await StorageService.uploadFiles(data.idPhotos, tempCheckInId);
-          idPhotoUrls = uploadResults.filter(result => result.success && result.url).map(result => result.url!);
-        }
-        
-        // Prepare data for submission (remove File objects, add URLs)
-        const submissionData = {
-          ...data,
-          idPhotos: undefined, // Remove File objects
-          id_photo_urls: idPhotoUrls, // Add uploaded URLs
-        };
-        
-        await onSubmit(submissionData);
-        setSubmitStatus('success');
-        // Reset form after successful submission
-        setTimeout(() => {
-          reset();
-          setSubmitStatus('idle');
-        }, 3000);
-      } catch (error) {
-        // Don't set error state, parent will handle it
-        // Just ensure we don't show success
-        setSubmitStatus('idle');
+    try {
+      setSubmitting(true);
+      
+      // Get client information for rate limiting
+      const identifier = bookingId || data.email || 'anonymous';
+      const userAgent = navigator.userAgent;
+      
+      // Check server-side rate limit before submission
+      const rateLimitCheck = await ServerRateLimiter.checkRateLimit(
+        'checkin-submission', 
+        identifier,
+        undefined, // IP address will be determined server-side
+        userAgent
+      );
+      
+      if (!rateLimitCheck.allowed) {
+        const retryTime = rateLimitCheck.retryAfter || 60;
+        showError(
+          'Rate Limit Exceeded', 
+          rateLimitCheck.message || `Please wait ${retryTime} seconds before submitting again. This helps protect our system from abuse.`
+        );
+        return;
       }
-    } else {
-      // Handle errors internally (original behavior)
-      try {
-        setSubmitStatus('idle');
-        
-        // Handle ID photo uploads if present
-        let idPhotoUrls: string[] = [];
-        if (data.idPhotos && data.idPhotos.length > 0) {
-          const tempCheckInId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const uploadResults = await StorageService.uploadFiles(data.idPhotos, tempCheckInId);
-          idPhotoUrls = uploadResults.filter(result => result.success && result.url).map(result => result.url!);
+
+      // Log submission start
+      SecureLogger.info('Check-in form submission started', {
+        hasIdPhotos: !!data.idPhotos && data.idPhotos.length > 0,
+        guestCount: data.additionalGuests?.length || 0
+      });
+
+      // Handle ID photo upload if present
+      if (data.idPhotos && data.idPhotos.length > 0) {
+        try {
+          const uploadResults = await StorageService.uploadFiles(data.idPhotos, data.id || '');
+          const uploadedUrls = uploadResults.filter(result => result.success).map(result => result.url).filter(Boolean) as string[];
+          
+          // Log successful photo upload
+          SecureLogger.info('ID photos uploaded successfully', {
+            checkInId: data.id,
+            photoCount: uploadedUrls.length
+          });
+
+          // Remove file objects and add uploaded URLs
+          const { idPhotos, ...submissionData } = data;
+          const finalData = {
+            ...submissionData,
+            id_photo_urls: uploadedUrls
+          };
+
+          await onSubmit(finalData);
+          
+          // Record successful submission
+          await ServerRateLimiter.recordAttempt('checkin-submission', identifier, true, undefined, userAgent);
+        } catch (uploadError) {
+          // Log upload failure
+          SecureLogger.warn('ID photo upload failed', {
+            checkInId: data.id,
+            error: uploadError instanceof Error ? uploadError.message : 'Unknown error'
+          });
+          
+          // Record failed submission
+          await ServerRateLimiter.recordAttempt('checkin-submission', identifier, false, undefined, userAgent);
+          throw uploadError;
         }
-        
-        // Prepare data for submission (remove File objects, add URLs)
-        const submissionData = {
-          ...data,
-          idPhotos: undefined, // Remove File objects
-          id_photo_urls: idPhotoUrls, // Add uploaded URLs
-        };
-        
+      } else {
+        // No photos to upload, submit directly
+        const { idPhotos, ...submissionData } = data;
         await onSubmit(submissionData);
-        setSubmitStatus('success');
-        // Reset form after successful submission
-        setTimeout(() => {
-          reset();
-          setSubmitStatus('idle');
-        }, 3000);
-      } catch (error) {
-        console.error('Error submitting check-in form:', error);
+        
+        // Record successful submission
+        await ServerRateLimiter.recordAttempt('checkin-submission', identifier, true, undefined, userAgent);
+      }
+    } catch (error) {
+      // Record failed submission for rate limiting
+      const identifier = bookingId || data.email || 'anonymous';
+      const userAgent = navigator.userAgent;
+      await ServerRateLimiter.recordAttempt('checkin-submission', identifier, false, undefined, userAgent);
+      
+      // Use ErrorHandler for consistent error management
+      const handledError = ErrorHandler.handle(error, 'checkin-form-submission', {
+        userId: data.id,
+        action: 'form-submit'
+      });
+
+      if (!externalErrorHandling) {
+        showError('Submission Failed', handledError.userMessage);
         setSubmitStatus('error');
-        setTimeout(() => setSubmitStatus('idle'), 5000);
+      } else {
+        throw handledError;
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -210,6 +248,8 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
         </div>
       )}
       
+
+
       {/* Form submission error */}
       {submitStatus === 'error' && !externalErrorHandling && (
         <div className="ethereal-error border border-red-200 text-red-700 px-6 py-4 rounded-2xl mb-8">

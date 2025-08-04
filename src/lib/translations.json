@@ -100,7 +100,10 @@
       "checkInSuccess": "Check-in completed successfully!",
       "checkInError": "An error occurred during check-in. Please try again.",
       "translationUnavailable": "Translation service temporarily unavailable. Showing English text.",
-      "noAdditionalGuests": "No additional guests added"
+      "noAdditionalGuests": "No additional guests added",
+      "thankYou": "Thank you for completing the check-in process.",
+      "submitError": "Failed to submit check-in form. Please try again.",
+      "rateLimitExceeded": "Too many submissions. Please wait {{retryAfter}} seconds before trying again."
     },
     "languageSelector": {
       "loading": "Loading..."
