@@ -9,6 +9,8 @@ import { ServerRateLimiter } from '../services/serverRateLimiter';
 import { SecureLogger } from '../utils/secureLogger';
 import { ErrorHandler, ErrorType } from '../utils/errorHandler';
 import { useNotification } from './NotificationContainer';
+import { GuestProfileService } from '../services/guestProfileService';
+import type { GuestProfile } from '../types/guest';
 
 export const CheckInForm: React.FC<CheckInFormProps> = ({
   bookingId,
@@ -25,6 +27,9 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
+  
+  // Guest profile states (for automatic matching)
+  const [matchedGuest, setMatchedGuest] = useState<GuestProfile | null>(null);
   
   // Initialize notification hook
   const { showError, showWarning, showSuccess } = useNotification();
@@ -89,6 +94,46 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
     onLanguageChange?.(languageCode);
   };
 
+  // Automatic guest profile matching
+  const findMatchingGuest = async (email: string, phone: string, name: string) => {
+    if (!email && !phone) return null;
+
+    try {
+      // Search by email first (most reliable)
+      if (email) {
+        const emailResults = await GuestProfileService.searchGuestProfiles({
+          search: email,
+          limit: 5,
+          offset: 0
+        });
+        
+        const exactEmailMatch = emailResults.find(guest => 
+          guest.email?.toLowerCase() === email.toLowerCase()
+        );
+        if (exactEmailMatch) return exactEmailMatch;
+      }
+
+      // Search by phone if no email match
+      if (phone) {
+        const phoneResults = await GuestProfileService.searchGuestProfiles({
+          search: phone,
+          limit: 5,
+          offset: 0
+        });
+        
+        const exactPhoneMatch = phoneResults.find(guest => 
+          guest.phone === phone
+        );
+        if (exactPhoneMatch) return exactPhoneMatch;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error finding matching guest:', error);
+      return null;
+    }
+  };
+
   const onFormSubmit = async (data: CheckInFormData) => {
     try {
       setSubmitting(true);
@@ -120,6 +165,57 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
         guestCount: data.additionalGuests?.length || 0
       });
 
+      // Handle guest profile creation/linking with automatic matching
+      let guestProfileId: string | null = null;
+      
+      try {
+        // Automatically find matching guest profile
+        const fullName = `${data.firstName} ${data.lastName}`.trim();
+        const existingGuest = await findMatchingGuest(data.email, data.phone, fullName);
+        
+        if (existingGuest) {
+          // Update existing guest profile with any new information
+          guestProfileId = existingGuest.id;
+          await GuestProfileService.updateGuestProfile({
+            id: existingGuest.id,
+            name: fullName,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            city: data.city,
+            state: data.state,
+            country: data.country
+          });
+          
+          // Log that we found and updated an existing guest
+          SecureLogger.info('Existing guest profile updated during check-in', {
+            guestId: existingGuest.id,
+            checkInId: data.id
+          });
+        } else {
+          // Create new guest profile
+          const newGuest = await GuestProfileService.createGuestProfile({
+            name: fullName,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            city: data.city,
+            state: data.state,
+            country: data.country,
+            email_marketing_consent: data.marketingConsent || false,
+            sms_marketing_consent: data.marketingConsent || false,
+            data_retention_consent: true
+          });
+          guestProfileId = newGuest.id;
+        }
+      } catch (guestError) {
+        // Log guest profile error but don't fail the check-in
+        SecureLogger.warn('Guest profile creation/update failed', {
+          checkInId: data.id,
+          error: guestError instanceof Error ? guestError.message : 'Unknown error'
+        });
+      }
+
       // Handle ID photo upload if present
       if (data.idPhotos && data.idPhotos.length > 0) {
         try {
@@ -132,11 +228,12 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
             photoCount: uploadedUrls.length
           });
 
-          // Remove file objects and add uploaded URLs
+          // Remove file objects and add uploaded URLs and guest profile ID
           const { idPhotos, ...submissionData } = data;
           const finalData = {
             ...submissionData,
-            id_photo_urls: uploadedUrls
+            id_photo_urls: uploadedUrls,
+            guest_profile_id: guestProfileId
           };
 
           await onSubmit(finalData);
@@ -157,7 +254,11 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
       } else {
         // No photos to upload, submit directly
         const { idPhotos, ...submissionData } = data;
-        await onSubmit(submissionData);
+        const finalData = {
+          ...submissionData,
+          guest_profile_id: guestProfileId
+        };
+        await onSubmit(finalData);
         
         // Record successful submission
         await ServerRateLimiter.recordAttempt('checkin-submission', identifier, true, undefined, userAgent);
@@ -223,6 +324,12 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
         <div>
           <h2 className="dancing-script text-3xl font-bold text-[var(--text-secondary)] mb-2">{t('form.title')}</h2>
           <p className="text-[var(--text-primary)] text-lg">Please fill in all required information</p>
+          <div className="mt-2 text-sm text-[var(--text-primary)]/70 flex items-center">
+            <svg className="w-4 h-4 mr-1.5 text-[var(--sky-blue)]" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            We'll automatically link your information to any existing guest profile
+          </div>
         </div>
         <div className="ethereal-glass rounded-2xl p-2">
           <LanguageSelector
@@ -233,6 +340,8 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
           />
         </div>
       </div>
+
+
       
       {/* Translation error */}
       {translationError && (

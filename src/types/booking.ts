@@ -18,6 +18,7 @@ export interface Booking {
   specialRequests?: string;
   bookingDate?: string;
   folioNumber?: string;
+  guest_profile_id?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,4 +35,4 @@ export interface BookingFilters {
   showCancelled?: boolean;
 }
 
-export type ViewMode = 'calendar' | 'list'; 
+export type ViewMode = 'calendar' | 'list';

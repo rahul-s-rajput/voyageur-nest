@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, Plus, Minus } from 'lucide-react';
+import { X, Plus, Minus, Search } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { createBookingWithValidation } from '../lib/supabase';
+import { GuestProfileService } from '../services/guestProfileService';
+import type { GuestProfile } from '../types/guest';
 
 interface NewBookingModalProps {
   isOpen: boolean;
@@ -17,6 +19,12 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [roomNumbers, setRoomNumbers] = useState<string[]>(['']);
+  
+  // Guest profile search states
+  const [guestSearchTerm, setGuestSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<GuestProfile[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [selectedGuest, setSelectedGuest] = useState<GuestProfile | null>(null);
   const [formData, setFormData] = useState({
     guestName: '',
     roomNo: '',
@@ -37,6 +45,55 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
     bookingDate: new Date().toISOString().split('T')[0],
   });
 
+  // Guest profile search functions
+  const searchGuests = async (searchTerm: string) => {
+    if (searchTerm.length < 2) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    try {
+      const results = await GuestProfileService.searchGuestProfiles({ search: searchTerm });
+      setSearchResults(results);
+      setShowSearchResults(true);
+    } catch (error) {
+      console.error('Error searching guests:', error);
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+  };
+
+  const handleGuestSearch = (value: string) => {
+    setGuestSearchTerm(value);
+    searchGuests(value);
+  };
+
+  const selectGuest = (guest: GuestProfile) => {
+    setSelectedGuest(guest);
+    setFormData(prev => ({
+      ...prev,
+      guestName: guest.name,
+      contactPhone: guest.phone || '',
+      contactEmail: guest.email || ''
+    }));
+    setGuestSearchTerm(guest.name);
+    setShowSearchResults(false);
+  };
+
+  const clearGuestSelection = () => {
+    setSelectedGuest(null);
+    setGuestSearchTerm('');
+    setSearchResults([]);
+    setShowSearchResults(false);
+    setFormData(prev => ({
+      ...prev,
+      guestName: '',
+      contactPhone: '',
+      contactEmail: ''
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -50,12 +107,31 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
     }
 
     try {
+      // Handle guest profile creation/linking
+      let guestProfileId = selectedGuest?.id;
+      
+      if (!selectedGuest && (formData.contactEmail || formData.contactPhone)) {
+        // Create new guest profile if we have contact info
+        try {
+          const newGuestProfile = await GuestProfileService.createGuestProfile({
+            name: formData.guestName,
+            email: formData.contactEmail || undefined,
+            phone: formData.contactPhone || undefined
+          });
+          guestProfileId = newGuestProfile.id;
+        } catch (error) {
+          console.error('Error creating guest profile:', error);
+          // Continue with booking creation even if guest profile creation fails
+        }
+      }
+
       const bookingData = {
         ...formData,
         roomNo: formData.numberOfRooms > 1 ? roomNumbers.filter(room => room.trim()).join(', ') : formData.roomNo,
         adultChild: `${formData.adults}/${formData.children}`,
         totalAmount: parseFloat(formData.totalAmount) || 0,
         cancelled: false,
+        guest_profile_id: guestProfileId,
       };
 
       const result = await createBookingWithValidation(bookingData);
@@ -84,6 +160,11 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
           bookingDate: new Date().toISOString().split('T')[0],
         });
         setRoomNumbers(['']);
+        // Reset guest search state
+        setSelectedGuest(null);
+        setGuestSearchTerm('');
+        setSearchResults([]);
+        setShowSearchResults(false);
       } else if (result.errors) {
         setValidationErrors(result.errors);
       }
@@ -272,6 +353,78 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
             <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
               Guest Information
             </h3>
+            
+            {/* Guest Search */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Search Existing Guest or Enter New Guest Details
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  value={guestSearchTerm}
+                  onChange={(e) => handleGuestSearch(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Search by name, email, or phone..."
+                  disabled={isLoading}
+                />
+                {selectedGuest && (
+                  <button
+                    type="button"
+                    onClick={clearGuestSelection}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Search Results */}
+              {showSearchResults && searchResults.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {searchResults.map((guest) => (
+                    <button
+                      key={guest.id}
+                      type="button"
+                      onClick={() => selectGuest(guest)}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                    >
+                      <div className="font-medium text-gray-900">{guest.name}</div>
+                      <div className="text-sm text-gray-600">
+                        {guest.email && <span>{guest.email}</span>}
+                        {guest.email && guest.phone && <span> • </span>}
+                        {guest.phone && <span>{guest.phone}</span>}
+                      </div>
+                      {guest.last_stay_date && (
+                        <div className="text-xs text-gray-500">
+                          Last stay: {new Date(guest.last_stay_date).toLocaleDateString()}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected Guest Info */}
+              {selectedGuest && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-blue-900">Selected: {selectedGuest.name}</div>
+                      <div className="text-sm text-blue-700">
+                        {selectedGuest.total_stays} previous stay(s)
+                        {selectedGuest.last_stay_date && (
+                          <span> • Last: {new Date(selectedGuest.last_stay_date).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Guest Details Form */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -674,4 +827,4 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       </div>
     </div>
   );
-}; 
+};
