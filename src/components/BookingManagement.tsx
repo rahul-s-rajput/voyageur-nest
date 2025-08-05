@@ -9,8 +9,10 @@ import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
 import { invoiceCounterService, bookingService } from '../lib/supabase';
 import { NewBookingModal } from '../components/NewBookingModal';
 import { InvoiceTemplate } from '../components/InvoiceTemplate';
+import { useProperty } from '../contexts/PropertyContext';
 
 const BookingManagement: React.FC = () => {
+  const { currentProperty } = useProperty();
   const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview'>('home');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -82,8 +84,10 @@ const BookingManagement: React.FC = () => {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        // Load bookings
-        const bookingsData = await bookingService.getBookings();
+        // Load bookings filtered by current property
+        const bookingsData = await bookingService.getBookings({
+          propertyId: currentProperty?.id
+        });
         setBookings(bookingsData);
 
         // Load counter
@@ -98,7 +102,7 @@ const BookingManagement: React.FC = () => {
     };
 
     loadData();
-  }, []);
+  }, [currentProperty?.id]);
 
   // Update invoice number when counter changes
   useEffect(() => {
@@ -126,7 +130,7 @@ const BookingManagement: React.FC = () => {
       } else if (eventType === 'DELETE') {
         setBookings(prev => prev.filter(b => b.id !== booking.id));
       }
-    });
+    }, currentProperty?.id);
 
     return () => {
       counterSubscription.unsubscribe();

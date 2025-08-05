@@ -30,6 +30,17 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
+// Mock react-hot-toast
+vi.mock('react-hot-toast', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    loading: vi.fn(),
+    dismiss: vi.fn(),
+  },
+  Toaster: () => null,
+}))
+
 // Mock Supabase environment variables
 process.env.VITE_SUPABASE_URL = 'https://test.supabase.co'
 process.env.VITE_SUPABASE_ANON_KEY = 'test-anon-key'

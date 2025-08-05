@@ -1,5 +1,6 @@
 export interface Booking {
   id: string;
+  propertyId?: string; // Added for multi-property support
   guestName: string;
   roomNo: string;
   numberOfRooms: number;
@@ -18,12 +19,13 @@ export interface Booking {
   specialRequests?: string;
   bookingDate?: string;
   folioNumber?: string;
-  guest_profile_id?: string;
+  guestProfileId?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface BookingFilters {
+  propertyId?: string;
   dateRange?: {
     start: string;
     end: string;

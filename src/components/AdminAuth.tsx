@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface AdminAuthProps {
-  onAuthenticated: () => void;
+  children: React.ReactNode;
+  onAuthenticated?: () => void;
 }
 
-const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
+const AdminAuth: React.FC<AdminAuthProps> = ({ children, onAuthenticated }) => {
   const [deviceToken, setDeviceToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isCheckingExisting, setIsCheckingExisting] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     // Check if device is already authenticated
@@ -22,7 +24,10 @@ const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
       if (storedToken) {
         const isValid = await validateDeviceToken(storedToken);
         if (isValid) {
-          onAuthenticated();
+          setIsAuthenticated(true);
+          if (onAuthenticated) {
+            onAuthenticated();
+          }
           return;
         } else {
           localStorage.removeItem('admin_device_token');
@@ -90,7 +95,10 @@ const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
           })
           .eq('device_token', deviceToken);
 
-        onAuthenticated();
+        setIsAuthenticated(true);
+        if (onAuthenticated) {
+          onAuthenticated();
+        }
       } else {
         setError('Invalid or expired device token');
       }
@@ -102,16 +110,6 @@ const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
     }
   };
 
-  const generateDeviceInfo = () => {
-    return {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      language: navigator.language,
-      screen: `${screen.width}x${screen.height}`,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-    };
-  };
-
   if (isCheckingExisting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -121,6 +119,10 @@ const AdminAuth: React.FC<AdminAuthProps> = ({ onAuthenticated }) => {
         </div>
       </div>
     );
+  }
+
+  if (isAuthenticated) {
+    return <>{children}</>;
   }
 
   return (

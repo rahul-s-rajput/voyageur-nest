@@ -6,8 +6,44 @@ import { CheckInData, CheckInFormData } from '../types/checkin'
 // You'll get these after creating your Supabase project
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'YOUR_SUPABASE_URL'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY'
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Admin client for operations requiring elevated permissions
+export const supabaseAdmin = supabaseServiceKey 
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+  : supabase // Fallback to regular client if no service key
+
+// Helper function to get the appropriate client for admin operations
+export const getAdminClient = async () => {
+  // Check if user is authenticated with device token
+  const deviceToken = localStorage.getItem('admin_device_token');
+  
+  if (deviceToken) {
+    // Validate device token
+    const { data: tokenData, error } = await supabase
+      .from('device_tokens')
+      .select('*')
+      .eq('device_token', deviceToken)
+      .eq('is_active', true)
+      .gte('expires_at', new Date().toISOString())
+      .single();
+
+    if (!error && tokenData) {
+      // Device token is valid, use admin client if available
+      return supabaseServiceKey ? supabaseAdmin : supabase;
+    }
+  }
+  
+  // Fallback to regular client
+  return supabase;
+}
 
 // Database functions for invoice counter
 export const invoiceCounterService = {
@@ -102,6 +138,10 @@ export const bookingService = {
         .order('created_at', { ascending: false })
 
       // Apply filters
+      if (filters?.propertyId) {
+        query = query.eq('property_id', filters.propertyId)
+      }
+
       if (filters?.dateRange) {
         query = query
           .gte('check_in', filters.dateRange.start)
@@ -139,6 +179,7 @@ export const bookingService = {
       // Transform database fields to match interface
       return (data || []).map(booking => ({
         id: booking.id,
+        propertyId: booking.property_id,
         guestName: booking.guest_name,
         roomNo: booking.room_no,
         numberOfRooms: booking.number_of_rooms || 1,
@@ -181,6 +222,7 @@ export const bookingService = {
       const { data, error } = await supabase
         .from('bookings')
         .insert({
+          property_id: booking.propertyId,
           guest_name: booking.guestName,
           room_no: booking.roomNo,
           number_of_rooms: booking.numberOfRooms || 1,
@@ -211,6 +253,7 @@ export const bookingService = {
       // Transform database fields to match interface
       return {
         id: data.id,
+        propertyId: data.property_id,
         guestName: data.guest_name,
         roomNo: data.room_no,
         numberOfRooms: data.number_of_rooms || 1,
@@ -243,6 +286,7 @@ export const bookingService = {
     try {
       const updateData: any = {}
       
+      if (updates.propertyId !== undefined) updateData.property_id = updates.propertyId
       if (updates.guestName !== undefined) updateData.guest_name = updates.guestName
       if (updates.roomNo !== undefined) updateData.room_no = updates.roomNo
       if (updates.numberOfRooms !== undefined) updateData.number_of_rooms = updates.numberOfRooms
@@ -277,6 +321,7 @@ export const bookingService = {
       // Transform database fields to match interface
       return {
         id: data.id,
+        propertyId: data.property_id,
         guestName: data.guest_name,
         roomNo: data.room_no,
         numberOfRooms: data.number_of_rooms || 1,
@@ -361,6 +406,7 @@ export const bookingService = {
       // Transform database fields to match interface
       return {
         id: data.id,
+        propertyId: data.property_id,
         guestName: data.guest_name,
         roomNo: data.room_no,
         numberOfRooms: data.number_of_rooms || 1,
@@ -389,14 +435,15 @@ export const bookingService = {
   },
 
   // Real-time subscription to booking changes
-  subscribeToBookings(callback: (booking: Booking, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void) {
+  subscribeToBookings(callback: (booking: Booking, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void, propertyId?: string) {
     return supabase
       .channel('bookings_changes')
       .on('postgres_changes', 
         { 
           event: '*', 
           schema: 'public', 
-          table: 'bookings' 
+          table: 'bookings',
+          filter: propertyId ? `property_id=eq.${propertyId}` : undefined
         }, 
         (payload) => {
           const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE'
@@ -405,6 +452,7 @@ export const bookingService = {
             const bookingData = payload.new as any
             const booking: Booking = {
               id: bookingData.id,
+              propertyId: bookingData.property_id,
               guestName: bookingData.guest_name,
               roomNo: bookingData.room_no,
               numberOfRooms: bookingData.number_of_rooms || 1,

@@ -14,6 +14,7 @@ import { StorageService } from './lib/storage';
 import { NewBookingModal } from './components/NewBookingModal';
 import { InvoiceTemplate } from './components/InvoiceTemplate';
 import { NotificationProvider } from './components/NotificationContainer';
+import { PropertyProvider } from './contexts/PropertyContext';
 
 function MainApp() {
   const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview'>('home');
@@ -516,26 +517,28 @@ function MainApp() {
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        {/* Guest routes - Check-in only */}
-        <Route path="/checkin/:bookingId" element={<NotificationProvider><CheckInPage language="en" /></NotificationProvider>} />
-        <Route path="/checkin/:bookingId/hi" element={<NotificationProvider><CheckInPage language="hi" /></NotificationProvider>} />
-        
+    <PropertyProvider>
+      <Router>
+        <Routes>
+          {/* Guest routes - Check-in only */}
+          <Route path="/checkin/:bookingId" element={<NotificationProvider><CheckInPage language="en" /></NotificationProvider>} />
+          <Route path="/checkin/:bookingId/hi" element={<NotificationProvider><CheckInPage language="hi" /></NotificationProvider>} />
+          
 
-        
-        {/* Admin routes - Protected booking management system */}
-        <Route path="/admin" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
-        <Route path="/admin/*" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
-        
-        {/* Legacy routes - redirect to admin */}
-        <Route path="/" element={<Navigate to="/admin" replace />} />
-        <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
-        
-        {/* Redirect any unknown routes to admin */}
-        <Route path="*" element={<Navigate to="/admin" replace />} />
-      </Routes>
-    </Router>
+          
+          {/* Admin routes - Protected booking management system */}
+          <Route path="/admin" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
+          <Route path="/admin/*" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
+          
+          {/* Legacy routes - redirect to admin */}
+          <Route path="/" element={<Navigate to="/admin" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
+          
+          {/* Redirect any unknown routes to admin */}
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Routes>
+      </Router>
+    </PropertyProvider>
   );
 }
 
