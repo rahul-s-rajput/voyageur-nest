@@ -1,17 +1,21 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Plus, Calendar, List, Users, DollarSign, Clock, CheckCircle, X, AlertTriangle } from 'lucide-react';
-import { BookingCalendar } from './BookingCalendar';
+import { Search, Filter, Plus, Calendar, List, Grid, X, AlertTriangle, Edit3 } from 'lucide-react';
+
 import { BookingList } from './BookingList';
+import { CalendarViewManager } from './CalendarViewManager';
 import { Booking, BookingFilters, ViewMode } from '../types/booking';
 import { NewBookingModal } from './NewBookingModal';
 import { BookingDetails } from './BookingDetails';
+import { BulkEditModal } from './BulkEditModal';
 import { bookingService, getSchedulingConflicts } from '../lib/supabase';
+import EnhancedKPIDashboard from './EnhancedKPIDashboard';
+import { BulkEditResult } from '../types/bulkEdit';
 
 interface HomePageProps {
   bookings: Booking[];
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
-  onNewBooking: () => void;
+
   onSelectBooking: (booking: Booking) => void;
   onEditBooking: (booking: Booking) => void;
   onDeleteBooking: (bookingId: string) => void;
@@ -24,7 +28,6 @@ export const HomePage: React.FC<HomePageProps> = ({
   bookings,
   viewMode,
   onViewModeChange,
-  onNewBooking,
   onSelectBooking,
   onEditBooking,
   onDeleteBooking,
@@ -41,6 +44,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
   const [conflicts, setConflicts] = useState<any[]>([]);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
 
   const formatDateForDisplay = (dateString: string) => {
     if (!dateString) return 'Not specified';
@@ -90,7 +94,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       // Payment status filter
     if (filters.paymentStatus && filters.paymentStatus.length > 0) {
-        if (!filters.paymentStatus.includes(booking.paymentStatus)) return false;
+        if (!booking.paymentStatus || !filters.paymentStatus.includes(booking.paymentStatus)) return false;
       }
 
       // Date range filter
@@ -110,22 +114,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     });
   }, [bookings, searchTerm, filters]);
 
-  // Calculate statistics
-  const stats = useMemo(() => {
-    const activeBookings = bookings.filter(b => !b.cancelled);
-    const totalRevenue = activeBookings.reduce((sum, booking) => sum + booking.totalAmount, 0);
-    const paidBookings = activeBookings.filter(b => b.paymentStatus === 'paid');
-    const pendingPayments = activeBookings.filter(b => b.paymentStatus === 'unpaid');
-    
-    return {
-      total: bookings.length,
-      active: activeBookings.length,
-      cancelled: bookings.filter(b => b.cancelled).length,
-      revenue: totalRevenue,
-      paid: paidBookings.length,
-      pending: pendingPayments.length,
-    };
-  }, [bookings]);
+
 
   const handleFilterChange = (newFilters: Partial<BookingFilters>) => {
     setFilters(prev => ({ ...prev, ...newFilters }));
@@ -155,31 +144,16 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
+  const handleBulkEditSuccess = (result: BulkEditResult) => {
+    // Handle successful bulk edit - you might want to refresh data or show a success message
+    console.log('Bulk edit completed:', result);
+    // You could add a toast notification here or trigger a data refresh
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border">
-          <div className="text-xs sm:text-sm font-medium text-gray-500">Total Bookings</div>
-          <div className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total}</div>
-          </div>
-        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border">
-          <div className="text-xs sm:text-sm font-medium text-gray-500">Active</div>
-          <div className="text-lg sm:text-2xl font-bold text-green-600">{stats.active}</div>
-        </div>
-        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border">
-          <div className="text-xs sm:text-sm font-medium text-gray-500">Cancelled</div>
-          <div className="text-lg sm:text-2xl font-bold text-red-600">{stats.cancelled}</div>
-      </div>
-        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border">
-          <div className="text-xs sm:text-sm font-medium text-gray-500">Revenue</div>
-          <div className="text-lg sm:text-2xl font-bold text-blue-600">${stats.revenue.toFixed(2)}</div>
-          </div>
-        <div className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border">
-          <div className="text-xs sm:text-sm font-medium text-gray-500">Paid/Pending</div>
-          <div className="text-lg sm:text-2xl font-bold text-gray-900">{stats.paid}/{stats.pending}</div>
-          </div>
-        </div>
+      {/* Enhanced KPI Dashboard */}
+      <EnhancedKPIDashboard bookings={bookings} />
 
         {/* Controls */}
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border">
@@ -223,7 +197,16 @@ export const HomePage: React.FC<HomePageProps> = ({
             >
               <AlertTriangle className="w-4 h-4 mr-2" />
               Check Conflicts
-              </button>
+            </button>
+
+            {/* Bulk Edit */}
+            <button
+              onClick={() => setShowBulkEditModal(true)}
+              className="flex items-center px-3 py-2 border border-purple-300 text-purple-700 rounded-md hover:bg-purple-50 transition-colors text-sm"
+            >
+              <Edit3 className="w-4 h-4 mr-2" />
+              Bulk Edit
+            </button>
             </div>
 
           {/* Right side - View Toggle and New Booking */}
@@ -240,6 +223,17 @@ export const HomePage: React.FC<HomePageProps> = ({
               >
                 <Calendar className="w-4 h-4 mr-1.5" />
                 Calendar
+              </button>
+              <button
+                onClick={() => onViewModeChange('grid')}
+                className={`flex items-center px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Grid className="w-4 h-4 mr-1.5" />
+                Grid
               </button>
               <button
                 onClick={() => onViewModeChange('list')}
@@ -305,7 +299,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   multiple
                   value={filters.status || []}
                   onChange={(e) => handleFilterChange({
-                    status: Array.from(e.target.selectedOptions, option => option.value) as any
+                    status: Array.from(e.target.selectedOptions, option => option.value) as ('confirmed' | 'pending' | 'checked-in' | 'checked-out')[]
                   })}
                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                   size={4}
@@ -322,9 +316,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
                 <select
                   multiple
-                  value={filters.paymentStatus || []}
+                  value={(filters.paymentStatus || []).filter((status): status is 'paid' | 'partial' | 'unpaid' => status !== undefined)}
                   onChange={(e) => handleFilterChange({
-                    paymentStatus: Array.from(e.target.selectedOptions, option => option.value) as any
+                    paymentStatus: Array.from(e.target.selectedOptions, option => option.value) as ('paid' | 'partial' | 'unpaid')[]
                   })}
                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                   size={3}
@@ -400,12 +394,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         {/* Main Content */}
       <div className="bg-white rounded-lg shadow-sm border">
-          {viewMode === 'calendar' ? (
-            <BookingCalendar
-              bookings={filteredBookings}
-            onSelectBooking={onSelectBooking}
-            />
-          ) : (
+          {viewMode === 'list' ? (
             <BookingList
               bookings={filteredBookings}
             onSelectBooking={onSelectBooking}
@@ -415,6 +404,12 @@ export const HomePage: React.FC<HomePageProps> = ({
             onCancelBooking={onCancelBooking}
             onCreateCancellationInvoice={onCreateCancellationInvoice}
             />
+          ) : (
+            <CalendarViewManager
+              bookings={filteredBookings}
+              onSelectBooking={onSelectBooking}
+              viewMode={viewMode}
+            />
           )}
       </div>
 
@@ -423,7 +418,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         <NewBookingModal
           isOpen={showNewBookingModal}
           onClose={() => setShowNewBookingModal(false)}
-          onBookingCreated={(booking) => {
+          onBookingCreated={() => {
             // Close the modal - the parent will handle adding the booking
             setShowNewBookingModal(false);
           }}
@@ -451,6 +446,15 @@ export const HomePage: React.FC<HomePageProps> = ({
           }}
         />
       )}
+
+      {/* Bulk Edit Modal */}
+      {showBulkEditModal && (
+        <BulkEditModal
+          isOpen={showBulkEditModal}
+          onClose={() => setShowBulkEditModal(false)}
+          onSuccess={handleBulkEditSuccess}
+        />
+      )}
     </div>
   );
-}; 
+};

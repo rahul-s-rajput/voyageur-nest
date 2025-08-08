@@ -251,7 +251,7 @@ export const bookingService = {
       }
 
       // Transform database fields to match interface
-      return {
+      const created: Booking = {
         id: data.id,
         propertyId: data.property_id,
         guestName: data.guest_name,
@@ -275,6 +275,20 @@ export const bookingService = {
         createdAt: data.created_at,
         updatedAt: data.updated_at
       }
+
+      // Auto-append manual update checklist items for manual OTAs
+      try {
+        const { ManualUpdateService } = await import('../services/manualUpdateService');
+        await ManualUpdateService.createDeltaChecklistsForBookingChange(
+           created.propertyId || '',
+           'created',
+           { id: created.id, roomNo: created.roomNo, check_in: created.checkIn, check_out: created.checkOut }
+         );
+      } catch (e) {
+        console.warn('ManualUpdateService delta generation failed on createBooking:', e);
+      }
+
+      return created
     } catch (error) {
       console.error('Error in createBooking:', error)
       return null
@@ -319,7 +333,7 @@ export const bookingService = {
       }
 
       // Transform database fields to match interface
-      return {
+      const updated: Booking = {
         id: data.id,
         propertyId: data.property_id,
         guestName: data.guest_name,
@@ -343,6 +357,20 @@ export const bookingService = {
         createdAt: data.created_at,
         updatedAt: data.updated_at
       }
+
+      // Auto-append manual update checklist items for manual OTAs
+      try {
+        const { ManualUpdateService } = await import('../services/manualUpdateService');
+        await ManualUpdateService.createDeltaChecklistsForBookingChange(
+           updated.propertyId || '',
+           'updated',
+           { id: updated.id, roomNo: updated.roomNo, check_in: updated.checkIn, check_out: updated.checkOut }
+         );
+      } catch (e) {
+        console.warn('ManualUpdateService delta generation failed on updateBooking:', e);
+      }
+
+      return updated
     } catch (error) {
       console.error('Error in updateBooking:', error)
       return null
@@ -352,14 +380,28 @@ export const bookingService = {
   // Cancel a booking (sets cancelled to true)
   async cancelBooking(id: string): Promise<boolean> {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('bookings')
         .update({ cancelled: true })
         .eq('id', id)
+        .select()
+        .single()
 
       if (error) {
         console.error('Error cancelling booking:', error)
         return false
+      }
+
+      // Auto-append manual update checklist items for manual OTAs
+      try {
+        const { ManualUpdateService } = await import('../services/manualUpdateService');
+        await ManualUpdateService.createDeltaChecklistsForBookingChange(
+           data.property_id || '',
+           'cancelled',
+           { id: data.id, room_no: data.room_no, check_in: data.check_in, check_out: data.check_out }
+         );
+      } catch (e) {
+        console.warn('ManualUpdateService delta generation failed on cancelBooking:', e);
       }
 
       return true
@@ -517,11 +559,11 @@ export const validateBooking = async (
     }
 
     // Check guest capacity
-    if (bookingData.noOfPax < 1) {
+    if ((bookingData.noOfPax ?? 0) < 1) {
       errors.push('Number of guests must be at least 1');
     }
 
-    if (bookingData.noOfPax > 10) {
+    if ((bookingData.noOfPax ?? 0) > 10) {
       errors.push('Number of guests cannot exceed 10 per room');
     }
 

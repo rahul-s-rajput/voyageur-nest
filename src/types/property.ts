@@ -1,3 +1,4 @@
+// Re-export types from booking.ts for convenience
 export interface Property {
   id: string;
   name: string;
@@ -50,17 +51,48 @@ export interface Room {
   id: string;
   propertyId: string;
   roomNumber: string;
+  roomNo: string; // Added for compatibility with real-time grid
   roomType: RoomType;
   floor?: number;
   maxOccupancy: number;
   basePrice: number;
+  seasonalPricing?: Record<string, number>; // NEW: {"summer": 1500, "winter": 1200}
+  pricing?: RoomPricing; // Enhanced pricing structure
   amenities: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  // Optional per-date availability overrides map: { 'YYYY-MM-DD': boolean }
+  availabilityOverrides?: Record<string, boolean>;
+}
+
+export interface RoomPricing {
+  basePrice: number;
+  weekendMultiplier?: number;
+  seasonalAdjustments?: SeasonalAdjustment[];
+  lastUpdated: Date;
+  updatedBy: string;
+}
+
+export interface SeasonalAdjustment {
+  id: string;
+  name: string;
+  type: 'percentage' | 'fixed';
+  value: number; // Percentage (e.g., 20 for 20%) or fixed amount (e.g., 500 for ₹500)
+  startDate?: Date;
+  endDate?: Date;
+  daysOfWeek?: number[]; // 0-6 (Sunday-Saturday)
+  isActive?: boolean;
 }
 
 export type RoomType = 'standard' | 'deluxe' | 'twin_single' | 'suite' | 'dormitory';
+
+export interface GridCalendarSettings {
+  viewType: 'week' | 'month' | 'custom';
+  dateRange: { start: Date; end: Date };
+  showPricing: boolean;
+  selectedRooms: string[];
+}
 
 export interface PropertyContext {
   currentProperty: Property | null;
@@ -73,6 +105,11 @@ export interface PropertyContext {
   addProperty: (propertyData: Omit<Property, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Property>;
   updateProperty: (propertyId: string, updates: Partial<Property>) => Promise<Property>;
   deleteProperty: (propertyId: string) => Promise<void>;
+  
+  // Grid calendar specific state and actions
+  gridCalendarSettings: GridCalendarSettings;
+  updateGridSettings: (settings: Partial<GridCalendarSettings>) => void;
+  refreshGridData: () => Promise<void>;
 }
 
 export interface PropertySpecificRoom extends Room {
@@ -419,4 +456,29 @@ export interface RoomValidationErrors {
   maxOccupancy?: string;
   basePrice?: string;
   amenities?: string;
+}
+
+// Room Grid Calendar interfaces for Task 3
+export interface RoomGridData {
+  room: Room;
+  availability: RoomAvailabilityMap[string];
+  bookings: PropertyBooking[];
+  pricing: PricingMap;
+}
+
+export interface PricingMap {
+  [dateString: string]: number;
+}
+
+// Import RoomAvailabilityMap from roomBookingService
+export interface RoomAvailabilityMap {
+  [roomNo: string]: {
+    [dateString: string]: {
+      status: 'available' | 'occupied' | 'checkout' | 'checkin' | 'checkin-checkout' | 'unavailable';
+      booking?: PropertyBooking;
+      checkInBooking?: PropertyBooking;
+      checkOutBooking?: PropertyBooking;
+      price: number;
+    }
+  }
 }

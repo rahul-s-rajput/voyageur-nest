@@ -2,21 +2,25 @@ export interface Booking {
   id: string;
   propertyId?: string; // Added for multi-property support
   guestName: string;
+  guestEmail?: string; // Added for real-time grid
+  guestPhone?: string; // Added for real-time grid
   roomNo: string;
-  numberOfRooms: number;
+  numberOfRooms?: number;
+  numberOfGuests?: number; // Added for real-time grid
   checkIn: string;
   checkOut: string;
-  noOfPax: number;
-  adultChild: string;
+  noOfPax?: number;
+  adultChild?: string;
   status: 'confirmed' | 'pending' | 'checked-in' | 'checked-out';
-  cancelled: boolean;
+  cancelled?: boolean;
   totalAmount: number;
-  paymentStatus: 'paid' | 'partial' | 'unpaid';
+  paymentStatus?: 'paid' | 'partial' | 'unpaid';
   paymentAmount?: number;
   paymentMode?: string;
   contactPhone?: string;
   contactEmail?: string;
   specialRequests?: string;
+  notes?: string; // Added for real-time grid
   bookingDate?: string;
   folioNumber?: string;
   guestProfileId?: string;
@@ -37,4 +41,4 @@ export interface BookingFilters {
   showCancelled?: boolean;
 }
 
-export type ViewMode = 'calendar' | 'list';
+export type ViewMode = 'calendar' | 'list' | 'grid';

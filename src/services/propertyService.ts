@@ -1,5 +1,6 @@
 import { supabase, getAdminClient } from '../lib/supabase';
-import { Property, Room, PropertySpecificSettings, CrossPropertyGuest, PropertyStay, GuestPreferences as TypesGuestPreferences, VisitHistory, RoomType } from '../types/property';
+import { Property, Room, PropertySpecificSettings, CrossPropertyGuest, PropertyStay, GuestPreferences as TypesGuestPreferences, VisitHistory, RoomType, RoomGridData, PricingMap, PropertyBooking } from '../types/property';
+import { formatDateLocal } from '../utils/dateUtils';
 
 // Additional interfaces for new functionality
 export interface PricingRule {
@@ -254,6 +255,88 @@ export class PropertyService {
     }
   }
 
+  // Room pricing management methods
+  async updateRoomPricing(roomId: string, pricing: { basePrice?: number; seasonalPricing?: Record<string, number> }): Promise<Room> {
+    const updates: any = {};
+    
+    if (pricing.basePrice !== undefined) {
+      // Validate base price
+      if (pricing.basePrice < 0) {
+        throw new Error('Base price cannot be negative');
+      }
+      if (pricing.basePrice > 100000) {
+        throw new Error('Base price cannot exceed ₹100,000');
+      }
+      updates.base_price = pricing.basePrice;
+    }
+    
+    if (pricing.seasonalPricing !== undefined) {
+      // Validate seasonal pricing values
+      for (const [season, price] of Object.entries(pricing.seasonalPricing)) {
+        if (price < 0) {
+          throw new Error(`Seasonal price for ${season} cannot be negative`);
+        }
+        if (price > 100000) {
+          throw new Error(`Seasonal price for ${season} cannot exceed ₹100,000`);
+        }
+      }
+      updates.seasonal_pricing = pricing.seasonalPricing;
+    }
+
+    const { data, error } = await supabase
+      .from('rooms')
+      .update(updates)
+      .eq('id', roomId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update room pricing: ${error.message}`);
+    }
+
+    return this.transformRoomFromDB(data);
+  }
+
+  async getRoomPricingForDates(roomNumber: string, propertyId: string, dates: Date[]): Promise<Record<string, number>> {
+    // Get room data with pricing information
+    const { data: room, error } = await supabase
+      .from('rooms')
+      .select('base_price, seasonal_pricing')
+      .eq('room_number', roomNumber)
+      .eq('property_id', propertyId)
+      .eq('is_active', true)
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to fetch room pricing: ${error.message}`);
+    }
+
+    const pricingMap: Record<string, number> = {};
+    const seasonalPricing = room.seasonal_pricing || {};
+    const basePrice = room.base_price || 0;
+
+    dates.forEach(date => {
+      const dateString = formatDateLocal(date);
+      
+      // Determine season based on month (simple logic - can be enhanced)
+      const month = date.getMonth() + 1;
+      let season = 'regular';
+      
+      if (month >= 4 && month <= 6) {
+        season = 'summer';
+      } else if (month >= 10 && month <= 12) {
+        season = 'winter';
+      } else if (month >= 7 && month <= 9) {
+        season = 'monsoon';
+      }
+
+      // Use seasonal price if available, otherwise use base price
+      pricingMap[dateString] = seasonalPricing[season] || basePrice;
+    });
+
+    return pricingMap;
+  }
+
   // Property settings operations
   async getPropertySettings(propertyId: string): Promise<PropertySpecificSettings[]> {
     const { data, error } = await supabase
@@ -421,10 +504,13 @@ export class PropertyService {
       id: dbRoom.id,
       propertyId: dbRoom.property_id,
       roomNumber: dbRoom.room_number,
+      roomNo: dbRoom.room_number, // Ensure both roomNumber and roomNo are populated
       roomType: dbRoom.room_type,
       floor: dbRoom.floor,
       maxOccupancy: dbRoom.max_occupancy,
       basePrice: dbRoom.base_price,
+      seasonalPricing: dbRoom.seasonal_pricing || {},
+      availabilityOverrides: dbRoom.availability_overrides || {},
       amenities: dbRoom.amenities || [],
       isActive: dbRoom.is_active,
       createdAt: dbRoom.created_at,
@@ -441,6 +527,8 @@ export class PropertyService {
     if (room.floor !== undefined) dbData.floor = room.floor;
     if (room.maxOccupancy !== undefined) dbData.max_occupancy = room.maxOccupancy;
     if (room.basePrice !== undefined) dbData.base_price = room.basePrice;
+    if (room.seasonalPricing !== undefined) dbData.seasonal_pricing = room.seasonalPricing;
+    if (room.availabilityOverrides !== undefined) dbData.availability_overrides = room.availabilityOverrides;
     if (room.amenities !== undefined) dbData.amenities = room.amenities;
     if (room.isActive !== undefined) dbData.is_active = room.isActive;
 
@@ -1231,6 +1319,255 @@ export class PropertyService {
       updatedAt: dbGuest.updated_at || new Date().toISOString()
     };
   }
+
+  // Task 3: Room Grid Data Methods
+  /**
+   * Get rooms with booking data for grid display (optimized with batch queries)
+   */
+  async getPropertyRoomsWithBookings(
+    propertyId: string, 
+    startDate: Date, 
+    endDate: Date
+  ): Promise<RoomGridData[]> {
+    try {
+      // Get all rooms for the property
+      const rooms = await this.getRooms(propertyId);
+      
+      if (rooms.length === 0) {
+        return [];
+      }
+      
+      // Import RoomBookingService dynamically to avoid circular dependency
+      const { roomBookingService } = await import('./roomBookingService');
+      
+      // Generate date range for availability calculation
+      const dateRange = this.generateDateRange(startDate, endDate);
+      const roomNumbers = rooms.map(room => room.roomNumber);
+      
+      // Use batch queries for efficiency - this prevents individual API calls
+      const [batchAvailability, allBookings] = await Promise.all([
+        // Get all room availability in one batch query
+        roomBookingService.getBatchRoomAvailability(roomNumbers, dateRange),
+        // Get all bookings for all rooms in one query
+        this.getBatchPropertyBookings(propertyId, roomNumbers, startDate, endDate)
+      ]);
+      
+      // Get all room pricing in batch
+      const allPricing = await this.getBatchRoomPricing(propertyId, roomNumbers, dateRange);
+      
+      // Build room grid data
+      const roomGridData = rooms.map((room) => {
+        const roomAvailability = batchAvailability[room.roomNumber] || {};
+        const roomBookings = allBookings.filter(booking => booking.roomNo === room.roomNumber);
+        const roomPricing = allPricing[room.roomNumber] || {};
+        
+        // Ensure room has roomNo property for compatibility
+        const roomWithRoomNo = {
+          ...room,
+          roomNo: room.roomNumber // Add roomNo for compatibility
+        };
+        
+        return {
+          room: roomWithRoomNo,
+          availability: roomAvailability,
+          bookings: roomBookings,
+          pricing: roomPricing
+        } as RoomGridData;
+      });
+      
+      // Sort rooms by room number for consistent display
+      return roomGridData.sort((a, b) => {
+        const aNum = parseInt(a.room.roomNumber.replace(/\D/g, '')) || 0;
+        const bNum = parseInt(b.room.roomNumber.replace(/\D/g, '')) || 0;
+        return aNum - bNum;
+      });
+      
+    } catch (error) {
+      console.error('Error in getPropertyRoomsWithBookings:', error);
+      throw new Error(`Failed to fetch room grid data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get bookings for multiple rooms in a property (batch query)
+   */
+  private async getBatchPropertyBookings(
+    propertyId: string, 
+    roomNumbers: string[], 
+    startDate: Date, 
+    endDate: Date
+  ): Promise<PropertyBooking[]> {
+    try {
+      if (roomNumbers.length === 0) return [];
+      
+      // Get all bookings for all rooms in one query - handle field name differences
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          properties!inner(name)
+        `)
+        .eq('property_id', propertyId)
+        .in('room_no', roomNumbers)  // bookings uses room_no
+        .eq('cancelled', false)
+        .lte('check_in', formatDateLocal(endDate))  // check_in <= endDate
+        .gte('check_out', formatDateLocal(startDate)) // check_out >= startDate
+        .order('check_in', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching batch property bookings:', error);
+        return [];
+      }
+
+      return (data || []).map(booking => ({
+        id: booking.id,
+        propertyId: booking.property_id,
+        propertyName: booking.properties?.name || 'Unknown Property',
+        guestName: booking.guest_name,
+        roomNo: booking.room_no,
+        numberOfRooms: booking.number_of_rooms || 1,
+        checkIn: booking.check_in,
+        checkOut: booking.check_out,
+        noOfPax: booking.no_of_pax,
+        adultChild: booking.adult_child,
+        status: booking.status,
+        cancelled: booking.cancelled,
+        totalAmount: parseFloat(booking.total_amount || '0'),
+        paymentStatus: booking.payment_status,
+        paymentAmount: booking.payment_amount ? parseFloat(booking.payment_amount) : undefined,
+        paymentMode: booking.payment_mode,
+        contactPhone: booking.contact_phone,
+        contactEmail: booking.contact_email,
+        specialRequests: booking.special_requests,
+        bookingDate: booking.booking_date,
+        folioNumber: booking.folio_number,
+        guestProfileId: booking.guest_profile_id,
+        createdAt: booking.created_at,
+        updatedAt: booking.updated_at
+      }));
+    } catch (error) {
+      console.error('Error in getBatchPropertyBookings:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get pricing for multiple rooms in batch
+   */
+  private async getBatchRoomPricing(
+    propertyId: string, 
+    roomNumbers: string[], 
+    dateRange: Date[]
+  ): Promise<Record<string, PricingMap>> {
+    try {
+      if (roomNumbers.length === 0) return {};
+      
+      // Get all room pricing data in one query - use correct field names
+      const { data: rooms, error } = await supabase
+        .from('rooms')
+        .select('room_number, base_price, seasonal_pricing')
+        .eq('property_id', propertyId)
+        .in('room_number', roomNumbers)  // rooms table uses room_number
+        .eq('is_active', true);
+
+      if (error) {
+        console.warn('Error fetching batch room pricing:', error.message);
+      }
+
+      const pricingMap: Record<string, PricingMap> = {};
+      
+      // Initialize pricing for all rooms
+      roomNumbers.forEach(roomNumber => {
+        const roomData = rooms?.find(r => r.room_number === roomNumber);
+        const basePrice = roomData?.base_price || 1000;
+        const seasonalPricing = roomData?.seasonal_pricing || {};
+        
+        const roomPricingMap: PricingMap = {};
+        
+        dateRange.forEach(date => {
+          const dateString = formatDateLocal(date);
+          
+          // Determine season based on month (simple logic)
+          const month = date.getMonth() + 1;
+          let season = 'regular';
+          
+          if (month >= 4 && month <= 6) {
+            season = 'summer';
+          } else if (month >= 10 && month <= 12) {
+            season = 'winter';
+          } else if (month >= 7 && month <= 9) {
+            season = 'monsoon';
+          }
+
+          // Use seasonal price if available, otherwise use base price
+          roomPricingMap[dateString] = seasonalPricing[season] || basePrice;
+        });
+        
+        pricingMap[roomNumber] = roomPricingMap;
+      });
+      
+      return pricingMap;
+    } catch (error) {
+      console.error('Error in getBatchRoomPricing:', error);
+      
+      // Return default pricing for all rooms
+      const defaultPricingMap: Record<string, PricingMap> = {};
+      roomNumbers.forEach(roomNumber => {
+        const roomPricingMap: PricingMap = {};
+        dateRange.forEach(date => {
+          const dateString = formatDateLocal(date);
+          roomPricingMap[dateString] = 1000; // Default price
+        });
+        defaultPricingMap[roomNumber] = roomPricingMap;
+      });
+      return defaultPricingMap;
+    }
+  }
+
+  /**
+   * Get bookings for a specific room in a property (legacy method - kept for compatibility)
+   */
+  private async getPropertyBookingsForRoom(
+    propertyId: string, 
+    roomNumber: string, 
+    startDate: Date, 
+    endDate: Date
+  ): Promise<PropertyBooking[]> {
+    // Use the batch method for consistency
+    const allBookings = await this.getBatchPropertyBookings(propertyId, [roomNumber], startDate, endDate);
+    return allBookings.filter(booking => booking.roomNo === roomNumber);
+  }
+
+  /**
+   * Generate array of dates between start and end date
+   */
+  private generateDateRange(startDate: Date, endDate: Date): Date[] {
+    const dates: Date[] = [];
+    const currentDate = new Date(startDate);
+    
+    console.log('🔍 DEBUG: generateDateRange called with:', {
+      startDate,
+      endDate,
+      startString: formatDateLocal(startDate),
+      endString: formatDateLocal(endDate)
+    });
+    
+    while (currentDate <= endDate) {
+      dates.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    console.log('🔍 DEBUG: generateDateRange result:', {
+      count: dates.length,
+      firstDate: dates[0] ? formatDateLocal(dates[0]) : '',
+      lastDate: dates[dates.length - 1] ? formatDateLocal(dates[dates.length - 1]) : '',
+      allDates: dates.map(d => formatDateLocal(d))
+    });
+    
+    return dates;
+  }
+
+
 }
 
 export const propertyService = new PropertyService();

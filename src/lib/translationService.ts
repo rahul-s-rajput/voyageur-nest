@@ -56,15 +56,7 @@ const FALLBACK_TRANSLATIONS = {
         "checkOutDate": "Check-out Date",
         "numberOfGuests": "Number of Guests",
         "roomType": "Room Type",
-        "specialRequests": "Special Requests",
-        "emergencyContactName": "Emergency Contact Name",
-        "emergencyContactPhone": "Emergency Contact Phone",
-        "relationship": "Relationship",
-        "purposeOfVisit": "Purpose of Visit",
-        "uploadIdPhotos": "Upload ID Photos",
-        "termsAccepted": "I accept the terms and conditions",
-        "marketingConsent": "I agree to receive marketing communications",
-        "idNumber": "ID Number"
+        "specialRequests": "Special Requests"
       },
       "sections": {
         "personalInfo": "Personal Information",
@@ -72,12 +64,7 @@ const FALLBACK_TRANSLATIONS = {
         "identification": "Identification",
         "emergencyInfo": "Emergency Contact",
         "stayDetails": "Stay Details",
-        "preferences": "Preferences & Requests",
-        "personalDetails": "Personal Details",
-        "idVerification": "ID Verification",
-        "emergencyContact": "Emergency Contact",
-        "purposeOfVisit": "Purpose of Visit",
-        "additionalGuests": "Additional Guests"
+        "preferences": "Preferences & Requests"
       },
       "buttons": {
         "next": "Next",
@@ -85,19 +72,14 @@ const FALLBACK_TRANSLATIONS = {
         "submit": "Submit Check-in",
         "addGuest": "Add Guest",
         "removeGuest": "Remove Guest",
-        "uploadId": "Upload ID Document",
-        "submitting": "Submitting...",
-        "submitCheckIn": "Submit Check-In"
+        "uploadId": "Upload ID Document"
       },
       "validation": {
         "required": "This field is required",
         "email": "Please enter a valid email address",
         "phone": "Please enter a valid phone number",
         "date": "Please enter a valid date",
-        "minAge": "Guest must be at least 18 years old",
-        "invalidEmail": "Please enter a valid email address",
-        "invalidPhone": "Please enter a valid phone number",
-        "termsRequired": "You must accept the terms and conditions"
+        "minAge": "Guest must be at least 18 years old"
       },
       "placeholders": {
         "firstName": "Enter your first name",
@@ -113,9 +95,7 @@ const FALLBACK_TRANSLATIONS = {
         "idNumber": "Enter your ID number",
         "emergencyContact": "Emergency contact name",
         "emergencyPhone": "Emergency contact phone",
-        "specialRequests": "Any special requests or preferences...",
-        "selectIdType": "Select ID Type",
-        "selectPurpose": "Select purpose"
+        "specialRequests": "Any special requests or preferences..."
       },
       "options": {
         "roomTypes": {
@@ -123,21 +103,13 @@ const FALLBACK_TRANSLATIONS = {
           "deluxe": "Deluxe Room",
           "suite": "Suite",
           "family": "Family Room"
-        },
-        "business": "Business",
-        "leisure": "Tourism / Vacation",
-        "conference": "Conference",
-        "other": "Other"
+        }
       },
       "idTypes": {
         "passport": "Passport",
         "drivingLicense": "Driving License",
         "nationalId": "National ID",
-        "other": "Other",
-        "aadhaar": "Aadhaar Card",
-        "panCard": "PAN Card",
-        "voterId": "Voter ID Card",
-        "rationCard": "Ration Card"
+        "other": "Other"
       },
       "terms": {
         "agreement": "I agree to the terms and conditions",
@@ -152,11 +124,7 @@ const FALLBACK_TRANSLATIONS = {
       "error": "An error occurred. Please try again.",
       "checkInSuccess": "Welcome! Your check-in has been completed successfully.",
       "uploadSuccess": "Document uploaded successfully",
-      "uploadError": "Failed to upload document. Please try again.",
-      "translationUnavailable": "Translation service temporarily unavailable. Showing English text.",
-      "noAdditionalGuests": "No additional guests added",
-      "thankYou": "Thank you for completing the check-in process.",
-      "submitError": "Failed to submit check-in form. Please try again."
+      "uploadError": "Failed to upload document. Please try again."
     },
     "languageSelector": {
       "loading": "Loading languages..."
@@ -182,18 +150,12 @@ const FALLBACK_TRANSLATIONS = {
       "loading": "Loading check-in details...",
       "error": "Error loading check-in information",
       "title": "Digital Check-in",
-      "bookingId": "Booking ID:",
-      "guest": "Guest:",
-      "room": "Room:",
-      "checkInDate": "Check-in Date:",
+      "bookingId": "Booking ID",
+      "guest": "Guest",
+      "room": "Room",
+      "checkInDate": "Check-in Date",
       "alreadyCompleted": "Check-in already completed",
-      "notFound": "Booking not found",
-      "digitalCheckIn": "Digital Check-in",
-      "checkInComplete": "Check-in Complete!",
-      "checkInSuccess": "Your check-in form has been submitted successfully.",
-      "canClosePageNow": "You can now close this page.",
-      "processCompleted": "Check-in process completed.",
-      "errorPrefix": "Error: "
+      "notFound": "Booking not found"
     }
   }
 };
@@ -274,7 +236,7 @@ class DatabaseTranslationService {
     this.availableLanguages = [...FALLBACK_LANGUAGES];
     this.cache.set('en-US', FALLBACK_TRANSLATIONS['en-US']);
     this.isInitialized = true;
-    console.log('[TranslationService] Bootstrap initialized with fallback translations');
+    // Bootstrap initialized with fallback translations
   }
 
   /**
@@ -346,7 +308,7 @@ class DatabaseTranslationService {
         throw new Error('Supabase not available');
       }
       this.isInitialized = true;
-      console.log('[TranslationService] Initialized with', this.availableLanguages.length, 'languages');
+      // Initialized with database translations
     } catch (error) {
       console.warn('[TranslationService] Database initialization failed, using fallback:', error);
       console.warn('[TranslationService] Run database health check for detailed diagnostics');
@@ -362,7 +324,7 @@ class DatabaseTranslationService {
     this.availableLanguages = [...FALLBACK_LANGUAGES];
     this.cache.set('en-US', FALLBACK_TRANSLATIONS['en-US']);
     this.isInitialized = true;
-    console.log('[TranslationService] Initialized with fallback translations');
+    // Initialized with fallback translations
   }
 
   /**
@@ -426,7 +388,7 @@ class DatabaseTranslationService {
     
     // Check cache first with normalized code
     if (this.cache.has(normalizedCode)) {
-      console.log(`[TranslationService] Using cached data for ${normalizedCode}`);
+      // Using cached translation data
       return this.cache.get(normalizedCode);
     }
 
@@ -470,7 +432,7 @@ class DatabaseTranslationService {
 
       // Cache the data with normalized code
       this.cache.set(normalizedCode, data.translation_data);
-      console.log(`[TranslationService] Loaded and cached ${normalizedCode} translations`);
+      // Loaded and cached translation data
       
       return data.translation_data;
     } catch (error) {
@@ -832,25 +794,6 @@ class DatabaseTranslationService {
   }
 
   /**
-   * Force refresh the translation service (clears cache and reloads)
-   */
-  async forceRefresh(): Promise<void> {
-    console.log('[TranslationService] Force refresh initiated');
-    
-    // Clear all caches
-    this.cache.clear();
-    this.availableLanguages = [];
-    this.isInitialized = false;
-    this.useFallback = true;
-    
-    // Reinitialize
-    this.initializeFallbackForBootstrap();
-    await this.upgradeToDatabase();
-    
-    console.log('[TranslationService] Force refresh completed');
-  }
-
-  /**
    * Run database health check for diagnostics
    */
   async runHealthCheck(): Promise<void> {
@@ -868,20 +811,3 @@ export const databaseTranslationService = DatabaseTranslationService.getInstance
 
 // Export for backward compatibility
 export default databaseTranslationService;
-
-// Add to global scope for debugging in development
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  window.databaseTranslationService = databaseTranslationService;
-  window.debugTranslationService = () => {
-    console.group('🔍 Translation Service Debug');
-    console.log('Service instance:', databaseTranslationService);
-    console.log('Cache stats:', databaseTranslationService.getCacheStats());
-    console.log('Available languages:', databaseTranslationService.getAvailableLanguages());
-    console.groupEnd();
-  };
-  window.fixTranslations = async () => {
-    console.log('🔄 Forcing translation refresh...');
-    await databaseTranslationService.forceRefresh();
-    console.log('✅ Refresh complete! Try your dropdowns now.');
-  };
-}

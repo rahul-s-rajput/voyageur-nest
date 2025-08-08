@@ -5,6 +5,7 @@ import { createBookingWithValidation } from '../lib/supabase';
 import { GuestProfileService } from '../services/guestProfileService';
 import type { GuestProfile } from '../types/guest';
 import { useProperty } from '../contexts/PropertyContext';
+import { formatDateLocal } from '../utils/dateUtils';
 
 interface NewBookingModalProps {
   isOpen: boolean;
@@ -44,7 +45,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
     contactPhone: '',
     contactEmail: '',
     specialRequests: '',
-    bookingDate: new Date().toISOString().split('T')[0],
+    bookingDate: formatDateLocal(new Date()),
   });
 
   // Guest profile search functions
@@ -160,7 +161,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
           contactPhone: '',
           contactEmail: '',
           specialRequests: '',
-          bookingDate: new Date().toISOString().split('T')[0],
+          bookingDate: formatDateLocal(new Date()),
         });
         setRoomNumbers(['']);
         // Reset guest search state

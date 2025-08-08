@@ -7,6 +7,7 @@ import { CancellationInvoicePreview } from './components/CancellationInvoicePrev
 import { BookingDetails } from './components/BookingDetails';
 import { CheckInPage } from './pages/CheckInPage';
 import AdminPage from './pages/AdminPage';
+import ManualUpdatesPage from './pages/ManualUpdatesPage';
 import { Booking, ViewMode } from './types/booking';
 import { InvoiceData, CancellationInvoiceData } from './types/invoice';
 import { invoiceCounterService, bookingService } from './lib/supabase';
@@ -187,11 +188,11 @@ function MainApp() {
         companyNameBillTo: '',
         billToRegNo: '',
         date: getCurrentISTTime(),
-        noOfPax: booking.noOfPax,
-        adultChild: booking.adultChild,
+        noOfPax: booking.noOfPax ?? 1,
+        adultChild: booking.adultChild ?? '',
         grCardNo: '',
         roomNo: booking.roomNo,
-        numberOfRooms: booking.numberOfRooms,
+        numberOfRooms: booking.numberOfRooms ?? 1,
         dateOfArrival: booking.checkIn,
         dateOfDeparture: booking.checkOut,
         timeOfArrival: '12:00',
@@ -302,7 +303,6 @@ function MainApp() {
             bookings={bookings}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
-            onNewBooking={() => setShowNewBookingModal(true)}
             onSelectBooking={handleSelectBooking}
             onEditBooking={handleEditBooking}
             onDeleteBooking={handleDeleteBooking}
@@ -445,7 +445,6 @@ function MainApp() {
           bookings={bookings}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          onNewBooking={() => setShowNewBookingModal(true)}
           onSelectBooking={handleSelectBooking}
           onEditBooking={handleEditBooking}
           onDeleteBooking={handleDeleteBooking}
@@ -529,6 +528,8 @@ function App() {
           {/* Admin routes - Protected booking management system */}
           <Route path="/admin" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
           <Route path="/admin/*" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
+          {/* Map manual-updates route into AdminPage (consistency with other tabs) */}
+          <Route path="/admin/manual-updates" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
           
           {/* Legacy routes - redirect to admin */}
           <Route path="/" element={<Navigate to="/admin" replace />} />

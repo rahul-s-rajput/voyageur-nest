@@ -53,19 +53,20 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
     // Apply date filter
     if (dateFilter.start || dateFilter.end) {
       filtered = filtered.filter(booking => {
-        const checkInDate = new Date(booking.checkIn);
-        const checkOutDate = new Date(booking.checkOut);
+        // Parse dates directly from the YYYY-MM-DD string format
+        const checkInDateStr = booking.checkIn;
+        const checkOutDateStr = booking.checkOut;
         
         let matchesFilter = true;
         
         if (dateFilter.start) {
-          const startDate = new Date(dateFilter.start);
-          matchesFilter = matchesFilter && (checkInDate >= startDate || checkOutDate >= startDate);
+          // Compare date strings directly (YYYY-MM-DD format allows string comparison)
+          matchesFilter = matchesFilter && (checkInDateStr >= dateFilter.start || checkOutDateStr >= dateFilter.start);
         }
         
         if (dateFilter.end) {
-          const endDate = new Date(dateFilter.end);
-          matchesFilter = matchesFilter && (checkInDate <= endDate || checkOutDate <= endDate);
+          // Compare date strings directly
+          matchesFilter = matchesFilter && (checkInDateStr <= dateFilter.end || checkOutDateStr <= dateFilter.end);
         }
         
         return matchesFilter;
@@ -81,14 +82,20 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
   }, [bookings, dateFilter, selectedRooms]);
 
   // Transform bookings to calendar events
-  const events: CalendarEvent[] = filteredBookings.map(booking => ({
-    id: booking.id,
-    title: `${booking.guestName} - Room ${booking.roomNo}${booking.cancelled ? ' (CANCELLED)' : ''}`,
-    start: new Date(booking.checkIn),
-    end: new Date(booking.checkOut),
-    resource: booking,
-    cancelled: booking.cancelled
-  }));
+  const events: CalendarEvent[] = filteredBookings.map(booking => {
+    // Parse dates from YYYY-MM-DD format ensuring local timezone
+    const [checkInYear, checkInMonth, checkInDay] = booking.checkIn.split('-').map(Number);
+    const [checkOutYear, checkOutMonth, checkOutDay] = booking.checkOut.split('-').map(Number);
+    
+    return {
+      id: booking.id,
+      title: `${booking.guestName} - Room ${booking.roomNo}${booking.cancelled ? ' (CANCELLED)' : ''}`,
+      start: new Date(checkInYear, checkInMonth - 1, checkInDay, 12, 0, 0), // Set to noon to avoid DST issues
+      end: new Date(checkOutYear, checkOutMonth - 1, checkOutDay, 12, 0, 0), // Set to noon to avoid DST issues
+      resource: booking,
+      cancelled: !!booking.cancelled
+    };
+  });
 
   const handleSelectEvent = (event: CalendarEvent) => {
     onSelectBooking(event.resource);

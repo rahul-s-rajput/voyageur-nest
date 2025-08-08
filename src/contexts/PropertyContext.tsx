@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Property, PropertyContext as PropertyContextType } from '../types/property';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { Property, PropertyContext as PropertyContextType, GridCalendarSettings } from '../types/property';
 import { propertyService } from '../services/propertyService';
 import { toast } from 'react-hot-toast';
+import { addDays, startOfDay } from 'date-fns';
+import { validateGridCalendarSettings } from '../utils/localStorageUtils';
 
 const PropertyContext = createContext<PropertyContextType | undefined>(undefined);
 
@@ -9,15 +11,129 @@ interface PropertyProviderProps {
   children: ReactNode;
 }
 
+// Default grid calendar settings
+const getDefaultGridSettings = (): GridCalendarSettings => {
+  // Use date-fns to ensure consistent date handling
+  const today = startOfDay(new Date());
+  const endDate = addDays(today, 6); // Add 6 days to get exactly 7 days total (inclusive)
+  
+  return {
+    viewType: 'week',
+    dateRange: {
+      start: today,
+      end: endDate
+    },
+    showPricing: true,
+    selectedRooms: []
+  };
+};
+
 export const PropertyProvider: React.FC<PropertyProviderProps> = ({ children }) => {
   const [currentProperty, setCurrentProperty] = useState<Property | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gridCalendarSettings, setGridCalendarSettings] = useState<GridCalendarSettings>(getDefaultGridSettings());
 
-  // Load properties on mount
+  // Load properties and grid settings on mount
   useEffect(() => {
     loadProperties();
+    
+    // Validate existing localStorage data first
+    validateGridCalendarSettings();
+    
+    // Load grid calendar settings from localStorage
+    const savedSettings = localStorage.getItem('gridCalendarSettings');
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        const today = startOfDay(new Date());
+        
+        // Parse and validate saved dates
+        const savedStartDate = startOfDay(new Date(parsed.dateRange.start));
+        const savedEndDate = startOfDay(new Date(parsed.dateRange.end));
+        
+        // Check if saved dates are valid and not in the past
+        if (savedStartDate < today || isNaN(savedStartDate.getTime()) || isNaN(savedEndDate.getTime())) {
+          // Reset to default if invalid or in the past
+          console.log('Resetting invalid or past grid calendar dates');
+          const defaultSettings = getDefaultGridSettings();
+          setGridCalendarSettings(defaultSettings);
+          localStorage.setItem('gridCalendarSettings', JSON.stringify({
+            ...defaultSettings,
+            dateRange: {
+              start: defaultSettings.dateRange.start.toISOString(),
+              end: defaultSettings.dateRange.end.toISOString()
+            }
+          }));
+        } else {
+          // Ensure week view always has exactly 7 days
+          if (parsed.viewType === 'week') {
+            const correctedEnd = addDays(savedStartDate, 6);
+            setGridCalendarSettings({
+              ...parsed,
+              dateRange: {
+                start: savedStartDate,
+                end: correctedEnd
+              }
+            });
+            // Update localStorage with corrected dates
+            localStorage.setItem('gridCalendarSettings', JSON.stringify({
+              ...parsed,
+              dateRange: {
+                start: savedStartDate.toISOString(),
+                end: correctedEnd.toISOString()
+              }
+            }));
+          } else {
+            // For month or custom view, use saved dates but ensure they're clean
+            const daysDiff = Math.ceil((savedEndDate.getTime() - savedStartDate.getTime()) / (1000 * 60 * 60 * 24));
+            if (parsed.viewType === 'month' && daysDiff !== 29) {
+              // Fix month view to be exactly 30 days
+              const correctedEnd = addDays(savedStartDate, 29);
+              setGridCalendarSettings({
+                ...parsed,
+                dateRange: {
+                  start: savedStartDate,
+                  end: correctedEnd
+                }
+              });
+            } else {
+              setGridCalendarSettings({
+                ...parsed,
+                dateRange: {
+                  start: savedStartDate,
+                  end: savedEndDate
+                }
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to parse saved grid calendar settings, resetting to defaults:', err);
+        // Reset to default settings on error
+        const defaultSettings = getDefaultGridSettings();
+        setGridCalendarSettings(defaultSettings);
+        localStorage.setItem('gridCalendarSettings', JSON.stringify({
+          ...defaultSettings,
+          dateRange: {
+            start: defaultSettings.dateRange.start.toISOString(),
+            end: defaultSettings.dateRange.end.toISOString()
+          }
+        }));
+      }
+    } else {
+      // No saved settings, use default
+      const defaultSettings = getDefaultGridSettings();
+      setGridCalendarSettings(defaultSettings);
+      localStorage.setItem('gridCalendarSettings', JSON.stringify({
+        ...defaultSettings,
+        dateRange: {
+          start: defaultSettings.dateRange.start.toISOString(),
+          end: defaultSettings.dateRange.end.toISOString()
+        }
+      }));
+    }
   }, []);
 
   // Load saved property preference on mount
@@ -131,6 +247,32 @@ export const PropertyProvider: React.FC<PropertyProviderProps> = ({ children }) 
     }
   };
 
+  // Grid calendar methods
+  const updateGridSettings = useCallback((settings: Partial<GridCalendarSettings>) => {
+    setGridCalendarSettings(prev => {
+      const updatedSettings = { ...prev, ...settings };
+      // Save to localStorage with the new settings
+      try {
+        localStorage.setItem('gridCalendarSettings', JSON.stringify({
+          ...updatedSettings,
+          dateRange: {
+            start: updatedSettings.dateRange.start.toISOString(),
+            end: updatedSettings.dateRange.end.toISOString()
+          }
+        }));
+      } catch (error) {
+        console.warn('Failed to save grid calendar settings:', error);
+      }
+      return updatedSettings;
+    });
+  }, []);
+
+  const refreshGridData = async () => {
+    // This will be handled by the useGridCalendar hook
+    // This method is here to satisfy the interface
+    return Promise.resolve();
+  };
+
   const contextValue: PropertyContextType = {
     currentProperty,
     properties,
@@ -142,6 +284,9 @@ export const PropertyProvider: React.FC<PropertyProviderProps> = ({ children }) 
     addProperty,
     updateProperty,
     deleteProperty,
+    gridCalendarSettings,
+    updateGridSettings,
+    refreshGridData,
   };
 
   return (

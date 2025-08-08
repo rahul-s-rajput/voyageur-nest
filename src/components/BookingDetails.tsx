@@ -68,6 +68,15 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       };
       
       fetchCheckInData();
+
+      // Auto-open QR if requested by previous action
+      try {
+        const targetId = sessionStorage.getItem('open_qr_for_booking_id');
+        if (targetId && targetId === booking.id) {
+          setShowQRCode(true);
+          sessionStorage.removeItem('open_qr_for_booking_id');
+        }
+      } catch {}
     }
   }, [booking]);
 
@@ -496,11 +505,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         companyNameBillTo: '',
         billToRegNo: '',
         date: getCurrentISTTime(),
-        noOfPax: booking.noOfPax,
-        adultChild: booking.adultChild,
+        noOfPax: booking.noOfPax ?? 1,
+        adultChild: booking.adultChild ?? '',
         grCardNo: '',
         roomNo: booking.roomNo,
-        numberOfRooms: booking.numberOfRooms,
+        numberOfRooms: booking.numberOfRooms ?? 1,
         dateOfArrival: booking.checkIn,
         dateOfDeparture: booking.checkOut,
         timeOfArrival: '12:00',
@@ -540,11 +549,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       companyNameBillTo: '',
       billToRegNo: '',
       date: getCurrentISTTime(),
-      noOfPax: booking.noOfPax,
-      adultChild: booking.adultChild,
+              noOfPax: booking.noOfPax ?? 1,
+        adultChild: booking.adultChild ?? '',
       grCardNo: '',
       roomNo: booking.roomNo,
-      numberOfRooms: booking.numberOfRooms,
+      numberOfRooms: booking.numberOfRooms ?? 1,
       dateOfArrival: booking.checkIn,
       dateOfDeparture: booking.checkOut,
       timeOfArrival: '14:00',
@@ -897,11 +906,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                   </select>
                 ) : (
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    booking.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
-                    booking.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                    (booking.paymentStatus ?? 'unpaid') === 'paid' ? 'bg-green-100 text-green-800' :
+                    (booking.paymentStatus ?? 'unpaid') === 'partial' ? 'bg-yellow-100 text-yellow-800' :
                     'bg-red-100 text-red-800'
                   }`}>
-                    {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
+                    {(booking.paymentStatus ?? 'unpaid').charAt(0).toUpperCase() + (booking.paymentStatus ?? 'unpaid').slice(1)}
                   </span>
                 )}
               </div>
