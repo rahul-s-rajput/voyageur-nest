@@ -22,20 +22,24 @@ const AdminAuth: React.FC<AdminAuthProps> = ({ children, onAuthenticated }) => {
     try {
       const storedToken = localStorage.getItem('admin_device_token');
       if (storedToken) {
-        const isValid = await validateDeviceToken(storedToken);
-        if (isValid) {
-          setIsAuthenticated(true);
-          if (onAuthenticated) {
-            onAuthenticated();
-          }
-          return;
-        } else {
-          localStorage.removeItem('admin_device_token');
+        // Optimistic auth: immediately allow access and validate in background
+        setIsAuthenticated(true);
+        setIsCheckingExisting(false);
+        if (onAuthenticated) {
+          onAuthenticated();
         }
+        // Background validation; if invalid, revert auth
+        const isValid = await validateDeviceToken(storedToken);
+        if (!isValid) {
+          localStorage.removeItem('admin_device_token');
+          setIsAuthenticated(false);
+        }
+        return;
       }
     } catch (error) {
       console.error('Error checking existing auth:', error);
     } finally {
+      // If no stored token, stop checking to show login form
       setIsCheckingExisting(false);
     }
   };

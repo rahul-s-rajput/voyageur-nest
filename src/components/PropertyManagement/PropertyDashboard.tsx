@@ -8,13 +8,15 @@ import PropertyProfile from './PropertyProfile';
 import RoomManagement from './RoomManagement';
 import PricingManagement from './PricingManagement';
 import PropertySettings from './PropertySettings';
+import ExpenseManagement from './ExpenseManagement';
 import GuestRecognition from './GuestRecognition';
 import PropertyReporting from './PropertyReporting';
 import AddPropertyModal from './AddPropertyModal';
 import { PlusIcon, Cog6ToothIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
+import ExpenseService from '../../services/expenseService';
 
-type ManagementSection = 'overview' | 'room-inventory' | 'pricing-rules' | 'maintenance' | 'staff-management' | 'guest-services' | 'reports-analytics' | 'settings';
+type ManagementSection = 'overview' | 'room-inventory' | 'pricing-rules' | 'maintenance' | 'staff-management' | 'guest-services' | 'reports-analytics' | 'expenses' | 'settings';
 
 const PropertyDashboard: React.FC = () => {
   const { properties, currentProperty, isLoading, loadProperties, switchProperty } = useProperty();
@@ -26,6 +28,7 @@ const PropertyDashboard: React.FC = () => {
   const [initialTab, setInitialTab] = useState<'details' | 'rooms' | 'settings'>('details');
   const [loadingData, setLoadingData] = useState(false);
   const [activeSection, setActiveSection] = useState<ManagementSection>('overview');
+  const [expenseSummary, setExpenseSummary] = useState<{ mtd: number; pending: number; recent: Array<{ id: string; date: string; amount: number; category?: string | null; vendor?: string | null; status: string }> }>({ mtd: 0, pending: 0, recent: [] });
 
   useEffect(() => {
     loadDashboardData();
@@ -192,6 +195,25 @@ const PropertyDashboard: React.FC = () => {
       };
       
       setDashboardData(dashboardData);
+
+      // Load expense summary for current property (MTD totals, pending approvals, recent)
+      try {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+        const exps = await ExpenseService.listExpenses({ propertyId: currentProperty.id, from: start, to: end });
+        const mtd = exps.filter(e => e.approvalStatus !== 'rejected').reduce((s, e) => s + (typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount || 0))), 0);
+        const pending = exps.filter(e => e.approvalStatus === 'pending').length;
+        const recentAll = await ExpenseService.listExpenses({ propertyId: currentProperty.id });
+        const recent = recentAll
+          .slice(0, 5)
+          .map(e => ({ id: e.id, date: e.expenseDate, amount: e.amount, category: e.categoryId || null, vendor: e.vendor || null, status: e.approvalStatus }));
+        setExpenseSummary({ mtd, pending, recent });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to load expense summary', e);
+        setExpenseSummary({ mtd: 0, pending: 0, recent: [] });
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       toast.error('Failed to load dashboard data');
@@ -335,6 +357,37 @@ const PropertyDashboard: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Expenses Overview Widgets */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="text-xs text-gray-600">MTD Expenses</div>
+                      <div className="text-2xl font-semibold text-gray-900">₹{expenseSummary.mtd.toFixed(2)}</div>
+                      <div className="text-xs text-gray-500 mt-1">Excludes rejected</div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="text-xs text-gray-600">Pending Approvals</div>
+                      <div className="text-2xl font-semibold text-gray-900">{expenseSummary.pending}</div>
+                      <div className="text-xs text-gray-500 mt-1">Awaiting review</div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="text-xs text-gray-600 mb-2">Latest Expenses</div>
+                      <div className="space-y-2 max-h-32 overflow-auto">
+                        {expenseSummary.recent.length === 0 && (
+                          <div className="text-sm text-gray-500">No recent expenses</div>
+                        )}
+                        {expenseSummary.recent.map(r => (
+                          <div key={r.id} className="flex items-center justify-between text-sm">
+                            <div className="truncate">
+                              <span className="text-gray-700">₹{r.amount.toFixed(0)}</span>
+                              <span className="text-gray-500"> • {r.date}</span>
+                            </div>
+                            <span className={`text-xs px-2 py-0.5 rounded ${r.status==='approved'?'bg-green-100 text-green-700': r.status==='rejected'?'bg-red-100 text-red-700':'bg-yellow-100 text-yellow-700'}`}>{r.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Property Management Sections */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-4">
@@ -380,6 +433,13 @@ const PropertyDashboard: React.FC = () => {
                         >
                           <div className="font-medium">Guest Services</div>
                           <div className="text-sm text-gray-600">Handle guest requests and feedback</div>
+                        </button>
+                        <button 
+                          onClick={() => handleSectionChange('expenses')}
+                          className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <div className="font-medium">Expenses</div>
+                          <div className="text-sm text-gray-600">Track expenses, approvals, and budgets</div>
                         </button>
                         <button 
                           onClick={() => handleSectionChange('reports-analytics')}
@@ -438,9 +498,12 @@ const PropertyDashboard: React.FC = () => {
                     {activeSection === 'guest-services' && (
                       <GuestRecognition />
                     )}
-                    {activeSection === 'reports-analytics' && (
+                        {activeSection === 'reports-analytics' && (
                       <PropertyReporting />
                     )}
+                        {activeSection === 'expenses' && (
+                          <ExpenseManagement />
+                        )}
                     {activeSection === 'settings' && (
                       <PropertySettings />
                     )}

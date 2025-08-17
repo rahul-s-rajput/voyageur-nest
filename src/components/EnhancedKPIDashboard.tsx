@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -16,6 +16,7 @@ import {
 import { Booking } from '../types/booking';
 import { useProperty } from '../contexts/PropertyContext';
 import MobileQuickStats from './MobileQuickStats';
+import ExpenseService from '../services/expenseService';
 
 interface EnhancedKPIDashboardProps {
   bookings: Booking[];
@@ -38,7 +39,29 @@ interface KPIMetric {
 
 const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, className = '' }) => {
   const { currentProperty } = useProperty();
+  const [monthExpenseTotal, setMonthExpenseTotal] = useState<number>(0);
   
+  // Load approved expenses for current month for the active property
+  useEffect(() => {
+    const loadExpenses = async () => {
+      try {
+        if (!currentProperty?.id) {
+          setMonthExpenseTotal(0);
+          return;
+        }
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+        const exps = await ExpenseService.listExpenses({ propertyId: currentProperty.id, from: start, to: end, approval: 'approved' });
+        const total = exps.reduce((sum, e) => sum + (typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount || 0))), 0);
+        setMonthExpenseTotal(total);
+      } catch {
+        setMonthExpenseTotal(0);
+      }
+    };
+    loadExpenses();
+  }, [currentProperty?.id]);
+
   const kpiMetrics = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -100,6 +123,7 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
       const bookingDate = new Date(b.checkIn);
       return bookingDate.getMonth() === thisMonth && bookingDate.getFullYear() === thisYear;
     });
+    const thisMonthRevenueTotal = thisMonthBookings.reduce((sum, b) => sum + parseFloat(String(b.totalAmount || 0)), 0);
     
     // Payment status breakdown
     const paidBookings = activeBookings.filter(b => b.paymentStatus === 'paid');
@@ -171,6 +195,24 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
         priority: 'high'
       },
       {
+        id: 'month-expenses',
+        label: 'Expenses (MTD)',
+        value: `₹${(monthExpenseTotal / 1000).toFixed(1)}k`,
+        subValue: `${new Date().toLocaleString('default', { month: 'short' })}`,
+        icon: <AlertCircle className="w-5 h-5" />,
+        color: 'text-rose-600 bg-rose-50 border-rose-200',
+        priority: 'high'
+      },
+      {
+        id: 'profit-margin',
+        label: 'Profit Margin (MTD)',
+        value: `${thisMonthRevenueTotal > 0 ? (((thisMonthRevenueTotal - monthExpenseTotal) / thisMonthRevenueTotal) * 100).toFixed(0) : 0}%`,
+        subValue: `Rev ₹${(thisMonthRevenueTotal / 1000).toFixed(1)}k • Exp ₹${(monthExpenseTotal / 1000).toFixed(1)}k`,
+        icon: <Percent className="w-5 h-5" />,
+        color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+        priority: 'high'
+      },
+      {
         id: 'pending-payments',
         label: 'Pending Payments',
         value: `₹${(pendingRevenue / 1000).toFixed(1)}k`,
@@ -227,7 +269,7 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
     ];
 
     return metrics;
-  }, [bookings, currentProperty?.totalRooms]);
+  }, [bookings, currentProperty?.totalRooms, monthExpenseTotal]);
 
   // Separate metrics by priority for responsive layout
   const highPriorityMetrics = kpiMetrics.filter(m => m.priority === 'high');

@@ -1,10 +1,20 @@
 import { supabase } from '../lib/supabase';
 
+export type NotificationType =
+  | 'reminder'
+  | 'alert'
+  | 'update'
+  | 'deadline'
+  | 'booking_event'
+  | 'email_parsed'
+  | 'expense_event'
+  | 'budget_event';
+
 export interface NotificationConfig {
   id: string;
   propertyId: string;
   platform: 'booking.com' | 'gommt' | 'all';
-  type: 'reminder' | 'alert' | 'update' | 'deadline';
+  type: NotificationType;
   enabled: boolean;
   schedule: {
     frequency: 'daily' | 'weekly' | 'custom';
@@ -36,7 +46,7 @@ export interface Notification {
   id: string;
   propertyId: string;
   configId: string;
-  type: 'reminder' | 'alert' | 'update' | 'deadline';
+  type: NotificationType;
   title: string;
   message: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
@@ -65,50 +75,105 @@ class NotificationService {
   private subscribers: Map<string, ((notification: Notification) => void)[]> = new Map();
   private notificationQueue: Notification[] = [];
   private isProcessing = false;
+  private vapidPublicKey?: string;
 
-  // Real-time notification subscription
-  subscribeToNotifications(propertyId: string, callback: (notification: Notification) => void) {
-    if (!this.subscribers.has(propertyId)) {
-      this.subscribers.set(propertyId, []);
+  // Real-time notification subscription (GLOBAL ONLY)
+  subscribeToNotifications(_propertyId: string | undefined, callback: (notification: Notification) => void) {
+    const key = 'global';
+    if (!this.subscribers.has(key)) {
+      this.subscribers.set(key, []);
     }
-    this.subscribers.get(propertyId)!.push(callback);
+    this.subscribers.get(key)!.push(callback);
 
-    // Set up real-time subscription with Supabase
-    const subscription = supabase
-      .channel(`notifications:${propertyId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `property_id=eq.${propertyId}`
-        },
-        (payload) => {
-          const notification = this.transformNotification(payload.new);
-          this.notifySubscribers(propertyId, notification);
-        }
-      )
-      .subscribe();
+    // Set up a single global real-time subscription with Supabase (no property filter)
+    const unique = Math.random().toString(36).slice(2);
+    const chanName = `notifications:all:${unique}`;
+    const channel = supabase.channel(chanName);
+    const config = { event: 'INSERT', schema: 'public', table: 'notifications' } as any;
+    const subscription = channel.on('postgres_changes', config, (payload: any) => {
+      const notification = this.transformNotification(payload.new);
+      console.log('[NotificationService] Real-time notification received:', notification.id, notification.title, 'for channel:', chanName);
+      this.notifySubscribers(notification.propertyId, notification);
+    }).subscribe();
 
     // Return unsubscribe function
     return () => {
-      const callbacks = this.subscribers.get(propertyId);
+      const callbacks = this.subscribers.get(key);
       if (callbacks) {
         const index = callbacks.indexOf(callback);
-        if (index > -1) {
-          callbacks.splice(index, 1);
-        }
+        if (index > -1) callbacks.splice(index, 1);
       }
       subscription.unsubscribe();
     };
   }
 
-  private notifySubscribers(propertyId: string, notification: Notification) {
-    const callbacks = this.subscribers.get(propertyId);
-    if (callbacks) {
-      callbacks.forEach(callback => callback(notification));
+  private notifySubscribers(_propertyId: string, notification: Notification) {
+    // Global-only delivery to avoid duplicates
+    const cbs = this.subscribers.get('global');
+    if (cbs) cbs.forEach(cb => cb(notification));
+  }
+
+  // Push API: register SW and subscribe
+  async ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
+    try {
+      const reg = await navigator.serviceWorker.register('/notifications-sw.js');
+      await navigator.serviceWorker.ready;
+      return reg;
+    } catch {
+      return null;
     }
+  }
+
+  async subscribePush(propertyId?: string): Promise<PushSubscription | null> {
+    try {
+      const reg = await this.ensureServiceWorker();
+      if (!reg || !('PushManager' in window)) return null;
+      if (!this.vapidPublicKey) {
+        // Load VAPID public key from env served by backend or .env proxy
+        const res = await fetch('/vapid-public-key.json').catch(() => null);
+        const json = res && res.ok ? await res.json() : null;
+        this.vapidPublicKey = json?.publicKey;
+      }
+      if (!this.vapidPublicKey) return null;
+      const converted = this.urlBase64ToUint8Array(this.vapidPublicKey);
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: converted });
+      // Persist subscription
+      await (await import('../lib/supabase')).supabase
+        .from('notification_subscriptions')
+        .upsert({
+          endpoint: sub.endpoint,
+          keys: sub.toJSON().keys,
+          property_id: propertyId || null
+        }, { onConflict: 'endpoint' as any });
+      return sub;
+    } catch {
+      return null;
+    }
+  }
+
+  async unsubscribePush(): Promise<void> {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) {
+      try {
+        await (await import('../lib/supabase')).supabase
+          .from('notification_subscriptions')
+          .delete()
+          .eq('endpoint', sub.endpoint);
+      } catch {}
+      await sub.unsubscribe();
+    }
+  }
+
+  private urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
   }
 
   private transformNotification(data: any): Notification {
@@ -149,6 +214,37 @@ class NotificationService {
 
     if (error) throw error;
 
+    return {
+      id: data.id,
+      propertyId: data.property_id,
+      platform: data.platform,
+      type: data.type,
+      enabled: data.enabled,
+      schedule: data.schedule,
+      conditions: data.conditions,
+      channels: data.channels,
+      message: data.message,
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at)
+    };
+  }
+
+  async updateNotificationConfig(id: string, updates: Partial<Omit<NotificationConfig, 'id' | 'createdAt' | 'updatedAt'>>): Promise<NotificationConfig> {
+    const payload: any = {};
+    if (updates.enabled !== undefined) payload.enabled = updates.enabled;
+    if (updates.channels !== undefined) payload.channels = updates.channels as any;
+    if (updates.message !== undefined) payload.message = updates.message as any;
+    if (updates.schedule !== undefined) payload.schedule = updates.schedule as any;
+    if (updates.conditions !== undefined) payload.conditions = updates.conditions as any;
+    if (updates.platform !== undefined) payload.platform = updates.platform as any;
+    if (updates.type !== undefined) payload.type = updates.type as any;
+    const { data, error } = await supabase
+      .from('notification_configs')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw error;
     return {
       id: data.id,
       propertyId: data.property_id,
@@ -213,6 +309,9 @@ class NotificationService {
     if (error) throw error;
 
     const createdNotification = this.transformNotification(data);
+    
+    // Debug log to track notifications
+    console.log('[NotificationService] Created notification:', createdNotification.id, createdNotification.title);
 
     // Send to appropriate channels
     await this.deliverNotification(createdNotification);
@@ -234,12 +333,7 @@ class NotificationService {
 
       const channels = config.channels;
 
-      // In-app notification (already handled by real-time subscription)
-      if (channels.inApp) {
-        this.notifySubscribers(notification.propertyId, notification);
-      }
-
-      // Browser push notification
+      // In-app handled by realtime subscriber; show OS-level (system) notification here
       if (channels.inApp && 'Notification' in window) {
         await this.sendBrowserNotification(notification);
       }
@@ -289,16 +383,94 @@ class NotificationService {
     }
   }
 
-  // Email notification (placeholder - integrate with your email service)
+  // Email notification (Supabase Functions invoke)
   private async sendEmailNotification(notification: Notification) {
-    // This would integrate with your email service (SendGrid, AWS SES, etc.)
-    console.log('Sending email notification:', notification);
+    try {
+      await (supabase as any).functions.invoke('send-email', {
+        body: {
+          propertyId: notification.propertyId,
+          title: notification.title,
+          message: notification.message,
+          priority: notification.priority,
+          data: notification.data
+        }
+      });
+    } catch (e) {
+      console.warn('Email send failed', e);
+    }
   }
 
-  // SMS notification (placeholder - integrate with Twilio or similar)
+  // SMS notification (Supabase Functions invoke)
   private async sendSMSNotification(notification: Notification) {
-    // This would integrate with your SMS service (Twilio, AWS SNS, etc.)
-    console.log('Sending SMS notification:', notification);
+    try {
+      await (supabase as any).functions.invoke('send-sms', {
+        body: {
+          propertyId: notification.propertyId,
+          title: notification.title,
+          message: notification.message,
+          priority: notification.priority,
+          data: notification.data
+        }
+      });
+    } catch (e) {
+      console.warn('SMS send failed', e);
+    }
+  }
+
+  // Convenience: send event with auto channel handling
+  async sendEvent(params: {
+    propertyId: string;
+    type: Notification['type'];
+    title: string;
+    message: string;
+    priority?: Notification['priority'];
+    platform?: string;
+    data?: any;
+  }): Promise<Notification> {
+    const { propertyId, type, title, message } = params;
+    const priority = params.priority || 'medium';
+    let channels: any = { inApp: true, email: false, sms: false };
+    let configId: string | undefined;
+    try {
+      const { data: cfg } = await supabase
+        .from('notification_configs')
+        .select('id, channels')
+        .eq('property_id', propertyId)
+        .eq('type', type)
+        .maybeSingle();
+      if (cfg) {
+        configId = cfg.id;
+        channels = cfg.channels || channels;
+      }
+    } catch {}
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        property_id: propertyId,
+        config_id: configId || null,
+        type,
+        title,
+        message,
+        priority,
+        platform: params.platform,
+        data: params.data,
+        read: false,
+        dismissed: false,
+        sent_at: new Date().toISOString(),
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    const created = this.transformNotification(data);
+    try {
+      // Show OS-level notification; in-app toasts handled by realtime subscriber
+      if (channels.inApp && 'Notification' in window) await this.sendBrowserNotification(created);
+      if (channels.email) await this.sendEmailNotification(created);
+      if (channels.sms) await this.sendSMSNotification(created);
+    } catch {}
+    return created;
   }
 
   // Webhook notification
@@ -321,15 +493,18 @@ class NotificationService {
   }
 
   // Get notifications for a property
-  async getNotifications(propertyId: string, options?: {
+  async getNotifications(propertyId?: string, options?: {
     limit?: number;
     offset?: number;
     unreadOnly?: boolean;
   }): Promise<Notification[]> {
     let query = supabase
       .from('notifications')
-      .select('*')
-      .eq('property_id', propertyId);
+      .select('*');
+
+    if (propertyId) {
+      query = query.eq('property_id', propertyId);
+    }
 
     if (options?.unreadOnly) {
       query = query.eq('read', false);

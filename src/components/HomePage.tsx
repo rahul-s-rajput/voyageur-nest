@@ -97,14 +97,15 @@ export const HomePage: React.FC<HomePageProps> = ({
         if (!booking.paymentStatus || !filters.paymentStatus.includes(booking.paymentStatus)) return false;
       }
 
-      // Date range filter
+      // Date range filter (compare YYYY-MM-DD strings to avoid timezone issues)
       if (filters.dateRange) {
-        const checkIn = new Date(booking.checkIn);
-        const checkOut = new Date(booking.checkOut);
-        const filterStart = new Date(filters.dateRange.start);
-        const filterEnd = new Date(filters.dateRange.end);
-        
-        if (checkOut < filterStart || checkIn > filterEnd) return false;
+        const checkInStr = booking.checkIn;
+        const checkOutStr = booking.checkOut;
+        const filterStartStr = filters.dateRange.start;
+        const filterEndStr = filters.dateRange.end;
+
+        if (filterStartStr && checkOutStr < filterStartStr) return false;
+        if (filterEndStr && checkInStr > filterEndStr) return false;
       }
 
       // Cancelled bookings filter
@@ -442,6 +443,14 @@ export const HomePage: React.FC<HomePageProps> = ({
               }
             } catch (error) {
               console.error('Error cancelling booking:', error);
+            }
+          }}
+          onDelete={async (bookingId) => {
+            try {
+              await onDeleteBooking(bookingId);
+              setSelectedBooking(null);
+            } catch (error) {
+              console.error('Error deleting booking from details modal:', error);
             }
           }}
         />

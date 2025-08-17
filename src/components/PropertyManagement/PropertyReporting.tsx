@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useProperty } from '../../contexts/PropertyContext';
 import { Property, PropertyComparison, PropertyMetric, PropertyTrendData } from '../../types/property';
 import { propertyService } from '../../services/propertyService';
+import ExpenseService from '../../services/expenseService';
+import { supabase } from '../../lib/supabase';
 import { 
   ChartBarIcon, 
   DocumentChartBarIcon,
@@ -47,6 +49,8 @@ const PropertyReporting: React.FC<PropertyReportingProps> = ({ className = '' })
   const [comparisonData, setComparisonData] = useState<PropertyComparison[]>([]);
   const [trendData, setTrendData] = useState<PropertyTrendData[]>([]);
   const [metrics, setMetrics] = useState<PropertyMetric[]>([]);
+  const [financialSummary, setFinancialSummary] = useState<Array<{ propertyId: string; propertyName: string; revenue: number; expenses: number; marginPct: number }>>([]);
+  const [seasonalSummary, setSeasonalSummary] = useState<Array<{ season: 'Peak' | 'Moderate' | 'Low'; revenue: number; expenses: number }>>([]);
 
   useEffect(() => {
     if (properties.length > 0) {
@@ -88,6 +92,59 @@ const PropertyReporting: React.FC<PropertyReportingProps> = ({ className = '' })
         setComparisonData(comparison);
         setTrendData(trends);
         setMetrics(metricsData);
+
+        // Financial summary (Expenses vs Revenue) per property
+        const fin = await Promise.all(selectedProperties.map(async (pid) => {
+          const analytics = await propertyService.getPropertyAnalytics(pid, fromDate, endDate);
+          const expenses = (await ExpenseService.listExpenses({ propertyId: pid, from: fromDate, to: endDate }))
+            .filter(e => e.approvalStatus !== 'rejected')
+            .reduce((s, e) => s + (typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount || 0))), 0);
+          const revenue = analytics.totalRevenue || 0;
+          const marginPct = revenue > 0 ? ((revenue - expenses) / revenue) * 100 : 0;
+          const prop = properties.find(p => p.id === pid);
+          return { propertyId: pid, propertyName: prop?.name || pid.slice(0, 6), revenue, expenses, marginPct };
+        }));
+        setFinancialSummary(fin);
+
+        // Seasonal summary across selected properties
+        const seasonOfMonth = (m: number): 'Peak' | 'Moderate' | 'Low' => {
+          if ([5,6,10,11].includes(m)) return 'Peak';
+          if ([3,4,9,12].includes(m)) return 'Moderate';
+          return 'Low';
+        };
+        const seasons: Record<'Peak'|'Moderate'|'Low', { revenue: number; expenses: number }> = {
+          Peak: { revenue: 0, expenses: 0 },
+          Moderate: { revenue: 0, expenses: 0 },
+          Low: { revenue: 0, expenses: 0 }
+        };
+        // Load bookings and expenses and bucket by season (based on check_in/expense_date month)
+        await Promise.all(selectedProperties.map(async (pid) => {
+          const { data: bookings } = await supabase
+            .from('bookings')
+            .select('check_in,total_amount')
+            .eq('property_id', pid)
+            .gte('check_in', fromDate)
+            .lte('check_out', endDate)
+            .eq('cancelled', false);
+          (bookings || []).forEach(b => {
+            const d = new Date(b.check_in);
+            const season = seasonOfMonth(d.getMonth()+1);
+            const amt = parseFloat(String(b.total_amount || 0));
+            seasons[season].revenue += isFinite(amt) ? amt : 0;
+          });
+          const exps = await ExpenseService.listExpenses({ propertyId: pid, from: fromDate, to: endDate });
+          exps.filter(e => e.approvalStatus !== 'rejected').forEach(e => {
+            const d = new Date(e.expenseDate);
+            const season = seasonOfMonth(d.getMonth()+1);
+            const amt = typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount || 0));
+            seasons[season].expenses += isFinite(amt) ? amt : 0;
+          });
+        }));
+        setSeasonalSummary([
+          { season: 'Peak', revenue: seasons.Peak.revenue, expenses: seasons.Peak.expenses },
+          { season: 'Moderate', revenue: seasons.Moderate.revenue, expenses: seasons.Moderate.expenses },
+          { season: 'Low', revenue: seasons.Low.revenue, expenses: seasons.Low.expenses }
+        ]);
       }
     } catch (error) {
       console.error('Failed to load reporting data:', error);
@@ -95,6 +152,8 @@ const PropertyReporting: React.FC<PropertyReportingProps> = ({ className = '' })
       setComparisonData([]);
       setTrendData([]);
       setMetrics([]);
+      setFinancialSummary([]);
+      setSeasonalSummary([]);
     } finally {
       setLoading(false);
     }
@@ -228,6 +287,70 @@ const PropertyReporting: React.FC<PropertyReportingProps> = ({ className = '' })
 
       {/* Content */}
       <div className="p-6">
+        {/* Expense vs Revenue Summary */}
+        {financialSummary.length > 0 && (
+          <div className="mb-6 bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-gray-900">Expense vs Revenue</h3>
+              <div className="text-sm text-gray-600">Date range: {dateRange}</div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-gray-600">
+                    <th className="py-2 px-3">Property</th>
+                    <th className="py-2 px-3 text-right">Revenue</th>
+                    <th className="py-2 px-3 text-right">Expenses</th>
+                    <th className="py-2 px-3 text-right">Profit</th>
+                    <th className="py-2 px-3 text-right">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {financialSummary.map((row, idx) => {
+                    const profit = row.revenue - row.expenses;
+                    const margin = row.marginPct;
+                    return (
+                      <tr key={idx} className="border-b last:border-b-0">
+                        <td className="py-2 px-3">{row.propertyName}</td>
+                        <td className="py-2 px-3 text-right">₹{row.revenue.toLocaleString()}</td>
+                        <td className="py-2 px-3 text-right">₹{row.expenses.toLocaleString()}</td>
+                        <td className={`py-2 px-3 text-right ${profit>=0?'text-green-700':'text-red-600'}`}>₹{profit.toLocaleString()}</td>
+                        <td className={`py-2 px-3 text-right ${margin>=0?'text-green-700':'text-red-600'}`}>{margin.toFixed(0)}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Seasonal Summary */}
+        {seasonalSummary.length > 0 && (
+          <div className="mb-6 bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Seasonal Summary (All Selected)</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-gray-600">
+                    <th className="py-2 px-3">Season</th>
+                    <th className="py-2 px-3 text-right">Revenue</th>
+                    <th className="py-2 px-3 text-right">Expenses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seasonalSummary.map((row, i) => (
+                    <tr key={i} className="border-b last:border-b-0">
+                      <td className="py-2 px-3">{row.season}</td>
+                      <td className="py-2 px-3 text-right">₹{row.revenue.toLocaleString()}</td>
+                      <td className="py-2 px-3 text-right">₹{row.expenses.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         {viewMode === 'comparison' && (
           <PropertyComparisonView
             comparisonData={comparisonData}

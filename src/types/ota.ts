@@ -495,3 +495,44 @@ export type Checklist = ManualUpdateChecklist;
 export type SyncLog = OTASyncLog;
 export type CalendarEvent = ICalEvent;
 export type Operation = SyncOperation;
+
+export interface EmailMessage {
+  id: string;
+  gmail_message_id: string;
+  thread_id?: string;
+  label_ids?: string[];
+  sender?: string;
+  recipient?: string;
+  subject?: string;
+  received_at?: string;
+  snippet?: string;
+  mime_summary?: Record<string, any>;
+  raw_source_ref?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailAIExtraction {
+  id: string;
+  email_message_id: string;
+  model: string;
+  output_json: Record<string, any>;
+  confidence: number;
+  reasoning?: string;
+  status: 'auto_imported' | 'needs_review' | 'ignored';
+  created_at: string;
+}
+
+export interface EmailBookingImport {
+  id: string;
+  email_message_id: string;
+  extraction_id?: string;
+  property_id?: string;
+  event_type: 'new' | 'modified' | 'cancelled';
+  decision: 'auto' | 'manual-approved' | 'manual-rejected';
+  booking_id?: string;
+  import_errors?: Record<string, any>;
+  processed_at?: string;
+  processed_by?: string;
+  created_at: string;
+}

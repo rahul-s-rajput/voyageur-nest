@@ -274,3 +274,78 @@ body {
 .ethereal-error {
   background: linear-gradient(135deg, #FFE5E5 0%, #FFF0F0 100%);
 }
+
+/* PrimeReact Calendar sizing and FloatLabel behavior overrides */
+.p-float-label .p-calendar {
+  width: 100%;
+}
+.p-calendar .p-inputtext {
+  height: 40px;
+}
+/* Hide FloatLabel label once the input has a value (wrapper becomes filled) */
+.p-float-label .p-inputwrapper-filled + label {
+  display: none;
+}
+/* Also hide while focused to avoid flicker on first character */
+.p-float-label .p-inputwrapper-focus + label {
+  display: none;
+}
+
+/* Custom Range Slider Styles */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 6px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.slider:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.slider:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  transform: scale(1);
+}
+
+.slider:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+  transform: scale(1);
+}

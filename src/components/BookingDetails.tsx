@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, Mail, MapPin, CreditCard, Users, Calendar, Clock } from 'lucide-react';
+import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2 } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
@@ -16,6 +16,7 @@ interface BookingDetailsProps {
   onClose: () => void;
   onUpdate: (booking: Booking) => void;
   onCancel: (bookingId: string) => void;
+  onDelete: (bookingId: string) => void;
 }
 
 export const BookingDetails: React.FC<BookingDetailsProps> = ({
@@ -24,6 +25,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   onClose,
   onUpdate,
   onCancel,
+  onDelete,
 }) => {
   const { showSuccess, showError, showWarning } = useNotification();
   const [isEditing, setIsEditing] = useState(false);
@@ -39,6 +41,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [loadingCheckIn, setLoadingCheckIn] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
 
   
   // Additional guests and photo upload states
@@ -271,7 +275,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         // Auto-adjust adults/children to match total guests
         const adultChildParts = (prev.adultChild || '1/0').split('/');
         const currentAdults = parseInt(adultChildParts[0]) || 1;
-        const currentChildren = parseInt(adultChildParts[1]) || 0;
         const newAdults = Math.min(currentAdults, newCount);
         const newChildren = Math.max(0, newCount - newAdults);
         newData.adultChild = `${newAdults}/${newChildren}`;
@@ -336,7 +339,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       // Parse adults and children from adultChild field
       const adultChildParts = (prev.adultChild || '1/0').split('/');
       const currentAdults = parseInt(adultChildParts[0]) || 1;
-      const currentChildren = parseInt(adultChildParts[1]) || 0;
       
       // Auto-adjust adults/children to match total guests
       const newAdults = Math.min(currentAdults, newCount);
@@ -479,8 +481,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   };
 
   const handleCancelBooking = () => {
-    if (booking && window.confirm('Are you sure you want to cancel this booking?')) {
-      onCancel(booking.id);
+    if (booking) {
+      setConfirmCancelOpen(true);
     }
   };
 
@@ -1476,6 +1478,15 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                       Cancel Booking
                     </button>
                   )}
+                  {booking.cancelled && (
+                    <button
+                      onClick={() => setConfirmDeleteOpen(true)}
+                      className="flex-1 flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Booking
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -1632,6 +1643,42 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Cancel Modal */}
+      {confirmCancelOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">Cancel Booking</h3>
+            </div>
+            <div className="px-5 py-4 text-sm text-gray-700">
+              Are you sure you want to cancel this booking?
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t px-5 py-3">
+              <button onClick={() => setConfirmCancelOpen(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Close</button>
+              <button onClick={() => { onCancel(booking.id); setConfirmCancelOpen(false); }} className="px-4 py-2 text-sm text-white bg-orange-600 rounded-md hover:bg-orange-700 transition-colors">Confirm Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Modal */}
+      {confirmDeleteOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">Delete Booking</h3>
+            </div>
+            <div className="px-5 py-4 text-sm text-gray-700">
+              Permanently delete this cancelled booking? This cannot be undone.
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t px-5 py-3">
+              <button onClick={() => setConfirmDeleteOpen(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Close</button>
+              <button onClick={() => { onDelete(booking.id); setConfirmDeleteOpen(false); }} className="px-4 py-2 text-sm text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors">Delete</button>
+            </div>
           </div>
         </div>
       )}

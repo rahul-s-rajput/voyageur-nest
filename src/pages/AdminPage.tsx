@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AdminAuth from '../components/AdminAuth';
 import BookingManagement from '../components/BookingManagement';
 import TokenManagement from '../components/TokenManagement';
 import { GuestProfileList } from '../components/GuestProfileList';
 import PropertyDashboard from '../components/PropertyManagement/PropertyDashboard';
+import NotificationSettings from '../components/NotificationSettings';
 import PropertySelector from '../components/PropertySelector';
 import OTACalendar from './OTACalendar';
 import { PropertyProvider, useProperty } from '../contexts/PropertyContext';
 import MobileNavigation from '../components/MobileNavigation';
 import EnhancedManualUpdateDashboard from '../components/EnhancedManualUpdateDashboard';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const ManualUpdatesTab: React.FC = () => {
   const { currentProperty } = useProperty();
@@ -20,8 +22,54 @@ const ManualUpdatesTab: React.FC = () => {
   );
 };
 
+const NotificationsSettingsTab: React.FC = () => {
+  const { currentProperty } = useProperty();
+  return (
+    <NotificationSettings propertyId={currentProperty?.id || ''} />
+  );
+};
+
 const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates'>('bookings');
+  type AdminTab = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates' | 'menu' | 'notifications-settings';
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const allTabs: AdminTab[] = useMemo(
+    () => ['bookings', 'properties', 'guests', 'tokens', 'ota-calendar', 'manual-updates', 'menu', 'notifications-settings'],
+    []
+  );
+
+  const getTabFromPath = (pathname: string): AdminTab | null => {
+    const seg = pathname.split('/')[2];
+    if (!seg) return null;
+    return (allTabs.includes(seg as AdminTab) ? (seg as AdminTab) : null);
+  };
+
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    // Prefer tab from URL if present; otherwise use saved tab or default
+    const initialFromRoute = getTabFromPath(window.location.pathname);
+    const saved = (localStorage.getItem('admin_active_tab') as AdminTab) || 'bookings';
+    return initialFromRoute ?? saved ?? 'bookings';
+  });
+
+  // Keep activeTab in sync with URL
+  useEffect(() => {
+    const tabFromRoute = getTabFromPath(location.pathname);
+    if (tabFromRoute && tabFromRoute !== activeTab) {
+      setActiveTab(tabFromRoute);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // Persist tab and ensure URL reflects it on user-initiated changes
+  useEffect(() => {
+    localStorage.setItem('admin_active_tab', activeTab);
+    const desiredPath = activeTab === 'bookings' ? '/admin' : `/admin/${activeTab}`;
+    if (location.pathname !== desiredPath) {
+      navigate(desiredPath, { replace: false });
+    }
+  }, [activeTab, location.pathname, navigate]);
 
   return (
     <AdminAuth>
@@ -46,6 +94,13 @@ const AdminPage: React.FC = () => {
               {activeTab === 'tokens' && <TokenManagement />}
               {activeTab === 'ota-calendar' && <OTACalendar />}
               {activeTab === 'manual-updates' && <ManualUpdatesTab />}
+              {activeTab === 'notifications-settings' && <NotificationsSettingsTab />}
+              {activeTab === 'menu' && (
+                // Lazy import to avoid initial bundle growth
+                <React.Suspense fallback={<div>Loading menu…</div>}>
+                  {React.createElement(React.lazy(() => import('../components/FnB/MenuManagement')))}
+                </React.Suspense>
+              )}
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, AlertTriangle, CheckCircle, RefreshCw, Settings, Download, Bell, Cog } from 'lucide-react';
 import BulkFormatPanel from './BulkFormatPanel';
 import NotificationCenter from './NotificationCenter';
@@ -23,8 +23,7 @@ interface PlatformStats {
 }
 
 const EnhancedManualUpdateDashboard: React.FC<EnhancedManualUpdateDashboardProps> = ({
-  propertyId,
-  platforms
+  propertyId
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'booking.com' | 'gommt' | 'notifications' | 'config' | 'reminders'>('overview');
   const [checklists, setChecklists] = useState<ManualUpdateChecklist[]>([]);
@@ -107,7 +106,7 @@ const EnhancedManualUpdateDashboard: React.FC<EnhancedManualUpdateDashboardProps
     return null;
   };
 
-  const calculatePlatformStats = (checklists: ManualUpdateChecklist[], labelsMap: Record<string, string>): PlatformStats[] => {
+  const calculatePlatformStats = (checklists: ManualUpdateChecklist[], _labelsMap: Record<string, string>): PlatformStats[] => {
     const manualPlatforms = ['booking.com', 'gommt'];
     
     return manualPlatforms.map(platform => {
@@ -144,7 +143,7 @@ const EnhancedManualUpdateDashboard: React.FC<EnhancedManualUpdateDashboardProps
     });
   };
 
-  const loadRecentBookings = async (propertyId: string): Promise<OTABooking[]> => {
+  const loadRecentBookings = async (_propertyId: string): Promise<OTABooking[]> => {
     // Mock implementation - replace with actual booking service call
     return [
       {

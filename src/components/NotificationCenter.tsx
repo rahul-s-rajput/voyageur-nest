@@ -3,7 +3,7 @@ import { Bell, X, Check, AlertTriangle, Info, Clock, Settings } from 'lucide-rea
 import { notificationService, type Notification } from '../services/notificationService';
 
 interface NotificationCenterProps {
-  propertyId: string;
+  propertyId?: string; // optional: global by default
   className?: string;
 }
 
@@ -15,11 +15,17 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [permissionState, setPermissionState] = useState<NotificationPermission | 'unsupported'>(() =>
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadNotifications();
     
+    // DISABLED: NotificationContainer already handles global notifications
+    // We don't need another subscription here to avoid duplicates
+    /*
     // Subscribe to real-time notifications
     const unsubscribe = notificationService.subscribeToNotifications(
       propertyId,
@@ -41,6 +47,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     );
 
     return unsubscribe;
+    */
   }, [propertyId]);
 
   // Close dropdown when clicking outside
@@ -55,10 +62,32 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const requestSystemPermission = async () => {
+    try {
+      if (!('Notification' in window)) {
+        setPermissionState('unsupported');
+        return;
+      }
+      const res = await Notification.requestPermission();
+      setPermissionState(res);
+      if (res === 'granted') {
+        // Attempt push subscription
+        try {
+          const { notificationService } = await import('../services/notificationService');
+          await notificationService.subscribePush();
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const loadNotifications = async () => {
     setIsLoading(true);
     try {
-      const allNotifications = await notificationService.getNotifications(propertyId, {
+      const allNotifications = await notificationService.getNotifications(undefined, {
         limit: 50
       });
       setNotifications(allNotifications);
@@ -185,6 +214,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
             <div className="flex items-center space-x-2">
+              {permissionState !== 'granted' && (
+                <button
+                  onClick={requestSystemPermission}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Enable system alerts
+                </button>
+              )}
               {unreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}

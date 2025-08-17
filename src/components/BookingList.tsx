@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, Edit, CreditCard, FileText, Trash2, XCircle, Receipt, CheckCircle, Clock } from 'lucide-react';
+import { Eye, Edit, FileText, Trash2, XCircle, Receipt, CheckCircle, Clock } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { checkInService } from '../lib/supabase';
 import { format } from 'date-fns';
+import { createLocalDate } from '../utils/dateUtils';
 
 interface BookingListProps {
   bookings: Booking[];
@@ -26,6 +27,7 @@ export const BookingList: React.FC<BookingListProps> = ({
 }) => {
   const [checkInData, setCheckInData] = useState<Record<string, CheckInData>>({});
   const [loadingCheckIns, setLoadingCheckIns] = useState(true);
+  const [confirm, setConfirm] = useState<{ type: 'cancel' | 'delete'; bookingId: string } | null>(null);
 
   // Fetch check-in data for all bookings
   useEffect(() => {
@@ -108,21 +110,29 @@ export const BookingList: React.FC<BookingListProps> = ({
   };
 
   const getPaymentStatusBadge = (paymentStatus: Booking['paymentStatus']) => {
-    const statusColors = {
+    const statusColors: Record<'paid' | 'partial' | 'unpaid', string> = {
       paid: 'bg-green-100 text-green-800',
       partial: 'bg-yellow-100 text-yellow-800',
       unpaid: 'bg-red-100 text-red-800'
     };
+    const status: 'paid' | 'partial' | 'unpaid' = paymentStatus ?? 'unpaid';
 
     return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusColors[paymentStatus]}`}>
-        {paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusColors[status]}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
   };
 
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'MMM dd, yyyy');
+    if (!dateString) return '';
+    // Ensure we parse YYYY-MM-DD as a local date to avoid UTC conversion issues
+    // This aligns with calendar/grid which normalize dates in local time
+    const [y, m, d] = dateString.split('-').map(Number);
+    const date = Number.isInteger(y) && Number.isInteger(m) && Number.isInteger(d)
+      ? createLocalDate(dateString)
+      : new Date(dateString);
+    return format(date, 'MMM dd, yyyy');
   };
 
   if (bookings.length === 0) {
@@ -154,7 +164,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                   <p className="text-sm text-gray-500">Room {booking.roomNo}</p>
                 </div>
                 <div className="flex items-center space-x-1">
-                  {getStatusBadge(booking.status, booking.cancelled)}
+                  {getStatusBadge(booking.status, !!booking.cancelled)}
                 </div>
               </div>
               
@@ -319,7 +329,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                   ₹{booking.totalAmount.toLocaleString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  {getStatusBadge(booking.status, booking.cancelled)}
+                  {getStatusBadge(booking.status, !!booking.cancelled)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {getPaymentStatusBadge(booking.paymentStatus)}
@@ -360,7 +370,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                         </button>
                         {onCancelBooking && (
                           <button
-                            onClick={() => onCancelBooking(booking.id)}
+                            onClick={() => setConfirm({ type: 'cancel', bookingId: booking.id })}
                             className="text-orange-600 hover:text-orange-900 transition-colors"
                             title="Cancel Booking"
                           >
@@ -381,7 +391,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                     )}
                     
                     <button
-                      onClick={() => onDeleteBooking(booking.id)}
+                      onClick={() => setConfirm({ type: 'delete', bookingId: booking.id })}
                       className="text-red-600 hover:text-red-900 transition-colors"
                       title="Delete Booking"
                     >
@@ -394,6 +404,41 @@ export const BookingList: React.FC<BookingListProps> = ({
           </tbody>
         </table>
       </div>
+      {/* Confirm Dialog */}
+      {confirm && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {confirm.type === 'cancel' ? 'Cancel Booking' : 'Delete Booking'}
+              </h3>
+            </div>
+            <div className="px-5 py-4 text-sm text-gray-700">
+              {confirm.type === 'cancel'
+                ? 'Are you sure you want to cancel this booking?'
+                : 'Permanently delete this booking? This cannot be undone.'}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t px-5 py-3">
+              <button
+                onClick={() => setConfirm(null)}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm.type === 'cancel' && onCancelBooking) onCancelBooking(confirm.bookingId);
+                  if (confirm.type === 'delete') onDeleteBooking(confirm.bookingId);
+                  setConfirm(null);
+                }}
+                className={`px-4 py-2 text-sm text-white rounded-md transition-colors ${confirm.type === 'cancel' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-red-600 hover:bg-red-700'}`}
+              >
+                {confirm.type === 'cancel' ? 'Confirm Cancel' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

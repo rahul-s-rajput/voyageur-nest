@@ -240,7 +240,9 @@ export const bookingService = {
           contact_email: booking.contactEmail,
           special_requests: booking.specialRequests,
           booking_date: booking.bookingDate || null,
-          folio_number: folioNumber
+          folio_number: folioNumber,
+          source: (booking as any).source || null,
+          source_details: (booking as any).source_details || null
         })
         .select()
         .single()
@@ -319,6 +321,9 @@ export const bookingService = {
       if (updates.specialRequests !== undefined) updateData.special_requests = updates.specialRequests
       if (updates.bookingDate !== undefined) updateData.booking_date = updates.bookingDate || null
       if (updates.folioNumber !== undefined) updateData.folio_number = updates.folioNumber
+      // Optional OTA source fields
+      if ((updates as any).source !== undefined) (updateData as any).source = (updates as any).source
+      if ((updates as any).source_details !== undefined) (updateData as any).source_details = (updates as any).source_details
 
       const { data, error } = await supabase
         .from('bookings')
@@ -733,14 +738,16 @@ export const checkInService = {
         .from('checkin_data')
         .select('*')
         .eq('booking_id', bookingId)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          // No check-in data found
-          return null;
-        }
-        console.error('Error fetching check-in data:', error);
+        // For not-found or non-matching rows maybeSingle avoids 406; any other error: log once and return null
+        console.warn('Error fetching check-in data:', error);
+        return null;
+      }
+
+      if (!data) {
+        // No row found for this booking
         return null;
       }
 
@@ -1161,6 +1168,128 @@ export const checkInService = {
         }
       )
       .subscribe();
+  }
+};
+
+export const emailMessageService = {
+  async getRecent(limit: number = 5): Promise<Array<{ id: string; subject: string; receivedAt?: string }>> {
+    try {
+      const { data, error } = await supabase
+        .from('email_messages')
+        .select('id, subject, received_at, processed')
+        .eq('processed', false)
+        .order('received_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('Error fetching email messages:', error);
+        return [];
+      }
+
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        subject: row.subject || '(no subject)',
+        receivedAt: row.received_at || undefined
+      }));
+    } catch (e) {
+      console.error('Error in getRecent email messages:', e);
+      return [];
+    }
+  },
+  async getUnprocessedAll(): Promise<Array<{ id: string; subject: string; receivedAt?: string }>> {
+    try {
+      const { data, error } = await supabase
+        .from('email_messages')
+        .select('id, subject, received_at, processed')
+        .eq('processed', false)
+        .order('received_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching all unprocessed email messages:', error);
+        return [];
+      }
+
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        subject: row.subject || '(no subject)',
+        receivedAt: row.received_at || undefined
+      }));
+    } catch (e) {
+      console.error('Error in getUnprocessedAll email messages:', e);
+      return [];
+    }
+  },
+  async getById(id: string): Promise<{ id: string; subject: string; snippet?: string; sender?: string; receivedAt?: string } | null> {
+    try {
+      const { data, error } = await supabase
+        .from('email_messages')
+        .select('id, subject, snippet, sender, received_at')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching email message by id:', error);
+        return null;
+      }
+
+      return {
+        id: data.id,
+        subject: data.subject || '(no subject)',
+        snippet: data.snippet || undefined,
+        sender: data.sender || undefined,
+        receivedAt: data.received_at || undefined
+      };
+    } catch (e) {
+      console.error('Error in getById email message:', e);
+      return null;
+    }
+  }
+};
+
+export const emailImportService = {
+  async getByEmailMessageId(emailMessageId: string): Promise<{ id: string; email_message_id: string; booking_id?: string } | null> {
+    try {
+      const { data, error } = await supabase
+        .from('email_booking_imports')
+        .select('id, email_message_id, booking_id')
+        .eq('email_message_id', emailMessageId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        console.error('Error fetching email booking import:', error);
+        return null;
+      }
+
+      return data;
+    } catch (e) {
+      console.error('Error in getByEmailMessageId:', e);
+      return null;
+    }
+  }
+};
+
+export const emailParseQueueService = {
+  async requeue(emailMessageId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('email_parse_queue')
+        .upsert({
+          email_message_id: emailMessageId,
+          status: 'pending',
+          attempts: 0,
+          last_error: null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'email_message_id' });
+      if (error) {
+        console.error('Error re-queuing email for parse:', error);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Error in emailParseQueueService.requeue:', e);
+      return false;
+    }
   }
 };
 

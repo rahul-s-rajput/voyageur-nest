@@ -16,6 +16,8 @@ import { NewBookingModal } from './components/NewBookingModal';
 import { InvoiceTemplate } from './components/InvoiceTemplate';
 import { NotificationProvider } from './components/NotificationContainer';
 import { PropertyProvider } from './contexts/PropertyContext';
+import MenuLoading from './components/FnB/MenuLoading';
+const LazyMenuPage = React.lazy(() => import('./components/FnB/MenuPage'));
 
 function MainApp() {
   const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview'>('home');
@@ -325,6 +327,7 @@ function MainApp() {
             setSelectedBooking(updatedBooking);
           }}
           onCancel={handleCancelBooking}
+          onDelete={handleDeleteBooking}
         />
 
         <NewBookingModal
@@ -467,6 +470,7 @@ function MainApp() {
           setSelectedBooking(updatedBooking);
         }}
         onCancel={handleCancelBooking}
+        onDelete={handleDeleteBooking}
       />
 
       <NewBookingModal
@@ -517,28 +521,33 @@ function MainApp() {
 function App() {
   return (
     <PropertyProvider>
-      <Router>
-        <Routes>
-          {/* Guest routes - Check-in only */}
-          <Route path="/checkin/:bookingId" element={<NotificationProvider><CheckInPage language="en" /></NotificationProvider>} />
-          <Route path="/checkin/:bookingId/hi" element={<NotificationProvider><CheckInPage language="hi" /></NotificationProvider>} />
-          
+      <NotificationProvider>
+        <Router>
+          <Routes>
+            {/* Guest routes - Check-in only */}
+            <Route path="/checkin/:bookingId" element={<CheckInPage language="en" />} />
+            <Route path="/checkin/:bookingId/hi" element={<CheckInPage language="hi" />} />
+            
 
-          
-          {/* Admin routes - Protected booking management system */}
-          <Route path="/admin" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
-          <Route path="/admin/*" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
-          {/* Map manual-updates route into AdminPage (consistency with other tabs) */}
-          <Route path="/admin/manual-updates" element={<NotificationProvider><AdminPage /></NotificationProvider>} />
-          
-          {/* Legacy routes - redirect to admin */}
-          <Route path="/" element={<Navigate to="/admin" replace />} />
-          <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
-          
-          {/* Redirect any unknown routes to admin */}
-          <Route path="*" element={<Navigate to="/admin" replace />} />
-        </Routes>
-      </Router>
+            
+            {/* Public menu view */}
+            <Route path="/menu" element={<React.Suspense fallback={<MenuLoading />}><LazyMenuPage /></React.Suspense>} />
+
+            {/* Admin routes - Protected booking management system */}
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin/*" element={<AdminPage />} />
+            {/* Map manual-updates route into AdminPage (consistency with other tabs) */}
+            <Route path="/admin/manual-updates" element={<AdminPage />} />
+            
+            {/* Legacy routes - redirect to admin */}
+            <Route path="/" element={<Navigate to="/admin" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
+            
+            {/* Redirect any unknown routes to admin */}
+            <Route path="*" element={<Navigate to="/admin" replace />} />
+          </Routes>
+        </Router>
+      </NotificationProvider>
     </PropertyProvider>
   );
 }

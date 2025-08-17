@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { Menu, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import NotificationCenter from './NotificationCenter';
+import { useProperty } from '../contexts/PropertyContext';
+
+type AdminTab = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates' | 'menu' | 'notifications-settings';
 
 interface MobileNavigationProps {
-  activeTab: 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates';
-  onTabChange: (tab: 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates') => void;
+  activeTab: AdminTab;
+  onTabChange: (tab: AdminTab) => void;
   propertySelector?: React.ReactNode;
 }
 
-type NavId = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates';
+type NavId = Exclude<AdminTab, 'notifications-settings'>;
 
 const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabChange, propertySelector }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const navigate = useNavigate();
 
-  const navigationItems: { id: NavId; label: string; icon: string; description: string }[] = [
+  const navigationItems: { id: NavId | 'notifications-settings'; label: string; icon: string; description: string }[] = [
     {
       id: 'bookings' as const,
       label: 'Booking Management',
@@ -51,21 +53,30 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabCha
       icon: '🛠️',
       description: 'Generate and track manual OTA updates'
     }
+    ,
+    {
+      id: 'notifications-settings' as any,
+      label: 'Notifications',
+      icon: '🔔',
+      description: 'Configure in‑app, email and SMS notifications'
+    },
+    {
+      id: 'menu' as const,
+      label: 'Menu',
+      icon: '🍽️',
+      description: 'Manage F&B menu (categories & items)'
+    }
   ];
 
-  const handleTabSelect = (tabId: NavId) => {
-    // Keep behavior consistent: switch tabs within AdminPage
+  const handleTabSelect = (tabId: AdminTab) => {
     onTabChange(tabId);
-    // Optionally update URL for manual-updates for deep links
-    if (tabId === 'manual-updates') {
-      navigate('/admin/manual-updates', { replace: false });
-    } else if (window.location.pathname.includes('/admin/manual-updates')) {
-      navigate('/admin', { replace: false });
-    }
     setIsOpen(false);
   };
 
   const currentItem = navigationItems.find(item => item.id === activeTab);
+
+  // Keep provider hierarchy; avoid unused variable warning by destructuring nothing
+  useProperty();
 
   return (
     <>
@@ -125,6 +136,8 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabCha
                   {propertySelector}
                 </div>
               )}
+              {/* Global notifications bell in header (no property filter) */}
+              <NotificationCenter />
             </div>
           </div>
         </div>
