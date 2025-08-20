@@ -92,6 +92,8 @@ export interface GridCalendarSettings {
   dateRange: { start: Date; end: Date };
   showPricing: boolean;
   selectedRooms: string[];
+  // Optional analytics filter: booking source (e.g., 'all', 'direct', 'booking', 'airbnb', ...)
+  bookingSource?: string;
 }
 
 export interface PropertyContext {

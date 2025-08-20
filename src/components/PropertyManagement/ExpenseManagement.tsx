@@ -323,7 +323,7 @@ const ExpenseManagement: React.FC = () => {
       setLoading(true);
       const [cats, exps, buds] = await Promise.all([
         ExpenseService.listAvailableCategories(currentProperty.id),
-        ExpenseService.listExpenses({ propertyId: currentProperty.id, ...filters, approval: (filters.approval || undefined) as any }),
+        ExpenseService.listExpensesForPropertyView({ propertyId: currentProperty.id, ...filters, approval: (filters.approval || undefined) as any }),
         ExpenseService.getBudgets(currentProperty.id)
       ]);
       setCategories(cats);
@@ -354,7 +354,7 @@ const ExpenseManagement: React.FC = () => {
       setLoading(true);
       // eslint-disable-next-line no-console
       console.log('[ExpenseManagement] applyFilters()', { propertyId: currentProperty.id, filters });
-      const exps = await ExpenseService.listExpenses({ propertyId: currentProperty.id, ...filters, approval: (filters.approval || undefined) as any });
+      const exps = await ExpenseService.listExpensesForPropertyView({ propertyId: currentProperty.id, ...filters, approval: (filters.approval || undefined) as any });
       setExpenses(exps);
       try {
         const counts = exps.reduce((acc: any, e) => { acc[e.approvalStatus] = (acc[e.approvalStatus]||0)+1; return acc; }, {});
@@ -433,8 +433,15 @@ const ExpenseManagement: React.FC = () => {
   // recalcAutoShare function moved to ExpenseSharesTab component
 
   const openDetails = async (exp: Expense) => {
-    // Use unified modal instead of details drawer
-    openUnifiedModal(exp, 'view');
+    // Fetch original expense data (not share-adjusted) for details modal
+    try {
+      const originalExpense = await ExpenseService.getExpense(exp.id);
+      openUnifiedModal(originalExpense, 'view');
+    } catch (error) {
+      console.error('Failed to fetch original expense data:', error);
+      // Fallback to share-adjusted data if fetch fails
+      openUnifiedModal(exp, 'view');
+    }
   };
 
   // onNewExpenseChange function moved to UnifiedExpenseModal
@@ -700,7 +707,7 @@ const ExpenseManagement: React.FC = () => {
         // eslint-disable-next-line no-console
         console.log('[ExpenseReports] loadReportData month', reportMonth, { start, nextMonthStr, ym });
       }
-      const all = await ExpenseService.listExpenses({ propertyId: currentProperty.id });
+      const all = await ExpenseService.listExpensesForPropertyView({ propertyId: currentProperty.id });
       if (debug) {
         // eslint-disable-next-line no-console
         console.log('[ExpenseReports] all count', all.length, 'sample', all.slice(0, 5).map(e => ({ d: e.expenseDate, amt: e.amount, cat: e.categoryId, status: e.approvalStatus })));
@@ -774,7 +781,7 @@ const ExpenseManagement: React.FC = () => {
       }
       if (ids.length) {
         const comp = await Promise.all(ids.map(async (pid) => {
-          const allP = await ExpenseService.listExpenses({ propertyId: pid });
+          const allP = await ExpenseService.listExpensesForPropertyView({ propertyId: pid });
           // Determine filter range
           const start = compareFrom && compareFrom.length ? compareFrom : `${ym}-01`;
           const endExclusive = (() => {

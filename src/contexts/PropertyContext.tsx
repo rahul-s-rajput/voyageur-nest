@@ -24,7 +24,8 @@ const getDefaultGridSettings = (): GridCalendarSettings => {
       end: endDate
     },
     showPricing: true,
-    selectedRooms: []
+    selectedRooms: [],
+    bookingSource: 'all'
   };
 };
 
@@ -72,6 +73,7 @@ export const PropertyProvider: React.FC<PropertyProviderProps> = ({ children }) 
             const correctedEnd = addDays(savedStartDate, 6);
             setGridCalendarSettings({
               ...parsed,
+              bookingSource: parsed.bookingSource ?? 'all',
               dateRange: {
                 start: savedStartDate,
                 end: correctedEnd
@@ -80,6 +82,7 @@ export const PropertyProvider: React.FC<PropertyProviderProps> = ({ children }) 
             // Update localStorage with corrected dates
             localStorage.setItem('gridCalendarSettings', JSON.stringify({
               ...parsed,
+              bookingSource: parsed.bookingSource ?? 'all',
               dateRange: {
                 start: savedStartDate.toISOString(),
                 end: correctedEnd.toISOString()
@@ -93,6 +96,7 @@ export const PropertyProvider: React.FC<PropertyProviderProps> = ({ children }) 
               const correctedEnd = addDays(savedStartDate, 29);
               setGridCalendarSettings({
                 ...parsed,
+                bookingSource: parsed.bookingSource ?? 'all',
                 dateRange: {
                   start: savedStartDate,
                   end: correctedEnd
@@ -101,6 +105,7 @@ export const PropertyProvider: React.FC<PropertyProviderProps> = ({ children }) 
             } else {
               setGridCalendarSettings({
                 ...parsed,
+                bookingSource: parsed.bookingSource ?? 'all',
                 dateRange: {
                   start: savedStartDate,
                   end: savedEndDate

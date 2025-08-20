@@ -3,7 +3,7 @@ import { Menu, X } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { useProperty } from '../contexts/PropertyContext';
 
-type AdminTab = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates' | 'menu' | 'notifications-settings';
+type AdminTab = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates' | 'menu' | 'notifications-settings' | 'analytics';
 
 interface MobileNavigationProps {
   activeTab: AdminTab;
@@ -28,6 +28,12 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabCha
       label: 'Property Management',
       icon: '🏢',
       description: 'Manage properties and rooms'
+    },
+    {
+      id: 'analytics' as const,
+      label: 'Analytics',
+      icon: '📊',
+      description: 'View reports and analytics'
     },
     {
       id: 'guests' as const,

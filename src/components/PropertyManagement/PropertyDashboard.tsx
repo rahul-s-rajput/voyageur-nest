@@ -15,6 +15,7 @@ import AddPropertyModal from './AddPropertyModal';
 import { PlusIcon, Cog6ToothIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import ExpenseService from '../../services/expenseService';
+import { useKpiPeriod, useKpiComparison } from '../../hooks/useKPI';
 
 type ManagementSection = 'overview' | 'room-inventory' | 'pricing-rules' | 'maintenance' | 'staff-management' | 'guest-services' | 'reports-analytics' | 'expenses' | 'settings';
 
@@ -29,6 +30,33 @@ const PropertyDashboard: React.FC = () => {
   const [loadingData, setLoadingData] = useState(false);
   const [activeSection, setActiveSection] = useState<ManagementSection>('overview');
   const [expenseSummary, setExpenseSummary] = useState<{ mtd: number; pending: number; recent: Array<{ id: string; date: string; amount: number; category?: string | null; vendor?: string | null; status: string }> }>({ mtd: 0, pending: 0, recent: [] });
+
+  // KPI (MTD) setup using new analytics engine
+  const _now = new Date();
+  const kpiStart = new Date(_now.getFullYear(), _now.getMonth(), 1).toISOString().slice(0, 10);
+  const kpiEnd = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate()).toISOString().slice(0, 10);
+  const kpiEnabled = Boolean(currentProperty?.id);
+
+  const { data: kpi, isLoading: kpiLoading } = useKpiPeriod(
+    {
+      propertyId: currentProperty?.id ?? '',
+      start: kpiStart,
+      end: kpiEnd,
+      totalRooms: currentProperty?.totalRooms ?? 0,
+    },
+    { enabled: kpiEnabled }
+  );
+
+  const { data: kpiCmp } = useKpiComparison(
+    {
+      propertyId: currentProperty?.id ?? '',
+      start: kpiStart,
+      end: kpiEnd,
+      totalRooms: currentProperty?.totalRooms ?? 0,
+    },
+    'prev_period',
+    { enabled: kpiEnabled }
+  );
 
   useEffect(() => {
     loadDashboardData();
@@ -201,10 +229,10 @@ const PropertyDashboard: React.FC = () => {
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-        const exps = await ExpenseService.listExpenses({ propertyId: currentProperty.id, from: start, to: end });
+        const exps = await ExpenseService.listExpensesForPropertyView({ propertyId: currentProperty.id, from: start, to: end });
         const mtd = exps.filter(e => e.approvalStatus !== 'rejected').reduce((s, e) => s + (typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount || 0))), 0);
         const pending = exps.filter(e => e.approvalStatus === 'pending').length;
-        const recentAll = await ExpenseService.listExpenses({ propertyId: currentProperty.id });
+        const recentAll = await ExpenseService.listExpensesForPropertyView({ propertyId: currentProperty.id });
         const recent = recentAll
           .slice(0, 5)
           .map(e => ({ id: e.id, date: e.expenseDate, amount: e.amount, category: e.categoryId || null, vendor: e.vendor || null, status: e.approvalStatus }));
@@ -323,6 +351,59 @@ const PropertyDashboard: React.FC = () => {
                       <Cog6ToothIcon className="h-4 w-4 mr-2" />
                       Settings
                     </button>
+                  </div>
+
+                  {/* KPIs (MTD) powered by KPICalculator */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Performance (MTD)</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="text-xs text-gray-600">Revenue</div>
+                        <div className="text-2xl font-semibold text-gray-900">₹{((kpi?.booking.totalRevenue ?? 0)).toFixed(0)}</div>
+                        {kpiCmp && (
+                          <div className={`text-xs mt-1 ${kpiCmp.deltas.revenueDeltaPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>{kpiCmp.deltas.revenueDeltaPct.toFixed(1)}% vs prev</div>
+                        )}
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="text-xs text-gray-600">Occupancy</div>
+                        <div className="text-2xl font-semibold text-gray-900">{(kpi?.booking.occupancyRate ?? 0).toFixed(0)}%</div>
+                        {kpiCmp && (
+                          <div className={`text-xs mt-1 ${kpiCmp.deltas.occupancyDeltaPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>{kpiCmp.deltas.occupancyDeltaPct.toFixed(1)}% vs prev</div>
+                        )}
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="text-xs text-gray-600">ADR</div>
+                        <div className="text-2xl font-semibold text-gray-900">₹{(kpi?.booking.adr ?? 0).toFixed(0)}</div>
+                        {kpiCmp && (
+                          <div className={`text-xs mt-1 ${kpiCmp.deltas.adrDeltaPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>{kpiCmp.deltas.adrDeltaPct.toFixed(1)}% vs prev</div>
+                        )}
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="text-xs text-gray-600">RevPAR</div>
+                        <div className="text-2xl font-semibold text-gray-900">₹{(kpi?.booking.revpar ?? 0).toFixed(0)}</div>
+                        {kpiCmp && (
+                          <div className={`text-xs mt-1 ${kpiCmp.deltas.revparDeltaPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>{kpiCmp.deltas.revparDeltaPct.toFixed(1)}% vs prev</div>
+                        )}
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="text-xs text-gray-600">Expenses</div>
+                        <div className="text-2xl font-semibold text-gray-900">₹{(kpi?.expenses.totalExpenses ?? 0).toFixed(0)}</div>
+                        {kpiCmp && (
+                          <div className={`text-xs mt-1 ${kpiCmp.deltas.expenseDeltaPct >= 0 ? 'text-red-600' : 'text-green-600'}`}>{kpiCmp.deltas.expenseDeltaPct.toFixed(1)}% vs prev</div>
+                        )}
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="text-xs text-gray-600">Profit Margin</div>
+                        <div className="text-2xl font-semibold text-gray-900">{(kpi?.profitMarginPct ?? 0).toFixed(0)}%</div>
+                        {kpiCmp && (
+                          <div className={`text-xs mt-1 ${kpiCmp.deltas.marginDeltaPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>{kpiCmp.deltas.marginDeltaPct.toFixed(1)}% vs prev</div>
+                        )}
+                        <div className="text-xs text-gray-500 mt-1">Confidence: {kpi?.confidence ?? 0}%</div>
+                      </div>
+                    </div>
+                    {kpiLoading && (
+                      <div className="text-xs text-gray-500 mt-2">Loading KPIs…</div>
+                    )}
                   </div>
 
                   {/* Property Details */}

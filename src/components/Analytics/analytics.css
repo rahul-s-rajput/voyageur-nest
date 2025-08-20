@@ -1,0 +1,205 @@
+/* Professional Analytics Dashboard Design System
+All colors MUST be HSL for consistency and theming.
+*/
+
+:root {
+    /* Base colors - Clean, professional palette */
+    --background: 248 250 252; /* slate-50 equivalent */
+    --foreground: 214 19% 15%; /* slate-800 equivalent */
+
+    /* Card system */
+    --card: 0 0% 100%;
+    --card-foreground: 214 19% 15%;
+    --card-border: 220 13% 91%;
+    --card-shadow: 220 13% 91% / 0.1;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 214 19% 15%;
+
+    /* Primary - Professional blue */
+    --primary: 213 94% 68%; /* blue-500 */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 213 94% 64%;
+    --primary-glow: 213 94% 68% / 0.2;
+
+    /* Secondary - Soft gray */
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 214 19% 15%;
+    --secondary-hover: 220 14% 92%;
+
+    /* Muted elements */
+    --muted: 220 14% 96%;
+    --muted-foreground: 214 9% 49%;
+
+    /* Accent - Teal for highlights */
+    --accent: 172 66% 50%; /* teal-500 */
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 172 66% 46%;
+
+    /* Status colors */
+    --success: 142 69% 58%; /* green-500 */
+    --success-foreground: 0 0% 100%;
+    --warning: 43 96% 56%; /* yellow-500 */
+    --warning-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Data visualization colors */
+    --chart-primary: 213 94% 68%;
+    --chart-secondary: 172 66% 50%;
+    --chart-tertiary: 43 96% 56%;
+    --chart-quaternary: 142 69% 58%;
+    --chart-accent: 271 91% 65%; /* purple-500 */
+
+    /* Chart colors (legacy naming for compatibility) */
+    --chart-1: 213 94% 68%;
+    --chart-2: 172 66% 50%;
+    --chart-3: 43 96% 56%;
+    --chart-4: 142 69% 58%;
+    --chart-5: 271 91% 65%;
+
+    /* Interactive elements */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 213 94% 68%;
+
+    /* Layout */
+    --radius: 0.75rem;
+    --header-height: 4rem;
+    --sidebar-width: 16rem;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(213 94% 68%), hsl(172 66% 50%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(220 14% 98%));
+    --gradient-data: linear-gradient(180deg, hsl(213 94% 68% / 0.1), hsl(213 94% 68% / 0.05));
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(220 13% 91% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(220 13% 91% / 0.1), 0 2px 4px -1px hsl(220 13% 91% / 0.06);
+    --shadow-lg: 0 10px 15px -3px hsl(220 13% 91% / 0.1), 0 4px 6px -2px hsl(220 13% 91% / 0.05);
+    --shadow-kpi: 0 4px 20px hsl(213 94% 68% / 0.1);
+
+    /* Animation timings */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Base colors - Dark theme */
+    --background: 222 47% 11%; /* slate-900 equivalent */
+    --foreground: 213 31% 91%; /* slate-100 equivalent */
+
+    /* Card system */
+    --card: 224 71% 4%; /* slate-950 equivalent */
+    --card-foreground: 213 31% 91%;
+    --card-border: 215 25% 27%;
+    --card-shadow: 220 13% 91% / 0.1;
+
+    /* Popover */
+    --popover: 224 71% 4%;
+    --popover-foreground: 213 31% 91%;
+
+    /* Primary - Professional blue for dark */
+    --primary: 213 94% 68%; /* blue-500 */
+    --primary-foreground: 222 47% 11%;
+    --primary-hover: 213 94% 64%;
+    --primary-glow: 213 94% 68% / 0.3;
+
+    /* Secondary - Dark gray */
+    --secondary: 215 25% 27%;
+    --secondary-foreground: 213 31% 91%;
+    --secondary-hover: 215 25% 23%;
+
+    /* Muted elements */
+    --muted: 215 25% 27%;
+    --muted-foreground: 217 11% 65%;
+
+    /* Accent - Teal for highlights */
+    --accent: 172 66% 50%; /* teal-500 */
+    --accent-foreground: 222 47% 11%;
+    --accent-hover: 172 66% 46%;
+
+    /* Status colors - Dark theme optimized */
+    --success: 142 69% 58%; /* green-500 */
+    --success-foreground: 222 47% 11%;
+    --warning: 43 96% 56%; /* yellow-500 */
+    --warning-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 213 31% 91%;
+
+    /* Data visualization colors */
+    --chart-primary: 213 94% 68%;
+    --chart-secondary: 172 66% 50%;
+    --chart-tertiary: 43 96% 56%;
+    --chart-quaternary: 142 69% 58%;
+    --chart-accent: 271 91% 65%; /* purple-500 */
+
+    /* Chart colors (legacy naming for compatibility) */
+    --chart-1: 213 94% 68%;
+    --chart-2: 172 66% 50%;
+    --chart-3: 43 96% 56%;
+    --chart-4: 142 69% 58%;
+    --chart-5: 271 91% 65%;
+
+    /* Interactive elements */
+    --border: 215 25% 27%;
+    --input: 215 25% 27%;
+    --ring: 213 94% 68%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(213 94% 68%), hsl(172 66% 50%));
+    --gradient-card: linear-gradient(145deg, hsl(224 71% 4%), hsl(215 25% 27%));
+    --gradient-data: linear-gradient(180deg, hsl(213 94% 68% / 0.1), hsl(213 94% 68% / 0.05));
+
+    /* Shadows for dark theme */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.06);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -2px hsl(0 0% 0% / 0.05);
+    --shadow-kpi: 0 4px 20px hsl(213 94% 68% / 0.2);
+
+    /* Sidebar colors */
+    --sidebar-background: 224 71% 4%;
+    --sidebar-foreground: 213 31% 91%;
+    --sidebar-primary: 213 94% 68%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 215 25% 27%;
+    --sidebar-accent-foreground: 213 31% 91%;
+    --sidebar-border: 215 25% 27%;
+    --sidebar-ring: 213 94% 68%;
+  }
+
+/* Additional Analytics-specific styles */
+.bg-gradient-data {
+  background: var(--gradient-data);
+}
+
+.bg-gradient-card {
+  background: var(--gradient-card);
+}
+
+.shadow-kpi {
+  box-shadow: var(--shadow-kpi);
+}
+
+.duration-fast {
+  transition-duration: var(--transition-fast);
+}
+
+.duration-normal {
+  transition-duration: var(--transition-normal);
+}
+
+.duration-slow {
+  transition-duration: var(--transition-slow);
+}

@@ -82,6 +82,18 @@ export class ExpenseService {
     return ExpenseService.transformCategoryFromDB(data);
   }
 
+  // Get single expense by ID (returns original data, not share-adjusted)
+  static async getExpense(expenseId: string): Promise<Expense> {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('id', expenseId)
+      .single();
+    
+    if (error) throw error;
+    return ExpenseService.transformExpenseFromDB(data);
+  }
+
   // Expenses
   static async listExpenses(params: {
     propertyId: string;
@@ -107,6 +119,124 @@ export class ExpenseService {
     const { data, error } = await query.order('expense_date', { ascending: false });
     if (error) throw error;
     return (data || []).map(ExpenseService.transformExpenseFromDB);
+  }
+
+  /**
+   * Returns expenses for a property's "list view" with per-property share amounts applied.
+   * Logic:
+   * - Include any expense that either (a) is owned by the property (expenses.property_id), or (b) has a row in expense_shares for the property.
+   * - If an expense has shares defined:
+   *    - If there is a matching share row for this property, use share_amount if present, else amount * (share_percent/100).
+   *    - If there are shares but none for this property, exclude the expense from the property's list.
+   * - If an expense has no shares at all and is owned by the property, include the full amount.
+   */
+  static async listExpensesForPropertyView(params: {
+    propertyId: string;
+    from?: string;
+    to?: string;
+    toExclusive?: string;
+    categoryId?: string;
+    approval?: ExpenseApprovalStatus;
+    vendor?: string;
+  }): Promise<Expense[]> {
+    const { propertyId } = params;
+
+    // 1) Gather expense IDs that have shares for this property
+    const { data: shareRows, error: shareErr } = await supabase
+      .from('expense_shares')
+      .select('expense_id, property_id, share_percent, share_amount')
+      .eq('property_id', propertyId);
+    if (shareErr) throw shareErr;
+
+    const sharedExpenseIds = new Set<string>((shareRows || []).map((r: any) => r.expense_id));
+
+    // 2) Gather expense IDs owned by this property with coarse filters (date/category/approval/vendor) where possible
+    let ownedIdsQuery = supabase
+      .from('expenses')
+      .select('id')
+      .eq('property_id', propertyId);
+
+    if (params.from) ownedIdsQuery = ownedIdsQuery.gte('expense_date', params.from);
+    if (params.toExclusive) ownedIdsQuery = ownedIdsQuery.lt('expense_date', params.toExclusive);
+    else if (params.to) ownedIdsQuery = ownedIdsQuery.lte('expense_date', params.to);
+    if (params.categoryId) ownedIdsQuery = ownedIdsQuery.eq('category_id', params.categoryId);
+    if (params.approval) ownedIdsQuery = ownedIdsQuery.eq('approval_status', params.approval);
+    if (params.vendor) ownedIdsQuery = ownedIdsQuery.ilike('vendor', `%${params.vendor}%`);
+
+    const { data: ownedIdRows, error: ownedErr } = await ownedIdsQuery;
+    if (ownedErr) throw ownedErr;
+    const ownedExpenseIds = new Set<string>((ownedIdRows || []).map((r: any) => r.id));
+
+    // 3) Combine to get the complete set of candidate expense IDs
+    const candidateIds = new Set<string>();
+    ownedExpenseIds.forEach(id => candidateIds.add(id));
+    sharedExpenseIds.forEach(id => candidateIds.add(id));
+
+    if (candidateIds.size === 0) return [];
+
+    const idsArr = Array.from(candidateIds);
+
+    // 4) Fetch full expense rows for candidates with all filters applied (ensures shared rows respect filters too)
+    let detailsQuery = supabase
+      .from('expenses')
+      .select('*')
+      .in('id', idsArr);
+
+    if (params.from) detailsQuery = detailsQuery.gte('expense_date', params.from);
+    if (params.toExclusive) detailsQuery = detailsQuery.lt('expense_date', params.toExclusive);
+    else if (params.to) detailsQuery = detailsQuery.lte('expense_date', params.to);
+    if (params.categoryId) detailsQuery = detailsQuery.eq('category_id', params.categoryId);
+    if (params.approval) detailsQuery = detailsQuery.eq('approval_status', params.approval);
+    if (params.vendor) detailsQuery = detailsQuery.ilike('vendor', `%${params.vendor}%`);
+
+    const { data: expensesRaw, error: detailsErr } = await detailsQuery.order('expense_date', { ascending: false });
+    if (detailsErr) throw detailsErr;
+
+    const allExpenses = (expensesRaw || []).map(ExpenseService.transformExpenseFromDB);
+
+    // 5) Fetch all shares for these expenses to compute per-property amounts and exclusion rules
+    const { data: allShares, error: allSharesErr } = await supabase
+      .from('expense_shares')
+      .select('expense_id, property_id, share_percent, share_amount')
+      .in('expense_id', idsArr);
+    if (allSharesErr) throw allSharesErr;
+
+    const sharesByExpenseId = new Map<string, Array<{ property_id: string; share_percent: number | null; share_amount: number | null }>>();
+    (allShares || []).forEach((r: any) => {
+      const list = sharesByExpenseId.get(r.expense_id) || [];
+      list.push({ property_id: r.property_id, share_percent: r.share_percent, share_amount: r.share_amount });
+      sharesByExpenseId.set(r.expense_id, list);
+    });
+
+    // 6) Build final list with per-property computed amounts and exclusions applied
+    const result: Expense[] = [];
+    for (const e of allExpenses) {
+      const shares = sharesByExpenseId.get(e.id) || [];
+      if (shares.length > 0) {
+        const matching = shares.find(s => s.property_id === propertyId);
+        if (!matching) {
+          // Shares exist, but none for this property → exclude this expense from this property's view
+          continue;
+        }
+        let computed = 0;
+        if (matching.share_amount != null) {
+          computed = Number(matching.share_amount || 0);
+        } else if (matching.share_percent != null) {
+          const pct = Math.max(0, Math.min(100, Number(matching.share_percent || 0)));
+          computed = (e.amount || 0) * (pct / 100);
+        } else {
+          computed = 0;
+        }
+        result.push({ ...e, amount: computed });
+      } else {
+        // No shares defined → include only if owned by this property
+        if (e.propertyId === propertyId) {
+          result.push(e);
+        }
+      }
+    }
+
+    return result;
   }
 
   static async createExpense(input: Omit<Expense, 'id' | 'createdAt' | 'updatedAt' | 'receiptUrl' | 'approvalStatus'> & { approvalStatus?: ExpenseApprovalStatus }): Promise<Expense> {

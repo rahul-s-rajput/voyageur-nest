@@ -52,7 +52,7 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-        const exps = await ExpenseService.listExpenses({ propertyId: currentProperty.id, from: start, to: end, approval: 'approved' });
+        const exps = await ExpenseService.listExpensesForPropertyView({ propertyId: currentProperty.id, from: start, to: end, approval: 'approved' });
         const total = exps.reduce((sum, e) => sum + (typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount || 0))), 0);
         setMonthExpenseTotal(total);
       } catch {

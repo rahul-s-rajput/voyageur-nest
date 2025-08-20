@@ -420,13 +420,17 @@ const UnifiedExpenseModal: React.FC<UnifiedExpenseModalProps> = ({
     const currentAmount = amount || formData.amount;
     
     if (properties.length > 1) {
-      const defaultShares = properties.map(property => ({
-        propertyId: property.id,
-        propertyName: property.name,
-        sharePercent: currentShareMode === 'percentage' ? (100 / properties.length) : undefined,
-        shareAmount: currentShareMode === 'amount' ? (currentAmount / properties.length) : undefined
-      }));
-      console.log('[UnifiedExpenseModal] Setting default shares:', defaultShares);
+      // Default to 100% for current/active property, 0% for others
+      const defaultShares = properties.map(property => {
+        const isActiveProperty = property.id === currentProperty?.id;
+        return {
+          propertyId: property.id,
+          propertyName: property.name,
+          sharePercent: currentShareMode === 'percentage' ? (isActiveProperty ? 100 : 0) : undefined,
+          shareAmount: currentShareMode === 'amount' ? (isActiveProperty ? currentAmount : 0) : undefined
+        };
+      });
+      console.log('[UnifiedExpenseModal] Setting default shares (100% to active property):', defaultShares);
       setShares(defaultShares);
       setInitialShares(defaultShares);
     } else if (properties.length === 1) {
@@ -441,7 +445,7 @@ const UnifiedExpenseModal: React.FC<UnifiedExpenseModalProps> = ({
       setShares(singleShare);
       setInitialShares(singleShare);
     }
-  }, [properties]);
+  }, [properties, currentProperty?.id]);
 
   // Check for changes whenever relevant state changes
   useEffect(() => {

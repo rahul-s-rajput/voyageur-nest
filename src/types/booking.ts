@@ -17,6 +17,7 @@ export interface Booking {
   paymentStatus?: 'paid' | 'partial' | 'unpaid';
   paymentAmount?: number;
   paymentMode?: string;
+  source?: string; // Added for analytics: booking source (Direct, OTA, etc.)
   contactPhone?: string;
   contactEmail?: string;
   specialRequests?: string;
@@ -39,6 +40,8 @@ export interface BookingFilters {
   status?: Booking['status'][];
   paymentStatus?: Booking['paymentStatus'][];
   showCancelled?: boolean;
+  // Optional booking source filter
+  source?: string;
 }
 
 export type ViewMode = 'calendar' | 'list' | 'grid';

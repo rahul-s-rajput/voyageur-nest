@@ -164,6 +164,11 @@ export const bookingService = {
         query = query.in('payment_status', filters.paymentStatus)
       }
 
+      // Filter by booking source if provided
+      if (filters?.source && filters.source !== 'all') {
+        query = query.eq('source', filters.source)
+      }
+
       // Filter cancelled bookings based on preference
       if (filters?.showCancelled === false) {
         query = query.eq('cancelled', false)
@@ -193,6 +198,7 @@ export const bookingService = {
         paymentStatus: booking.payment_status,
         paymentAmount: booking.payment_amount ? parseFloat(booking.payment_amount) : undefined,
         paymentMode: booking.payment_mode,
+        source: (booking as any).source,
         contactPhone: booking.contact_phone,
         contactEmail: booking.contact_email,
         specialRequests: booking.special_requests,
@@ -269,6 +275,7 @@ export const bookingService = {
         paymentStatus: data.payment_status,
         paymentAmount: data.payment_amount ? parseFloat(data.payment_amount) : undefined,
         paymentMode: data.payment_mode,
+        source: (data as any).source,
         contactPhone: data.contact_phone,
         contactEmail: data.contact_email,
         specialRequests: data.special_requests,
@@ -354,6 +361,7 @@ export const bookingService = {
         paymentStatus: data.payment_status,
         paymentAmount: data.payment_amount ? parseFloat(data.payment_amount) : undefined,
         paymentMode: data.payment_mode,
+        source: (data as any).source,
         contactPhone: data.contact_phone,
         contactEmail: data.contact_email,
         specialRequests: data.special_requests,
@@ -467,6 +475,7 @@ export const bookingService = {
         paymentStatus: data.payment_status,
         paymentAmount: data.payment_amount ? parseFloat(data.payment_amount) : undefined,
         paymentMode: data.payment_mode,
+        source: (data as any).source,
         contactPhone: data.contact_phone,
         contactEmail: data.contact_email,
         specialRequests: data.special_requests,
@@ -513,6 +522,7 @@ export const bookingService = {
               paymentStatus: bookingData.payment_status,
               paymentAmount: bookingData.payment_amount ? parseFloat(bookingData.payment_amount) : undefined,
               paymentMode: bookingData.payment_mode,
+              source: (bookingData as any).source,
               contactPhone: bookingData.contact_phone,
               contactEmail: bookingData.contact_email,
               specialRequests: bookingData.special_requests,

@@ -10,6 +10,7 @@ import OTACalendar from './OTACalendar';
 import { PropertyProvider, useProperty } from '../contexts/PropertyContext';
 import MobileNavigation from '../components/MobileNavigation';
 import EnhancedManualUpdateDashboard from '../components/EnhancedManualUpdateDashboard';
+import AnalyticsWrapper from '../components/Analytics/AnalyticsWrapper';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const ManualUpdatesTab: React.FC = () => {
@@ -30,13 +31,13 @@ const NotificationsSettingsTab: React.FC = () => {
 };
 
 const AdminPage: React.FC = () => {
-  type AdminTab = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates' | 'menu' | 'notifications-settings';
+  type AdminTab = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates' | 'menu' | 'notifications-settings' | 'analytics';
 
   const location = useLocation();
   const navigate = useNavigate();
 
   const allTabs: AdminTab[] = useMemo(
-    () => ['bookings', 'properties', 'guests', 'tokens', 'ota-calendar', 'manual-updates', 'menu', 'notifications-settings'],
+    () => ['bookings', 'properties', 'analytics', 'guests', 'tokens', 'ota-calendar', 'manual-updates', 'menu', 'notifications-settings'],
     []
   );
 
@@ -91,6 +92,7 @@ const AdminPage: React.FC = () => {
               {activeTab === 'bookings' && <BookingManagement />}
               {activeTab === 'guests' && <GuestProfileList />}
               {activeTab === 'properties' && <PropertyDashboard />}
+              {activeTab === 'analytics' && <AnalyticsWrapper />}
               {activeTab === 'tokens' && <TokenManagement />}
               {activeTab === 'ota-calendar' && <OTACalendar />}
               {activeTab === 'manual-updates' && <ManualUpdatesTab />}
