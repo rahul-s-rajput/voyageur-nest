@@ -7,7 +7,8 @@ import { CancellationInvoicePreview } from './components/CancellationInvoicePrev
 import { BookingDetails } from './components/BookingDetails';
 import { CheckInPage } from './pages/CheckInPage';
 import AdminPage from './pages/AdminPage';
-import ManualUpdatesPage from './pages/ManualUpdatesPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import AdminAuth from './components/AdminAuth';
 import { Booking, ViewMode } from './types/booking';
 import { InvoiceData, CancellationInvoiceData } from './types/invoice';
 import { invoiceCounterService, bookingService } from './lib/supabase';
@@ -16,6 +17,8 @@ import { NewBookingModal } from './components/NewBookingModal';
 import { InvoiceTemplate } from './components/InvoiceTemplate';
 import { NotificationProvider } from './components/NotificationContainer';
 import { PropertyProvider } from './contexts/PropertyContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { AuthErrorBoundary } from './components/AuthErrorBoundary';
 import MenuLoading from './components/FnB/MenuLoading';
 const LazyMenuPage = React.lazy(() => import('./components/FnB/MenuPage'));
 
@@ -138,29 +141,8 @@ function MainApp() {
     }
   }, [invoiceNumber, isCounterLoaded]);
 
-  // Set up real-time subscriptions
-  useEffect(() => {
-    if (!isCounterLoaded) return;
-
-    const counterSubscription = invoiceCounterService.subscribeToCounter((newValue) => {
-      setInvoiceNumber(newValue);
-    });
-
-    const bookingsSubscription = bookingService.subscribeToBookings((booking, eventType) => {
-      if (eventType === 'INSERT') {
-        setBookings(prev => [booking, ...prev]);
-      } else if (eventType === 'UPDATE') {
-        setBookings(prev => prev.map(b => b.id === booking.id ? booking : b));
-      } else if (eventType === 'DELETE') {
-        setBookings(prev => prev.filter(b => b.id !== booking.id));
-      }
-    });
-
-    return () => {
-      counterSubscription.unsubscribe();
-      bookingsSubscription.unsubscribe();
-    };
-  }, [isCounterLoaded]);
+  // TODO: Implement real-time subscriptions in future story
+  // Real-time subscriptions will be added when the services support them
 
   const handleCreateInvoice = async (booking: Booking) => {
     try {
@@ -520,35 +502,60 @@ function MainApp() {
 
 function App() {
   return (
-    <PropertyProvider>
-      <NotificationProvider>
-        <Router>
-          <Routes>
-            {/* Guest routes - Check-in only */}
-            <Route path="/checkin/:bookingId" element={<CheckInPage language="en" />} />
-            <Route path="/checkin/:bookingId/hi" element={<CheckInPage language="hi" />} />
-            
+    <AuthErrorBoundary>
+      <AuthProvider>
+        <PropertyProvider>
+          <NotificationProvider>
+            <Router>
+              <Routes>
+                {/* Guest routes - Check-in only */}
+                <Route path="/checkin/:bookingId" element={<CheckInPage language="en" />} />
+                <Route path="/checkin/:bookingId/hi" element={<CheckInPage language="hi" />} />
+                
+                {/* Public menu view */}
+                <Route path="/menu" element={<React.Suspense fallback={<MenuLoading />}><LazyMenuPage /></React.Suspense>} />
 
-            
-            {/* Public menu view */}
-            <Route path="/menu" element={<React.Suspense fallback={<MenuLoading />}><LazyMenuPage /></React.Suspense>} />
+                {/* Authentication route */}
+                <Route path="/admin/auth" element={<AdminAuth />} />
 
-            {/* Admin routes - Protected booking management system */}
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/admin/*" element={<AdminPage />} />
-            {/* Map manual-updates route into AdminPage (consistency with other tabs) */}
-            <Route path="/admin/manual-updates" element={<AdminPage />} />
-            
-            {/* Legacy routes - redirect to admin */}
-            <Route path="/" element={<Navigate to="/admin" replace />} />
-            <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
-            
-            {/* Redirect any unknown routes to admin */}
-            <Route path="*" element={<Navigate to="/admin" replace />} />
-          </Routes>
-        </Router>
-      </NotificationProvider>
-    </PropertyProvider>
+                {/* Protected admin routes */}
+                <Route path="/admin" element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <AdminPage />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/*" element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <AdminPage />
+                  </ProtectedRoute>
+                } />
+                
+                {/* Unauthorized page */}
+                <Route path="/unauthorized" element={
+                  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                    <div className="text-center">
+                      <h1 className="text-4xl font-bold text-gray-900 mb-4">403</h1>
+                      <h2 className="text-2xl font-bold text-gray-700 mb-4">Access Denied</h2>
+                      <p className="text-gray-600 mb-6">You don't have permission to access this resource.</p>
+                      <a href="/admin/auth" className="text-blue-600 hover:text-blue-800 underline">
+                        Sign in with admin credentials
+                      </a>
+                    </div>
+                  </div>
+                } />
+                
+                {/* Legacy routes - redirect to admin */}
+                <Route path="/" element={<Navigate to="/admin" replace />} />
+                <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
+                
+                {/* Redirect any unknown routes to admin */}
+                <Route path="*" element={<Navigate to="/admin" replace />} />
+              </Routes>
+            </Router>
+          </NotificationProvider>
+        </PropertyProvider>
+      </AuthProvider>
+    </AuthErrorBoundary>
   );
 }
 

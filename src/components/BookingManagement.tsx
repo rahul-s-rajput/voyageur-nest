@@ -172,29 +172,8 @@ const BookingManagement: React.FC = () => {
     }
   }, [invoiceNumber, isCounterLoaded]);
 
-  // Set up real-time subscriptions
-  useEffect(() => {
-    if (!isCounterLoaded) return;
-
-    const counterSubscription = invoiceCounterService.subscribeToCounter((newValue) => {
-      setInvoiceNumber(newValue);
-    });
-
-    const bookingsSubscription = bookingService.subscribeToBookings((booking, eventType) => {
-      if (eventType === 'INSERT') {
-        setBookings(prev => [booking, ...prev]);
-      } else if (eventType === 'UPDATE') {
-        setBookings(prev => prev.map(b => b.id === booking.id ? booking : b));
-      } else if (eventType === 'DELETE') {
-        setBookings(prev => prev.filter(b => b.id !== booking.id));
-      }
-    }, currentProperty?.id);
-
-    return () => {
-      counterSubscription.unsubscribe();
-      bookingsSubscription.unsubscribe();
-    };
-  }, [isCounterLoaded]);
+  // TODO: Implement real-time subscriptions in future story
+  // Real-time subscriptions will be added when the services support them
 
   useEffect(() => {
     // Load all unprocessed email messages

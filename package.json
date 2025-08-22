@@ -15,7 +15,9 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "migrate:menu": "tsx scripts/apply-menu-migration.ts",
     "seed:menu": "tsx scripts/seed-menu.ts",
-    "backfill:translations": "tsx scripts/backfill-translations.ts"
+    "backfill:translations": "tsx scripts/backfill-translations.ts",
+    "migrate:device-tokens": "tsx scripts/apply-device-tokens-migration.ts",
+    "cleanup:device-tokens": "tsx scripts/cleanup-device-tokens.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

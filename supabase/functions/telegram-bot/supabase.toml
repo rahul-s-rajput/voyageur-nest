@@ -1,0 +1,4 @@
+# Supabase Edge Function config for Telegram Bot
+# Ensures the webhook endpoint is publicly callable (Telegram sends no JWT)
+name = "telegram-bot"
+verify_jwt = false
