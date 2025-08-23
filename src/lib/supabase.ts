@@ -28,6 +28,9 @@ export {
   SupabaseError
 } from './supabase/monitoring'
 
+export { bookingChargesService } from '../services/bookingChargesService'
+export { bookingPaymentsService } from '../services/bookingPaymentsService'
+
 import { supabase } from './supabase/index'
 import { bookingService, invoiceCounterService } from './supabase/services'
 import { withEnhancedErrorHandling } from './supabase/monitoring'
