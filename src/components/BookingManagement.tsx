@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AlertCircle, Clock, CheckCircle, RefreshCw } from 'lucide-react';
 import { HomePage } from '../components/HomePage';
 import { InvoiceForm } from '../components/InvoiceForm';
 import { InvoicePreview } from '../components/InvoicePreview';
@@ -17,10 +18,11 @@ import AvailabilityService from '../services/availabilityService';
 import Notification from './Notification';
 import { propertyService } from '../services/propertyService';
 import EmailAIExtractionService from '../services/emailAIExtractionService';
+import { bookingComplianceService, type BookingEnforcementViolation } from '../services/bookingComplianceService';
 
 const BookingManagement: React.FC = () => {
   const { currentProperty } = useProperty();
-  const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview' | 'actions'>('home');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showBookingDetails, setShowBookingDetails] = useState(false);
@@ -92,6 +94,16 @@ const BookingManagement: React.FC = () => {
   const [isApproving, setIsApproving] = useState(false);
   const [toasts, setToasts] = useState<Array<{ id: string; type: 'success'|'error'|'warning'|'info'; title: string; message?: string }>>([]);
 
+  // Enforcement Actions state
+  const [violationsToday, setViolationsToday] = useState<BookingEnforcementViolation[]>([]);
+  const [violationsOverdue, setViolationsOverdue] = useState<BookingEnforcementViolation[]>([]);
+  const [violationsLoading, setViolationsLoading] = useState<boolean>(false);
+  const [extendOpen, setExtendOpen] = useState(false);
+  const [extendBookingId, setExtendBookingId] = useState<string | null>(null);
+  const [extendDate, setExtendDate] = useState<string>('');
+ 
+  // (Home banner removed)
+
   const pushToast = (type: 'success'|'error'|'warning'|'info', title: string, message?: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setToasts(prev => [...prev, { id, type, title, message }]);
@@ -161,6 +173,37 @@ const BookingManagement: React.FC = () => {
       }
     })();
   }, []);
+
+  // Load enforcement violations
+  const loadViolations = async () => {
+    try {
+      if (!currentProperty?.id) {
+        setViolationsToday([]);
+        setViolationsOverdue([]);
+        return;
+      }
+      setViolationsLoading(true);
+      const [today, overdue] = await Promise.all([
+        bookingComplianceService.listToday(currentProperty.id),
+        bookingComplianceService.listOverdue(currentProperty.id),
+      ]);
+      setViolationsToday(today);
+      setViolationsOverdue(overdue);
+    } catch (e) {
+      console.error('Failed to load enforcement violations', e);
+      pushToast('error', 'Load failed', 'Could not load Today\'s Actions');
+    } finally {
+      setViolationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentView === 'actions') {
+      loadViolations();
+    }
+  }, [currentView, currentProperty?.id]);
+ 
+  // (Home banner count effect removed)
 
   // Update invoice number when counter changes
   useEffect(() => {
@@ -285,18 +328,100 @@ const BookingManagement: React.FC = () => {
         if (selectedBooking?.id === bookingId) {
           setSelectedBooking(prev => prev ? { ...prev, cancelled: true } : null);
         }
+        // Refresh violations in case we are on actions view
+        if (currentView === 'actions') await loadViolations();
       }
     } catch (error) {
       console.error('Error cancelling booking:', error);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  
 
   const handleBackToHome = () => {
     setCurrentView('home');
+  };
+
+  // Actions view helpers
+  const openBookingById = async (bookingId: string) => {
+    try {
+      let booking = bookings.find(b => b.id === bookingId) || null;
+      if (!booking) {
+        booking = await bookingService.getBookingById(bookingId);
+      }
+      if (booking) {
+        setSelectedBooking(booking);
+        setShowBookingDetails(true);
+      } else {
+        pushToast('error', 'Not found', 'Booking could not be loaded');
+      }
+    } catch (e) {
+      console.error('Open booking failed', e);
+      pushToast('error', 'Open failed', 'Could not open booking');
+    }
+  };
+
+  const handleCheckIn = async (bookingId: string) => {
+    try {
+      const updated = await bookingService.updateBooking(bookingId, { status: 'checked-in' as Booking['status'] });
+      if (updated) {
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-in' } : b));
+        pushToast('success', 'Checked in', 'Guest has been checked in');
+        await loadViolations();
+      }
+    } catch (e) {
+      console.error('Check-in failed', e);
+      pushToast('error', 'Check-in failed', 'Could not update booking status');
+    }
+  };
+
+  const handleCheckOut = async (bookingId: string) => {
+    try {
+      const updated = await bookingService.updateBooking(bookingId, { status: 'checked-out' as Booking['status'] });
+      if (updated) {
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-out' } : b));
+        pushToast('success', 'Checked out', 'Guest has been checked out');
+        await loadViolations();
+      }
+    } catch (e) {
+      console.error('Check-out failed', e);
+      pushToast('error', 'Check-out failed', 'Could not update booking status');
+    }
+  };
+
+  const handleExtendOpen = (bookingId: string, currentDate?: string | null) => {
+    setExtendBookingId(bookingId);
+    // Default extend date to current check-out date if present
+    setExtendDate(currentDate ? currentDate.slice(0, 10) : '');
+    setExtendOpen(true);
+  };
+
+  const handleExtendSave = async () => {
+    if (!extendBookingId || !extendDate) {
+      pushToast('warning', 'Missing date', 'Please choose a new check-out date');
+      return;
+    }
+    try {
+      const updated = await bookingService.updateBooking(extendBookingId, { checkOut: extendDate });
+      if (updated) {
+        setBookings(prev => prev.map(b => b.id === extendBookingId ? { ...b, checkOut: extendDate } : b));
+        pushToast('success', 'Extended', 'Stay extended successfully');
+        await loadViolations();
+      }
+    } catch (e) {
+      console.error('Extend failed', e);
+      pushToast('error', 'Extend failed', 'Could not extend stay');
+    } finally {
+      setExtendOpen(false);
+      setExtendBookingId(null);
+      setExtendDate('');
+    }
+  };
+
+  const handleExtendCancel = () => {
+    setExtendOpen(false);
+    setExtendBookingId(null);
+    setExtendDate('');
   };
 
   if (isLoading) {
@@ -417,6 +542,7 @@ const BookingManagement: React.FC = () => {
             />
           </div>
         )}
+        {/* (Enforcement quick access banner removed) */}
         {previewOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-lg w-full max-w-full sm:max-w-2xl max-h-[85vh] mx-4 p-4 flex flex-col">
@@ -710,6 +836,236 @@ const BookingManagement: React.FC = () => {
     );
   }
 
+  if (currentView === 'actions') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+                <h1 className="text-2xl font-bold text-gray-900">Today&apos;s Actions</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadViolations}
+                  className="inline-flex items-center px-3 py-1.5 text-sm bg-gray-100 text-gray-800 rounded hover:bg-gray-200 border"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+                </button>
+                <button
+                  onClick={handleBackToHome}
+                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-800 rounded hover:bg-gray-200 border"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto p-4 space-y-6">
+          {/* Today section */}
+          <div className="bg-white rounded-lg border shadow-sm">
+            <div className="px-4 py-3 border-b flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
+              <div className="font-medium">Today</div>
+              <div className="text-xs text-gray-500">{violationsToday.length} items</div>
+            </div>
+            <div className="p-3">
+              {violationsLoading ? (
+                <div className="py-8 text-center text-gray-500">Loading...</div>
+              ) : violationsToday.length === 0 ? (
+                <div className="py-8 text-center text-gray-500">No actions for today</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-600 border-b">
+                        <th className="p-2">Guest</th>
+                        <th className="p-2">Room</th>
+                        <th className="p-2">Check-in</th>
+                        <th className="p-2">Check-out</th>
+                        <th className="p-2">Type</th>
+                        <th className="p-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {violationsToday.map(v => (
+                        <tr key={`${v.id}-${v.violationType}`} className="border-b last:border-0">
+                          <td className="p-2">{v.guestName}</td>
+                          <td className="p-2">{v.roomNo || '-'}</td>
+                          <td className="p-2">{v.checkIn ? v.checkIn.slice(0, 10) : '-'}</td>
+                          <td className="p-2">{v.checkOut ? v.checkOut.slice(0, 10) : '-'}</td>
+                          <td className="p-2 capitalize">{v.violationType.replace(/-/g, ' ')}</td>
+                          <td className="p-2">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                                onClick={() => openBookingById(v.id)}
+                              >Open</button>
+                              {(v.violationType === 'check-in-today') && (
+                                <button
+                                  className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                  onClick={() => handleCheckIn(v.id)}
+                                  disabled={v.cancelled}
+                                >Check-In</button>
+                              )}
+                              {(v.violationType === 'check-out-today') && (
+                                <>
+                                  <button
+                                    className="px-2 py-1 text-xs bg-sky-600 text-white rounded hover:bg-sky-700"
+                                    onClick={() => handleCheckOut(v.id)}
+                                    disabled={v.cancelled}
+                                  >Check-Out</button>
+                                  <button
+                                    className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                                    onClick={() => handleExtendOpen(v.id, v.checkOut)}
+                                    disabled={v.cancelled}
+                                  >Extend</button>
+                                </>
+                              )}
+                              <button
+                                className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                onClick={() => handleCancelBooking(v.id)}
+                                disabled={v.cancelled}
+                              >Cancel</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Overdue section */}
+          <div className="bg-white rounded-lg border shadow-sm">
+            <div className="px-4 py-3 border-b flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-600" />
+              <div className="font-medium">Overdue</div>
+              <div className="text-xs text-gray-500">{violationsOverdue.length} items</div>
+            </div>
+            <div className="p-3">
+              {violationsLoading ? (
+                <div className="py-8 text-center text-gray-500">Loading...</div>
+              ) : violationsOverdue.length === 0 ? (
+                <div className="py-8 text-center text-gray-500">No overdue actions</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-600 border-b">
+                        <th className="p-2">Guest</th>
+                        <th className="p-2">Room</th>
+                        <th className="p-2">Check-in</th>
+                        <th className="p-2">Check-out</th>
+                        <th className="p-2">Type</th>
+                        <th className="p-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {violationsOverdue.map(v => (
+                        <tr key={`${v.id}-${v.violationType}`} className="border-b last:border-0">
+                          <td className="p-2">{v.guestName}</td>
+                          <td className="p-2">{v.roomNo || '-'}</td>
+                          <td className="p-2">{v.checkIn ? v.checkIn.slice(0, 10) : '-'}</td>
+                          <td className="p-2">{v.checkOut ? v.checkOut.slice(0, 10) : '-'}</td>
+                          <td className="p-2 capitalize">{v.violationType.replace(/-/g, ' ')}</td>
+                          <td className="p-2">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                                onClick={() => openBookingById(v.id)}
+                              >Open</button>
+                              {(v.violationType === 'overdue-check-in') && (
+                                <button
+                                  className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                  onClick={() => handleCheckIn(v.id)}
+                                  disabled={v.cancelled}
+                                >Check-In</button>
+                              )}
+                              {(v.violationType === 'overdue-check-out') && (
+                                <>
+                                  <button
+                                    className="px-2 py-1 text-xs bg-sky-600 text-white rounded hover:bg-sky-700"
+                                    onClick={() => handleCheckOut(v.id)}
+                                    disabled={v.cancelled}
+                                  >Check-Out</button>
+                                  <button
+                                    className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
+                                    onClick={() => handleExtendOpen(v.id, v.checkOut)}
+                                    disabled={v.cancelled}
+                                  >Extend</button>
+                                </>
+                              )}
+                              <button
+                                className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                onClick={() => handleCancelBooking(v.id)}
+                                disabled={v.cancelled}
+                              >Cancel</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Extend Modal */}
+        {extendOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-4">
+              <div className="text-lg font-semibold mb-2">Extend Stay</div>
+              <div className="text-sm text-gray-600 mb-3">Choose a new check-out date.</div>
+              <input
+                type="date"
+                value={extendDate}
+                onChange={(e) => setExtendDate(e.target.value)}
+                className="w-full border rounded px-3 py-2 mb-3"
+              />
+              <div className="flex justify-end gap-2">
+                <button className="px-3 py-1 text-gray-600" onClick={handleExtendCancel}>Cancel</button>
+                <button className="px-3 py-1 bg-blue-600 text-white rounded" onClick={handleExtendSave}>Save</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Booking details modal inline to allow opening from Actions view */}
+        <BookingDetails
+          booking={selectedBooking}
+          isOpen={showBookingDetails}
+          onClose={() => {
+            setShowBookingDetails(false);
+            setSelectedBooking(null);
+          }}
+          onUpdate={(updatedBooking) => {
+            setBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
+            setSelectedBooking(updatedBooking);
+          }}
+          onCancel={handleCancelBooking}
+          onDelete={async (bookingId) => {
+            await handleDeleteBooking(bookingId);
+          }}
+        />
+
+        {/* Floating notifications */}
+        <div className="fixed top-4 right-4 z-[100] space-y-2">
+          {toasts.map(t => (
+            <Notification key={t.id} id={t.id} type={t.type} title={t.title} message={t.message} onClose={closeToast} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (currentView === 'invoice-form') {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -758,7 +1114,6 @@ const BookingManagement: React.FC = () => {
           ) : (
             <InvoicePreview 
               data={invoiceData}
-              onPrint={handlePrint}
             />
           )}
         </div>

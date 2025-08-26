@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Minus, Search } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { createBookingWithValidation } from '../lib/supabase';
+import { bookingPaymentsService } from '../services/bookingPaymentsService';
 import { GuestProfileService } from '../services/guestProfileService';
 import type { GuestProfile } from '../types/guest';
 import { useProperty } from '../contexts/PropertyContext';
@@ -141,6 +142,32 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       const result = await createBookingWithValidation(bookingData);
 
       if (result.success && result.booking) {
+        // Create initial payment in booking_payments if provided
+        try {
+          const propertyId = currentProperty?.id;
+          const bookingId = result.booking.id;
+          if (propertyId && bookingId) {
+            const totalAmount = parseFloat(formData.totalAmount) || 0;
+            const initialAmount =
+              formData.paymentStatus === 'paid'
+                ? totalAmount
+                : formData.paymentStatus === 'partial'
+                ? (Number(formData.paymentAmount) || 0)
+                : 0;
+
+            if (initialAmount > 0) {
+              await bookingPaymentsService.addPayment(propertyId, bookingId, {
+                amount: initialAmount,
+                method: formData.paymentMode || undefined,
+                createdAt: result.booking.createdAt, // backdate to booking creation
+              });
+            }
+          }
+        } catch (e) {
+          console.error('Failed to create initial payment for booking:', e);
+          // Do not block booking creation; payments can be added from Booking Details
+        }
+
         onBookingCreated(result.booking);
         onClose();
         // Reset form

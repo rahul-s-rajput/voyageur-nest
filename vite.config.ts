@@ -6,6 +6,12 @@ import path from 'path';
 export default defineConfig({
   server: {
     host: true,
+    headers: {
+      // Allow fonts to be loaded from public directory
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
   },
   plugins: [react()],
   resolve: {
@@ -19,6 +25,20 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['xlsx-js-style'],
+    include: ['xlsx-js-style', '@react-pdf/renderer'],
+  },
+  assetsInclude: ['**/*.ttf', '**/*.woff', '**/*.woff2'],
+  build: {
+    rollupOptions: {
+      output: {
+        assetFileNames: (assetInfo) => {
+          // Keep fonts in a fonts folder
+          if (assetInfo.name && /\.(ttf|woff|woff2)$/.test(assetInfo.name)) {
+            return 'fonts/[name]-[hash][extname]';
+          }
+          return 'assets/[name]-[hash][extname]';
+        },
+      },
+    },
   },
 });

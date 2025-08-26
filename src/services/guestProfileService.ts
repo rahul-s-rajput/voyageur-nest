@@ -6,7 +6,10 @@ import type {
   GuestProfileFilters,
   GuestProfileStats,
   GuestBookingHistory,
-  PrivacySettings
+  GuestEmailMessage,
+  PrivacySettings,
+  DuplicateCandidate,
+  MergeResult
 } from '../types/guest';
 
 export class GuestProfileService {
@@ -168,14 +171,40 @@ export class GuestProfileService {
         }
       }
 
-      // Apply marketing consent filter
+      // Apply marketing consent filters
       if (filters.marketingConsent !== undefined) {
         query = query.eq('email_marketing_consent', filters.marketingConsent);
       }
+      if (filters.emailMarketingConsent !== undefined) {
+        query = query.eq('email_marketing_consent', filters.emailMarketingConsent);
+      }
+      if (filters.smsMarketingConsent !== undefined) {
+        query = query.eq('sms_marketing_consent', filters.smsMarketingConsent);
+      }
 
-      // Order by last stay date (most recent first), then by name
-      query = query.order('last_stay_date', { ascending: false, nullsFirst: false })
-                   .order('name', { ascending: true });
+      // Sorting with alias mapping from UI to DB columns
+      const sortMap: Record<string, string> = {
+        created_at: 'created_at',
+        name: 'name',
+        last_visit_date: 'last_stay_date',
+        total_bookings: 'total_stays',
+      };
+      const sortByKey = filters.sortBy && sortMap[filters.sortBy] ? sortMap[filters.sortBy] : 'last_stay_date';
+      const ascending = filters.sortOrder === 'asc';
+      query = query.order(sortByKey, { ascending, nullsFirst: !ascending });
+      // Secondary order for stable sort
+      if (sortByKey !== 'name') {
+        query = query.order('name', { ascending: true });
+      }
+
+      // Pagination
+      if (typeof filters.offset === 'number' && typeof filters.limit === 'number') {
+        const from = Math.max(0, filters.offset);
+        const to = from + Math.max(1, filters.limit) - 1;
+        query = query.range(from, to);
+      } else if (typeof filters.limit === 'number') {
+        query = query.limit(filters.limit);
+      }
 
       const { data: profiles, error } = await query;
 
@@ -184,7 +213,15 @@ export class GuestProfileService {
         throw new Error(`Failed to search guest profiles: ${error.message}`);
       }
 
-      return profiles || [];
+      const list = (profiles || []) as any[];
+      // Backward-compat: add alias fields expected by some UI code/CSV
+      const hydrated: GuestProfile[] = list.map((p) => ({
+        ...p,
+        total_bookings: p.total_stays ?? 0,
+        last_visit_date: p.last_stay_date ?? null,
+      }));
+
+      return hydrated;
     } catch (error) {
       console.error('Error in searchGuestProfiles:', error);
       throw error;
@@ -240,11 +277,13 @@ export class GuestProfileService {
           check_in,
           check_out,
           no_of_pax,
+          additional_guest_names,
           total_amount,
           payment_status,
           status,
           special_requests,
-          created_at
+          created_at,
+          property_id
         `)
         .eq('guest_profile_id', guestId)
         .order('check_in', { ascending: false });
@@ -254,12 +293,55 @@ export class GuestProfileService {
         throw new Error(`Failed to fetch booking history: ${error.message}`);
       }
 
-      return (bookings || []).map(booking => ({
+      const list = bookings || [];
+      // Fetch property names for the involved property_ids
+      const propIds = Array.from(new Set(list.map((b: any) => b.property_id).filter(Boolean)));
+      let nameById: Record<string, string> = {};
+      if (propIds.length > 0) {
+        const { data: props, error: perr } = await supabase
+          .from('properties')
+          .select('id, name')
+          .in('id', propIds);
+        if (perr) {
+          console.warn('Failed to load properties for booking history:', perr);
+        } else {
+          nameById = Object.fromEntries((props || []).map((p: any) => [p.id, p.name]));
+        }
+      }
+
+      return list.map((booking: any) => ({
         ...booking,
-        booking_id: booking.id
+        booking_id: booking.id,
+        property_name: booking.property_id ? nameById[booking.property_id] : undefined,
       }));
     } catch (error) {
       console.error('Error in getGuestBookingHistory:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get recent communication history emails by guest email
+   */
+  static async getCommunicationHistoryByEmail(email: string, limit = 5): Promise<GuestEmailMessage[]> {
+    try {
+      if (!email) return [];
+
+      const { data, error } = await supabase
+        .from('email_messages')
+        .select('id,sender,recipient,subject,snippet,received_at')
+        .or(`sender.ilike.%${email}%,recipient.ilike.%${email}%`)
+        .order('received_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('Error fetching communication history:', error);
+        throw new Error(`Failed to fetch communication history: ${error.message}`);
+      }
+
+      return (data || []) as GuestEmailMessage[];
+    } catch (error) {
+      console.error('Error in getCommunicationHistoryByEmail:', error);
       throw error;
     }
   }
@@ -445,6 +527,242 @@ export class GuestProfileService {
     } catch (error) {
       console.error('Error in createOrUpdateFromCheckIn:', error);
       throw error;
+    }
+  }
+
+  // ---------------- Duplicate detection & merge ----------------
+
+  /**
+   * Compute a simple normalized Levenshtein distance-based similarity between two names.
+   * Returns a score between 0 and 1 (1 = identical).
+   */
+  private static nameSimilarity(a?: string | null, b?: string | null): number {
+    const s1 = (a || '').trim().toLowerCase();
+    const s2 = (b || '').trim().toLowerCase();
+    if (!s1 || !s2) return 0;
+    if (s1 === s2) return 1;
+    const d = (x: string, y: string) => {
+      const dp: number[][] = Array.from({ length: x.length + 1 }, () => new Array(y.length + 1).fill(0));
+      for (let i = 0; i <= x.length; i++) dp[i][0] = i;
+      for (let j = 0; j <= y.length; j++) dp[0][j] = j;
+      for (let i = 1; i <= x.length; i++) {
+        for (let j = 1; j <= y.length; j++) {
+          const cost = x[i - 1] === y[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + cost
+          );
+        }
+      }
+      return dp[x.length][y.length];
+    };
+    const dist = d(s1, s2);
+    const maxLen = Math.max(s1.length, s2.length);
+    return maxLen ? 1 - dist / maxLen : 0;
+  }
+
+  private static normEmail(email?: string | null): string | null {
+    const e = (email || '').trim().toLowerCase();
+    return e || null;
+  }
+
+  private static normPhone(phone?: string | null): string | null {
+    if (!phone) return null;
+    // Keep digits only for rough matching
+    const p = phone.replace(/\D+/g, '');
+    return p || null;
+  }
+
+  /**
+   * Find potential duplicates for a given profile ID.
+   * Uses exact email/phone matches and fuzzy name similarity.
+   */
+  static async findDuplicatesForProfile(profileId: string): Promise<DuplicateCandidate[]> {
+    try {
+      const target = await this.getGuestProfile(profileId);
+      if (!target) return [];
+
+      const email = this.normEmail(target.email);
+      const phone = this.normPhone(target.phone);
+
+      // Query candidates by:
+      // - Same email (case-insensitive exact)
+      // - Same phone (exact raw) OR contains last 6 digits
+      // - Name contains first or last token
+      let orParts: string[] = [];
+      if (target.email) orParts.push(`email.eq.${target.email}`);
+      if (email) orParts.push(`email.ilike.${email}`);
+      if (target.phone) orParts.push(`phone.eq.${target.phone}`);
+      if (phone) {
+        const last6 = phone.slice(-6);
+        if (last6 && last6.length >= 4) {
+          orParts.push(`phone.ilike.%${last6}%`);
+        }
+      }
+      const nameTokens = (target.name || '').split(/\s+/).filter(Boolean);
+      for (const t of nameTokens.slice(0, 2)) {
+        if (t.length >= 3) orParts.push(`name.ilike.%${t}%`);
+      }
+
+      let query = supabase.from('guest_profiles').select('*');
+      if (orParts.length) query = query.or(orParts.join(','));
+      const { data: candidates, error } = await query;
+      if (error) throw new Error(error.message);
+
+      const results: DuplicateCandidate[] = [];
+      (candidates || []).forEach((p: GuestProfile) => {
+        if (p.id === target.id) return;
+        let score = 0;
+        const reasons: string[] = [];
+        if (email && this.normEmail(p.email) === email) { score += 0.6; reasons.push('Same email'); }
+        const pPhone = this.normPhone(p.phone);
+        if (phone && pPhone === phone) { score += 0.6; reasons.push('Same phone'); }
+        const nameSim = this.nameSimilarity(target.name, p.name);
+        if (nameSim >= 0.8) { score += 0.3; reasons.push(`Very similar name (${(nameSim*100).toFixed(0)}%)`); }
+        else if (nameSim >= 0.6) { score += 0.15; reasons.push(`Similar name (${(nameSim*100).toFixed(0)}%)`); }
+
+        if (score >= 0.6) {
+          results.push({ profile: p, reasons, score });
+        }
+      });
+
+      // Sort high to low score
+      results.sort((a, b) => b.score - a.score);
+      return results;
+    } catch (err) {
+      console.error('Error in findDuplicatesForProfile:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Scan for duplicate clusters across the dataset (basic: exact email/phone).
+   */
+  static async findDuplicateClusters(limit = 500): Promise<Array<{ primary: GuestProfile; duplicates: DuplicateCandidate[] }>> {
+    try {
+      const { data: profiles, error } = await supabase
+        .from('guest_profiles')
+        .select('id,name,email,phone,total_stays,created_at')
+        .limit(limit);
+      if (error) throw new Error(error.message);
+      const list = (profiles || []) as GuestProfile[];
+
+      const byEmail = new Map<string, GuestProfile[]>();
+      const byPhone = new Map<string, GuestProfile[]>();
+      for (const p of list) {
+        const e = this.normEmail(p.email);
+        const ph = this.normPhone(p.phone);
+        if (e) byEmail.set(e, [...(byEmail.get(e) || []), p]);
+        if (ph) byPhone.set(ph, [...(byPhone.get(ph) || []), p]);
+      }
+
+      const clusters: GuestProfile[][] = [];
+      const seen = new Set<string>();
+
+      const collect = (groups: Map<string, GuestProfile[]>) => {
+        for (const [_key, arr] of groups.entries()) {
+          const uniq = Array.from(new Map(arr.map(g => [g.id, g])).values());
+          if (uniq.length <= 1) continue;
+          // Skip if already fully covered
+          const ids = uniq.map(u => u.id);
+          if (ids.every(id => seen.has(id))) continue;
+          uniq.forEach(u => seen.add(u.id));
+          clusters.push(uniq);
+        }
+      };
+
+      collect(byEmail);
+      collect(byPhone);
+
+      // Build result with a default primary (highest total_stays, then oldest created)
+      const results: Array<{ primary: GuestProfile; duplicates: DuplicateCandidate[] }> = clusters.map(group => {
+        const sorted = [...group].sort((a, b) => {
+          const stays = (b.total_stays || 0) - (a.total_stays || 0);
+          if (stays !== 0) return stays;
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+        const primary = sorted[0];
+        const dups: DuplicateCandidate[] = sorted.slice(1).map(p => ({
+          profile: p,
+          reasons: [
+            this.normEmail(p.email) && this.normEmail(p.email) === this.normEmail(primary.email) ? 'Same email' : 'Same phone'
+          ],
+          score: 0.7
+        }));
+        return { primary, duplicates: dups };
+      });
+
+      return results;
+    } catch (err) {
+      console.error('Error in findDuplicateClusters:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Merge duplicate guest profiles into a primary profile.
+   * - Reassign bookings from duplicates to primary
+   * - Optionally backfill missing contact fields on primary
+   * - Delete duplicate profiles
+   */
+  static async mergeGuestProfiles(primaryId: string, duplicateIds: string[]): Promise<MergeResult> {
+    if (!primaryId || !duplicateIds?.length) {
+      throw new Error('Primary ID and at least one duplicate ID are required');
+    }
+    try {
+      // Get primary & duplicates
+      const [primary, dupFetch] = await Promise.all([
+        this.getGuestProfile(primaryId),
+        supabase.from('guest_profiles').select('*').in('id', duplicateIds),
+      ]);
+      if (!primary) throw new Error('Primary guest profile not found');
+      if (dupFetch.error) throw new Error(dupFetch.error.message);
+      const duplicates = (dupFetch.data || []) as GuestProfile[];
+
+      // Reassign bookings
+      const { data: updatedBookings, error: updErr } = await supabase
+        .from('bookings')
+        .update({ guest_profile_id: primaryId })
+        .in('guest_profile_id', duplicateIds)
+        .select('id');
+      if (updErr) throw new Error(`Failed to reassign bookings: ${updErr.message}`);
+
+      // Backfill primary fields if missing
+      let profileUpdated = false;
+      const newPrimary: UpdateGuestProfileData = { id: primaryId };
+      for (const d of duplicates) {
+        if (!primary.email && d.email) { newPrimary.email = d.email; profileUpdated = true; }
+        if (!primary.phone && d.phone) { newPrimary.phone = d.phone; profileUpdated = true; }
+        if (!primary.name && d.name) { newPrimary.name = d.name; profileUpdated = true; }
+        if (!primary.city && d.city) { newPrimary.city = d.city; profileUpdated = true; }
+        if (!primary.state && d.state) { newPrimary.state = d.state; profileUpdated = true; }
+        if (!primary.country && d.country) { newPrimary.country = d.country; profileUpdated = true; }
+        if (!primary.address && d.address) { newPrimary.address = d.address; profileUpdated = true; }
+      }
+      if (profileUpdated) {
+        await this.updateGuestProfile(newPrimary);
+      } else {
+        // Touch updated_at to trigger stats-related processes if any
+        await supabase.from('guest_profiles').update({ updated_at: new Date().toISOString() }).eq('id', primaryId);
+      }
+
+      // Delete duplicates
+      const { error: delErr } = await supabase
+        .from('guest_profiles')
+        .delete()
+        .in('id', duplicateIds);
+      if (delErr) throw new Error(`Failed to delete duplicate profiles: ${delErr.message}`);
+
+      return {
+        primary: (await this.getGuestProfile(primaryId)) as GuestProfile,
+        mergedIds: duplicateIds,
+        bookingsReassigned: updatedBookings?.length || 0,
+        profileUpdated,
+      } as MergeResult;
+    } catch (err) {
+      console.error('Error in mergeGuestProfiles:', err);
+      throw err;
     }
   }
 }

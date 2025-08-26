@@ -6,9 +6,20 @@ import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
 import { updateBookingWithValidation, invoiceCounterService, checkInService } from '../lib/supabase';
 import { StorageService } from '../lib/storage';
 import { InvoicePreview } from './InvoicePreview';
+import { InvoicePerLine } from './InvoicePerLine';
 import { CancellationInvoicePreview } from './CancellationInvoicePreview';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { useNotification } from './NotificationContainer';
+import { InvoicePDFExport } from './InvoicePDF';
+// Removed exportInvoiceById usage in favor of consolidated high-quality export within InvoicePerLine
+import { bookingChargesService, type BookingCharge } from '../services/bookingChargesService';
+import { bookingPaymentsService, type BookingPayment } from '../services/bookingPaymentsService';
+import { bookingFinancialsService, type BookingFinancials } from '../services/bookingFinancialsService';
+import { useCurrentPropertyId } from '../contexts/PropertyContext';
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from './ui/Dialog';
+import { menuService } from '../services/menuService';
+import { useTranslation } from '../hooks/useTranslation';
+import type { MenuItem } from '../types/fnb';
 
 interface BookingDetailsProps {
   booking: Booking | null;
@@ -32,6 +43,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showInvoice, setShowInvoice] = useState(false);
+  const [showPerLineInvoice, setShowPerLineInvoice] = useState(false);
   const [showCancellationInvoice, setShowCancellationInvoice] = useState(false);
   const [showQRCode, setShowQRCode] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState(391);
@@ -43,6 +55,55 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+
+  // Charges / Payments / Financials state
+  const propertyId = useCurrentPropertyId();
+  const [charges, setCharges] = useState<BookingCharge[]>([]);
+  const [payments, setPayments] = useState<BookingPayment[]>([]);
+  const [financials, setFinancials] = useState<BookingFinancials | null>(null);
+  const [loadingFinance, setLoadingFinance] = useState(false);
+  const [financeError, setFinanceError] = useState<string | null>(null);
+
+  // Translation (for localized Food items)
+  const { currentLanguage } = useTranslation();
+
+  // Modals and forms state for Charges & Payments
+  const [addFoodOpen, setAddFoodOpen] = useState(false);
+  const [addMiscOpen, setAddMiscOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState<null | 'payment' | 'refund'>(null);
+  const [editCharge, setEditCharge] = useState<BookingCharge | null>(null);
+  const [voidChargeId, setVoidChargeId] = useState<string | null>(null);
+  const [voidPaymentId, setVoidPaymentId] = useState<string | null>(null);
+
+  // Food typeahead & form
+  const [foodSearch, setFoodSearch] = useState('');
+  const [foodResults, setFoodResults] = useState<MenuItem[]>([]);
+  const [foodLoading, setFoodLoading] = useState(false);
+  const [foodForm, setFoodForm] = useState<{ description: string; quantity: number; unitAmount: number; createdAt?: string }>({
+    description: '',
+    quantity: 1,
+    unitAmount: 0,
+    createdAt: undefined,
+  });
+
+  // Misc charge form
+  const [miscForm, setMiscForm] = useState<{ description: string; quantity: number; unitAmount: number; createdAt?: string }>({
+    description: '',
+    quantity: 1,
+    unitAmount: 0,
+    createdAt: undefined,
+  });
+
+  // Edit charge form
+  const [editForm, setEditForm] = useState<{ description?: string; quantity?: number; unitAmount?: number }>({});
+
+  // Payment / Refund form
+  const [paymentForm, setPaymentForm] = useState<{ method?: string; referenceNo?: string; amount: number; createdAt?: string }>({
+    method: undefined,
+    referenceNo: undefined,
+    amount: 0,
+    createdAt: undefined,
+  });
 
   
   // Additional guests and photo upload states
@@ -105,6 +166,220 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     }
   }, [checkInData]);
 
+
+
+  // Load booking charges, payments, and financial aggregates
+  useEffect(() => {
+    if (!booking || !propertyId) return;
+    let cancelled = false;
+    setFinanceError(null);
+    setLoadingFinance(true);
+    (async () => {
+      try {
+        const [chargesRes, paymentsRes, fin] = await Promise.all([
+          bookingChargesService.listByBooking(propertyId, booking.id),
+          bookingPaymentsService.listByBooking(propertyId, booking.id),
+          bookingFinancialsService.getByBooking(propertyId, booking.id),
+        ]);
+        if (cancelled) return;
+        setCharges(chargesRes);
+        setPayments(paymentsRes);
+        setFinancials(fin);
+      } catch (e: any) {
+        if (cancelled) return;
+        console.error('Failed to load booking finance data', e);
+        setFinanceError(e?.message || 'Failed to load booking finance data');
+        showError('Load failed', 'Could not load charges, payments, or totals.');
+      } finally {
+        if (!cancelled) setLoadingFinance(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [booking?.id, propertyId]);
+
+  // Food typeahead search (debounced)
+  useEffect(() => {
+    if (!addFoodOpen || !propertyId) return;
+    if (!foodSearch || foodSearch.trim().length < 2) {
+      setFoodResults([]);
+      return;
+    }
+    let cancelled = false;
+    setFoodLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const items = await menuService.listItems({
+          propertyId,
+          search: foodSearch.trim(),
+          availableOnly: true,
+          locale: currentLanguage,
+        });
+        if (!cancelled) setFoodResults(items);
+      } catch (err) {
+        if (!cancelled) console.error('Food search failed', err);
+      } finally {
+        if (!cancelled) setFoodLoading(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [addFoodOpen, foodSearch, propertyId, currentLanguage]);
+
+  // Helpers
+  const reloadFinancials = async () => {
+    if (!propertyId || !booking) return;
+    try {
+      const fin = await bookingFinancialsService.getByBooking(propertyId, booking.id);
+      setFinancials(fin);
+    } catch (e) {
+      console.error('Failed to refresh financials', e);
+    }
+  };
+
+  // Submit handlers
+  const submitFoodCharge = async () => {
+    if (!propertyId || !booking) return;
+    try {
+      if (!(foodForm.quantity > 0)) throw new Error('Quantity must be > 0');
+      if (!(foodForm.unitAmount >= 0)) throw new Error('Unit amount must be >= 0');
+      setIsLoading(true);
+      const created = await bookingChargesService.createFoodCharge(propertyId, booking.id, {
+        description: foodForm.description || undefined,
+        quantity: foodForm.quantity,
+        unitAmount: foodForm.unitAmount,
+        createdAt: foodForm.createdAt,
+      });
+      setCharges(prev => [...prev, created]);
+      showSuccess('Food charge added', 'The charge was saved.');
+      setAddFoodOpen(false);
+      setFoodSearch('');
+      setFoodResults([]);
+      setFoodForm({ description: '', quantity: 1, unitAmount: 0, createdAt: undefined });
+      await reloadFinancials();
+    } catch (e: any) {
+      console.error(e);
+      showError('Add failed', e?.message || 'Could not add food charge');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitMiscCharge = async () => {
+    if (!propertyId || !booking) return;
+    try {
+      if (!(miscForm.quantity > 0)) throw new Error('Quantity must be > 0');
+      if (!(miscForm.unitAmount >= 0)) throw new Error('Unit amount must be >= 0');
+      setIsLoading(true);
+      const created = await bookingChargesService.createMiscCharge(propertyId, booking.id, {
+        description: miscForm.description || undefined,
+        quantity: miscForm.quantity,
+        unitAmount: miscForm.unitAmount,
+        createdAt: miscForm.createdAt,
+      });
+      setCharges(prev => [...prev, created]);
+      showSuccess('Misc charge added', 'The charge was saved.');
+      setAddMiscOpen(false);
+      setMiscForm({ description: '', quantity: 1, unitAmount: 0, createdAt: undefined });
+      await reloadFinancials();
+    } catch (e: any) {
+      console.error(e);
+      showError('Add failed', e?.message || 'Could not add misc charge');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitEditCharge = async () => {
+    if (!editCharge || !propertyId || !booking) return;
+    try {
+      setIsLoading(true);
+      const updated = await bookingChargesService.update(propertyId, booking.id, editCharge.id, {
+        description: editForm.description,
+        quantity: editForm.quantity,
+        unitAmount: editForm.unitAmount,
+      });
+      setCharges(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+      showSuccess('Charge updated', 'The charge was updated.');
+      setEditCharge(null);
+      setEditForm({});
+      await reloadFinancials();
+    } catch (e: any) {
+      console.error(e);
+      showError('Update failed', e?.message || 'Could not update charge');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmVoidCharge = async () => {
+    if (!voidChargeId || !propertyId || !booking) return;
+    try {
+      setIsLoading(true);
+      await bookingChargesService.void(propertyId, booking.id, voidChargeId);
+      setCharges(prev => prev.filter(c => c.id !== voidChargeId));
+      showSuccess('Charge voided', 'The charge was voided.');
+      setVoidChargeId(null);
+      await reloadFinancials();
+    } catch (e: any) {
+      console.error(e);
+      showError('Void failed', e?.message || 'Could not void charge');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitPayment = async () => {
+    if (!paymentOpen || !propertyId || !booking) return;
+    try {
+      if (!(paymentForm.amount > 0)) throw new Error('Amount must be > 0');
+      setIsLoading(true);
+      const created =
+        paymentOpen === 'payment'
+          ? await bookingPaymentsService.addPayment(propertyId, booking.id, {
+              method: paymentForm.method,
+              referenceNo: paymentForm.referenceNo,
+              amount: paymentForm.amount,
+              createdAt: paymentForm.createdAt,
+            })
+          : await bookingPaymentsService.addRefund(propertyId, booking.id, {
+              method: paymentForm.method,
+              referenceNo: paymentForm.referenceNo,
+              amount: paymentForm.amount,
+              createdAt: paymentForm.createdAt,
+            });
+      setPayments(prev => [...prev, created]);
+      showSuccess(paymentOpen === 'payment' ? 'Payment added' : 'Refund added', 'Saved successfully.');
+      setPaymentOpen(null);
+      setPaymentForm({ method: undefined, referenceNo: undefined, amount: 0, createdAt: undefined });
+      await reloadFinancials();
+    } catch (e: any) {
+      console.error(e);
+      showError('Save failed', e?.message || 'Could not save');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmVoidPayment = async () => {
+    if (!voidPaymentId || !propertyId || !booking) return;
+    try {
+      setIsLoading(true);
+      await bookingPaymentsService.void(propertyId, booking.id, voidPaymentId);
+      setPayments(prev => prev.filter(p => p.id !== voidPaymentId));
+      showSuccess('Voided', 'The record was voided.');
+      setVoidPaymentId(null);
+      await reloadFinancials();
+    } catch (e: any) {
+      console.error(e);
+      showError('Void failed', e?.message || 'Could not void');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
 
   const getCurrentISTTime = () => {
@@ -228,9 +503,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         adultChild: editData.adultChild || '',
         status: editData.status || 'confirmed',
         totalAmount: editData.totalAmount || booking.totalAmount,
-        paymentStatus: editData.paymentStatus || 'unpaid',
-        paymentAmount: editData.paymentAmount || 0,
-        paymentMode: editData.paymentMode || '',
         contactPhone: editData.contactPhone || '',
         contactEmail: editData.contactEmail || '',
         specialRequests: editData.specialRequests || '',
@@ -262,7 +534,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     setEditData(prev => {
       const newData = {
         ...prev,
-        [name]: name === 'noOfPax' || name === 'totalAmount' || name === 'paymentAmount' || name === 'numberOfRooms'
+        [name]: name === 'noOfPax' || name === 'totalAmount' || name === 'numberOfRooms'
           ? parseFloat(value) || 0 
           : value,
       };
@@ -283,31 +555,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         const roomCount = parseFloat(value) || 1;
         newData.numberOfRooms = Math.max(1, roomCount);
         newData.noOfPax = Math.max(roomCount, prev.noOfPax || 1);
-      }
-
-      // Auto-update payment status based on payment amount
-      if (name === 'paymentAmount') {
-        const paymentAmount = parseFloat(value) || 0;
-        const totalAmount = prev.totalAmount || 0;
-        
-        if (paymentAmount === 0) {
-          newData.paymentStatus = 'unpaid';
-        } else if (paymentAmount >= totalAmount && totalAmount > 0) {
-          newData.paymentStatus = 'paid';
-        } else {
-          newData.paymentStatus = 'partial';
-        }
-      }
-
-      // If payment status is changed to 'paid', set payment amount to total amount
-      if (name === 'paymentStatus' && value === 'paid') {
-        newData.paymentAmount = prev.totalAmount || 0;
-      }
-
-      // If payment status is changed to 'unpaid', reset payment amount
-      if (name === 'paymentStatus' && value === 'unpaid') {
-        newData.paymentAmount = 0;
-        newData.paymentMode = '';
       }
 
       return newData;
@@ -495,6 +742,9 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       );
 
       // Create cancellation invoice data
+      const totalPaidCalculated = financials
+        ? Math.max(0, (financials.paymentsTotal || 0) - (financials.refundsTotal || 0))
+        : 0;
       const cancellationData: CancellationInvoiceData = {
         companyName: 'Voyageur Nest',
         companyAddress: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
@@ -518,8 +768,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         timeOfDeparture: '11:00',
         noOfDays: noOfDays,
         originalBookingAmount: booking.totalAmount,
-        totalPaid: booking.paymentStatus === 'paid' ? booking.totalAmount : 
-                   booking.paymentStatus === 'partial' ? booking.totalAmount * 0.5 : 0,
+        totalPaid: totalPaidCalculated,
         cancellationCharges: booking.totalAmount, // Full amount as cancellation charge (no refund)
         paymentMethod: 'UPI',
         bookingDate: booking.bookingDate || '',
@@ -562,14 +811,12 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       timeOfDeparture: '11:00',
       noOfDays: noOfDays,
       grandTotal: booking.totalAmount,
-      paymentAmount: booking.paymentAmount || 0,
-      paymentMethod: booking.paymentMode || 'Cash',
+      paymentAmount: Math.max(0, (financials?.paymentsTotal || 0) - (financials?.refundsTotal || 0)),
+      paymentMethod: (payments && payments.length > 0 && payments[payments.length - 1]?.method) ? (payments[payments.length - 1].method as string) : 'Cash',
     };
   };
 
-  const handlePrintInvoice = () => {
-    window.print();
-  };
+  
 
   if (!isOpen || !booking) return null;
 
@@ -613,6 +860,460 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                 </p>
               </div>
             )}
+
+            {/* Financial Summary Panel */}
+            <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Financial Summary</h3>
+              {loadingFinance && (
+                <p className="text-sm text-gray-500">Loading charges and payments…</p>
+              )}
+              {!loadingFinance && financeError && (
+                <p className="text-sm text-red-600">{financeError}</p>
+              )}
+              {!loadingFinance && !financeError && financials && (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex items-center justify-between"><span className="text-gray-600">Charges</span><span className="font-medium">₹{financials.chargesTotal.toFixed(2)}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-gray-600">Room Charges</span><span className="font-medium">₹{(
+                    charges.some(c => c.chargeType === 'room')
+                      ? charges.filter(c => c.chargeType === 'room').reduce((s, c) => s + c.amount, 0)
+                      : (booking?.totalAmount || 0)
+                  ).toFixed(2)}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-gray-600">Gross</span><span className="font-medium">₹{financials.grossTotal.toFixed(2)}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-gray-600">Payments</span><span className="font-medium">₹{financials.paymentsTotal.toFixed(2)}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-gray-600">Refunds</span><span className="font-medium">₹{financials.refundsTotal.toFixed(2)}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-gray-600">Balance Due</span><span className="font-semibold">₹{financials.balanceDue.toFixed(2)}</span></div>
+                </div>
+              )}
+              {!loadingFinance && !financeError && financials && (
+                <div className="mt-2 text-xs text-gray-600">Status: <span className="uppercase">{financials.statusDerived}</span></div>
+              )}
+            </div>
+
+            {/* Charges & Payments Sections */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              {/* Charges Section */}
+              <div className="border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white rounded-t-lg">
+                  <h3 className="text-sm font-medium text-gray-900">Charges</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAddFoodOpen(true)}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                    >
+                      <Plus className="w-3 h-3" /> Food
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddMiscOpen(true)}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                    >
+                      <Plus className="w-3 h-3" /> Misc
+                    </button>
+                  </div>
+                </div>
+                <div className="divide-y">
+                  {charges.length === 0 && (
+                    <div className="p-4 text-sm text-gray-500">No charges yet.</div>
+                  )}
+                  {charges.map((c) => (
+                    <div key={c.id} className="p-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {c.chargeType.toUpperCase()} {c.description ? `• ${c.description}` : ''}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Qty {c.quantity} × ₹{c.unitAmount.toFixed(2)} = ₹{c.amount.toFixed(2)}
+                        </div>
+                        <div className="text-[11px] text-gray-400">{new Date(c.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditCharge(c);
+                            setEditForm({ description: c.description, quantity: c.quantity, unitAmount: c.unitAmount });
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                        >
+                          <Edit className="w-3 h-3" /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVoidChargeId(c.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3 h-3" /> Void
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payments Section */}
+              <div className="border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white rounded-t-lg">
+                  <h3 className="text-sm font-medium text-gray-900">Payments</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentOpen('payment')}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                    >
+                      <Plus className="w-3 h-3" /> Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentOpen('refund')}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                    >
+                      <Minus className="w-3 h-3" /> Refund
+                    </button>
+                  </div>
+                </div>
+                <div className="divide-y">
+                  {payments.length === 0 && (
+                    <div className="p-4 text-sm text-gray-500">No payments yet.</div>
+                  )}
+                  {payments.map((p) => (
+                    <div key={p.id} className="p-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {p.paymentType.toUpperCase()} {p.method ? `• ${p.method}` : ''} {p.referenceNo ? `• Ref ${p.referenceNo}` : ''}
+                        </div>
+                        <div className="text-xs text-gray-500">Amount ₹{p.amount.toFixed(2)}</div>
+                        <div className="text-[11px] text-gray-400">{new Date(p.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setVoidPaymentId(p.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3 h-3" /> Void
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modals */}
+            {/* Modals: Add Food Charge */}
+            <Dialog open={addFoodOpen} onOpenChange={(open) => { if (!open) { setAddFoodOpen(false); setFoodSearch(''); setFoodResults([]); setFoodForm({ description: '', quantity: 1, unitAmount: 0, createdAt: undefined }); } else { setFoodForm(prev => ({ ...prev, createdAt: prev.createdAt ?? new Date().toISOString() })); } }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Food Charge</DialogTitle>
+                  <DialogDescription>Select an item or enter manual details.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Search menu item</label>
+                    <input
+                      type="text"
+                      value={foodSearch}
+                      onChange={(e) => setFoodSearch(e.target.value)}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Type at least 2 characters"
+                      disabled={isLoading}
+                    />
+                    {foodLoading && <div className="text-xs text-gray-500 mt-1">Searching…</div>}
+                    {foodResults.length > 0 && (
+                      <div className="mt-1 max-h-40 overflow-auto border rounded">
+                        {foodResults.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                            onClick={() => {
+                              setFoodForm({ description: item.name, quantity: 1, unitAmount: item.price, createdAt: foodForm.createdAt });
+                              setFoodResults([]);
+                              setFoodSearch(item.name);
+                            }}
+                          >
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-xs text-gray-500">₹{item.price.toFixed(2)} {item.description ? `• ${item.description}` : ''}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={foodForm.description}
+                      onChange={(e) => setFoodForm({ ...foodForm, description: e.target.value })}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="e.g., Paneer Tikka"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Date</label>
+                    <input
+                      type="datetime-local"
+                      value={foodForm.createdAt ? foodForm.createdAt.slice(0,16) : ''}
+                      onChange={(e) => setFoodForm({ ...foodForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Qty</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={foodForm.quantity}
+                        onChange={(e) => setFoodForm({ ...foodForm, quantity: Math.max(1, Number(e.target.value) || 1) })}
+                        className="w-full px-3 py-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Unit ₹</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={foodForm.unitAmount}
+                        onChange={(e) => setFoodForm({ ...foodForm, unitAmount: Math.max(0, Number(e.target.value) || 0) })}
+                        className="w-full px-3 py-2 border rounded"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <div className="w-full text-sm">Line: ₹{(foodForm.quantity * foodForm.unitAmount).toFixed(2)}</div>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <button
+                    type="button"
+                    className="px-4 py-2 border rounded"
+                    onClick={() => setAddFoodOpen(false)}
+                    disabled={isLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 bg-gray-900 text-white rounded"
+                    onClick={submitFoodCharge}
+                    disabled={isLoading}
+                  >
+                    Add
+                  </button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Modals: Add Misc Charge */}
+            <Dialog open={addMiscOpen} onOpenChange={(open) => { if (!open) { setAddMiscOpen(false); setMiscForm({ description: '', quantity: 1, unitAmount: 0, createdAt: undefined }); } else { setMiscForm(prev => ({ ...prev, createdAt: prev.createdAt ?? new Date().toISOString() })); } }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Misc Charge</DialogTitle>
+                  <DialogDescription>Enter description, quantity and unit amount.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={miscForm.description}
+                      onChange={(e) => setMiscForm({ ...miscForm, description: e.target.value })}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="e.g., Laundry"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Date</label>
+                    <input
+                      type="datetime-local"
+                      value={miscForm.createdAt ? miscForm.createdAt.slice(0,16) : ''}
+                      onChange={(e) => setMiscForm({ ...miscForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Qty</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={miscForm.quantity}
+                        onChange={(e) => setMiscForm({ ...miscForm, quantity: Math.max(1, Number(e.target.value) || 1) })}
+                        className="w-full px-3 py-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Unit ₹</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={miscForm.unitAmount}
+                        onChange={(e) => setMiscForm({ ...miscForm, unitAmount: Math.max(0, Number(e.target.value) || 0) })}
+                        className="w-full px-3 py-2 border rounded"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <div className="w-full text-sm">Line: ₹{(miscForm.quantity * miscForm.unitAmount).toFixed(2)}</div>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <button type="button" className="px-4 py-2 border rounded" onClick={() => setAddMiscOpen(false)} disabled={isLoading}>Cancel</button>
+                  <button type="button" className="px-4 py-2 bg-gray-900 text-white rounded" onClick={submitMiscCharge} disabled={isLoading}>Add</button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Modals: Edit Charge */}
+            <Dialog open={!!editCharge} onOpenChange={(open) => { if (!open) { setEditCharge(null); setEditForm({}); } }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit Charge</DialogTitle>
+                  <DialogDescription>Update the line details and save.</DialogDescription>
+                </DialogHeader>
+                {editCharge && (
+                  <div className="space-y-3">
+                    <div className="text-xs text-gray-500">Type: {editCharge.chargeType.toUpperCase()}</div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Description</label>
+                      <input
+                        type="text"
+                        value={editForm.description ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                        className="w-full px-3 py-2 border rounded"
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Qty</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={editForm.quantity ?? editCharge.quantity}
+                          onChange={(e) => setEditForm({ ...editForm, quantity: Math.max(1, Number(e.target.value) || 1) })}
+                          className="w-full px-3 py-2 border rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Unit ₹</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={editForm.unitAmount ?? editCharge.unitAmount}
+                          onChange={(e) => setEditForm({ ...editForm, unitAmount: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full px-3 py-2 border rounded"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <div className="w-full text-sm">Line: ₹{((editForm.quantity ?? editCharge.quantity) * (editForm.unitAmount ?? editCharge.unitAmount)).toFixed(2)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <button type="button" className="px-4 py-2 border rounded" onClick={() => setEditCharge(null)} disabled={isLoading}>Cancel</button>
+                  <button type="button" className="px-4 py-2 bg-gray-900 text-white rounded" onClick={submitEditCharge} disabled={isLoading}>Save</button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Confirm Void Charge */}
+            <Dialog open={!!voidChargeId} onOpenChange={(open) => { if (!open) setVoidChargeId(null); }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Void Charge</DialogTitle>
+                  <DialogDescription>This will mark the charge as void. Continue?</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <button type="button" className="px-4 py-2 border rounded" onClick={() => setVoidChargeId(null)} disabled={isLoading}>Cancel</button>
+                  <button type="button" className="px-4 py-2 bg-red-600 text-white rounded" onClick={confirmVoidCharge} disabled={isLoading}>Void</button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Payment / Refund Modal */}
+            <Dialog open={!!paymentOpen} onOpenChange={(open) => { if (!open) { setPaymentOpen(null); setPaymentForm({ method: undefined, referenceNo: undefined, amount: 0, createdAt: undefined }); } else { setPaymentForm(prev => ({ ...prev, createdAt: prev.createdAt ?? new Date().toISOString() })); } }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{paymentOpen === 'refund' ? 'Add Refund' : 'Add Payment'}</DialogTitle>
+                  <DialogDescription>Specify method, reference and amount.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <label className="block text-xs text-gray-600 mb-1">Method</label>
+                      <select
+                        value={paymentForm.method || ''}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value || undefined })}
+                        className="w-full px-3 py-2 border rounded"
+                      >
+                        <option value="">Select</option>
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="upi">UPI</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Amount ₹</label>
+                      <input
+                        type="number"
+                        min={0.01}
+                        step="0.01"
+                        value={paymentForm.amount}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, amount: Math.max(0, Number(e.target.value) || 0) })}
+                        className="w-full px-3 py-2 border rounded"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Date</label>
+                    <input
+                      type="datetime-local"
+                      value={paymentForm.createdAt ? paymentForm.createdAt.slice(0,16) : ''}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Reference No.</label>
+                    <input
+                      type="text"
+                      value={paymentForm.referenceNo || ''}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, referenceNo: e.target.value || undefined })}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <button type="button" className="px-4 py-2 border rounded" onClick={() => setPaymentOpen(null)} disabled={isLoading}>Cancel</button>
+                  <button type="button" className="px-4 py-2 bg-gray-900 text-white rounded" onClick={submitPayment} disabled={isLoading}>{paymentOpen === 'refund' ? 'Add Refund' : 'Add Payment'}</button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Confirm Void Payment */}
+            <Dialog open={!!voidPaymentId} onOpenChange={(open) => { if (!open) setVoidPaymentId(null); }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Void Record</DialogTitle>
+                  <DialogDescription>This will mark the payment/refund as void. Continue?</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <button type="button" className="px-4 py-2 border rounded" onClick={() => setVoidPaymentId(null)} disabled={isLoading}>Cancel</button>
+                  <button type="button" className="px-4 py-2 bg-red-600 text-white rounded" onClick={confirmVoidPayment} disabled={isLoading}>Void</button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
@@ -868,116 +1569,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                   </span>
                 )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Amount
-                </label>
-                {isEditing ? (
-                  <input
-                    type="number"
-                    name="totalAmount"
-                    value={editData.totalAmount || ''}
-                    onChange={handleInputChange}
-                    min="0"
-                    step="0.01"
-                    placeholder="Enter total amount"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={isLoading}
-                  />
-                ) : (
-                  <p className="text-gray-900">₹{booking.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment Status
-                </label>
-                {isEditing ? (
-                  <select
-                    name="paymentStatus"
-                    value={editData.paymentStatus || 'unpaid'}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={isLoading}
-                  >
-                    <option value="unpaid">Unpaid</option>
-                    <option value="partial">Partial</option>
-                    <option value="paid">Paid</option>
-                  </select>
-                ) : (
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    (booking.paymentStatus ?? 'unpaid') === 'paid' ? 'bg-green-100 text-green-800' :
-                    (booking.paymentStatus ?? 'unpaid') === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {(booking.paymentStatus ?? 'unpaid').charAt(0).toUpperCase() + (booking.paymentStatus ?? 'unpaid').slice(1)}
-                  </span>
-                )}
-              </div>
-
-              {/* Payment Amount - Show for partial payments or when paid */}
-              {(isEditing && (editData.paymentStatus === 'partial' || editData.paymentStatus === 'paid')) && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Payment Amount
-                  </label>
-                  <input
-                    type="number"
-                    name="paymentAmount"
-                    value={editData.paymentStatus === 'paid' ? (editData.totalAmount || 0) : (editData.paymentAmount || 0)}
-                    onChange={handleInputChange}
-                    min="0"
-                    step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={isLoading || editData.paymentStatus === 'paid'}
-                    placeholder={editData.paymentStatus === 'paid' ? 'Full amount' : 'Enter partial amount'}
-                  />
-                </div>
-              )}
-
-              {/* Payment Mode - Show for partial and paid payments */}
-              {(isEditing && (editData.paymentStatus === 'partial' || editData.paymentStatus === 'paid')) && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Payment Mode
-                  </label>
-                  <select
-                    name="paymentMode"
-                    value={editData.paymentMode || ''}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={isLoading}
-                  >
-                    <option value="">Select payment mode</option>
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="upi">UPI</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="cheque">Cheque</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-              )}
-
-              {/* Show payment details in view mode */}
-              {(!isEditing && (booking.paymentStatus === 'partial' || booking.paymentStatus === 'paid')) && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Payment Amount
-                    </label>
-                    <p className="text-gray-900">₹{(booking.paymentAmount || 0).toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Payment Mode
-                    </label>
-                    <p className="text-gray-900">{booking.paymentMode || 'Not specified'}</p>
-                  </div>
-                </>
-              )}
+              
+              {/* Removed Last Payment Method (duplicate of Financial Summary) */}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1447,6 +2040,13 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                     Print Invoice
                   </button>
                   <button
+                    onClick={() => setShowPerLineInvoice(true)}
+                    className="flex-1 flex items-center justify-center px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Full Invoice (Per-line)
+                  </button>
+                  <button
                     onClick={() => setShowQRCode(true)}
                     className="flex-1 flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
                   >
@@ -1502,12 +2102,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               <h2 className="text-xl font-semibold text-gray-900">Invoice</h2>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={handlePrintInvoice}
-                  className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-                >
-                  Print
-                </button>
-                <button
                   onClick={() => setShowInvoice(false)}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
@@ -1517,7 +2111,54 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
             </div>
             <InvoicePreview
               data={createInvoiceData(booking)}
-              onPrint={handlePrintInvoice}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Per-line Invoice Modal */}
+      {showPerLineInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b bg-white print:hidden">
+              <h2 className="text-xl font-semibold text-gray-900">Full Invoice (Per-line)</h2>
+              <div className="flex items-center space-x-2">
+                <InvoicePDFExport
+                  booking={booking}
+                  invoiceNumber={booking.folioNumber || `520/${invoiceNumber}`}
+                  charges={charges}
+                  payments={payments}
+                  financials={financials}
+                  company={{
+                    name: 'Voyageur Nest',
+                    address: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
+                    phone: '+919876161215',
+                    email: 'voyageur.nest@gmail.com',
+                  }}
+                  className="px-4 py-2 text-sm text-white bg-gray-900 rounded-md hover:bg-gray-800 transition-colors"
+                >
+                  Export
+                </InvoicePDFExport>
+                <button
+                  onClick={() => setShowPerLineInvoice(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            <InvoicePerLine
+              booking={booking}
+              invoiceNumber={booking.folioNumber || `520/${invoiceNumber}`}
+              charges={charges}
+              payments={payments}
+              financials={financials}
+              company={{
+                name: 'Voyageur Nest',
+                address: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
+                phone: '+919876161215',
+                email: 'voyageur.nest@gmail.com',
+              }}
             />
           </div>
         </div>

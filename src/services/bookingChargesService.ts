@@ -20,6 +20,7 @@ export interface CreateChargeInput {
   description?: string;
   quantity: number; // > 0
   unitAmount: number; // >= 0
+  createdAt?: string; // ISO timestamp for backdating
 }
 
 export interface UpdateChargeInput {
@@ -87,7 +88,7 @@ export const bookingChargesService = {
     await verifyBookingScope(propertyId, bookingId);
     validateChargeValues(input);
 
-    const payload = {
+    const payload: any = {
       property_id: propertyId,
       booking_id: bookingId,
       charge_type: 'fnb' as const,
@@ -96,6 +97,7 @@ export const bookingChargesService = {
       unit_amount: input.unitAmount,
       amount: computeLineTotal(input.quantity, input.unitAmount),
     };
+    if (input.createdAt) payload.created_at = input.createdAt;
 
     const { data, error } = await supabase
       .from('booking_charges')
@@ -111,7 +113,7 @@ export const bookingChargesService = {
     await verifyBookingScope(propertyId, bookingId);
     validateChargeValues(input);
 
-    const payload = {
+    const payload: any = {
       property_id: propertyId,
       booking_id: bookingId,
       charge_type: 'misc' as const,
@@ -120,6 +122,7 @@ export const bookingChargesService = {
       unit_amount: input.unitAmount,
       amount: computeLineTotal(input.quantity, input.unitAmount),
     };
+    if (input.createdAt) payload.created_at = input.createdAt;
 
     const { data, error } = await supabase
       .from('booking_charges')

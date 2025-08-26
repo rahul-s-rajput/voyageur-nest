@@ -3,6 +3,12 @@ import { X, Printer } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { format } from 'date-fns';
 
+// New imports for data fetching
+import { useEffect, useMemo, useState } from 'react';
+import { bookingChargesService, type BookingCharge } from '../services/bookingChargesService';
+import { bookingPaymentsService, type BookingPayment } from '../services/bookingPaymentsService';
+import { bookingFinancialsService, type BookingFinancials } from '../services/bookingFinancialsService';
+
 interface InvoiceTemplateProps {
   booking: Booking;
   invoiceNumber: number;
@@ -43,6 +49,48 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
     
     return `${istDate} ${istTime}`;
   };
+
+  // Currency formatter (INR)
+  const inr = useMemo(() => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }), []);
+  const fmtINR = (n: number) => inr.format(n ?? 0);
+
+  // Data state
+  const [charges, setCharges] = useState<BookingCharge[]>([]);
+  const [payments, setPayments] = useState<BookingPayment[]>([]);
+  const [financials, setFinancials] = useState<BookingFinancials | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load invoice data
+  useEffect(() => {
+    const propertyId = booking.propertyId;
+    if (!booking.id || !propertyId) return;
+    let isCancelled = false;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      bookingChargesService.listByBooking(propertyId, booking.id),
+      bookingPaymentsService.listByBooking(propertyId, booking.id),
+      bookingFinancialsService.getByBooking(propertyId, booking.id),
+    ])
+      .then(([c, p, f]) => {
+        if (isCancelled) return;
+        setCharges(c);
+        setPayments(p);
+        setFinancials(f);
+      })
+      .catch((e) => {
+        if (isCancelled) return;
+        setError(e?.message || 'Failed to load invoice data');
+      })
+      .finally(() => {
+        if (isCancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [booking.id, booking.propertyId]);
 
   const noOfDays = Math.ceil(
     (new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / (1000 * 60 * 60 * 24)
@@ -137,72 +185,141 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
             </div>
           </div>
 
-          {/* Invoice Items */}
+          {/* Charges Line Items */}
           <div className="mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold text-gray-900">Charges</h3>
+              {loading && <span className="text-sm text-gray-500 print:hidden">Loading…</span>}
+            </div>
+            {error && (
+              <div className="mb-4 text-sm text-red-600 print:hidden">{error}</div>
+            )}
+            {!booking.propertyId && (
+              <div className="mb-4 text-sm text-yellow-700 print:hidden">Property not set on booking. Cannot load detailed invoice.</div>
+            )}
             <table className="w-full border-collapse border border-gray-300">
               <thead>
                 <tr className="bg-gray-50">
+                  <th className="border border-gray-300 px-4 py-2 text-left">Type</th>
                   <th className="border border-gray-300 px-4 py-2 text-left">Description</th>
-                  <th className="border border-gray-300 px-4 py-2 text-right">Days</th>
-                  <th className="border border-gray-300 px-4 py-2 text-right">Rate</th>
-                  <th className="border border-gray-300 px-4 py-2 text-right">Amount</th>
+                  <th className="border border-gray-300 px-4 py-2 text-right">Qty</th>
+                  <th className="border border-gray-300 px-4 py-2 text-right">Unit</th>
+                  <th className="border border-gray-300 px-4 py-2 text-right">Line Total</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="border border-gray-300 px-4 py-2">
-                    Room {booking.roomNo} - {booking.guestName}
-                    {isCancellationInvoice && <span className="text-red-600 font-medium"> (CANCELLED)</span>}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-2 text-right">{noOfDays}</td>
-                  <td className="border border-gray-300 px-4 py-2 text-right">
-                    ₹{(booking.totalAmount / noOfDays).toFixed(2)}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-2 text-right">
-                    ₹{booking.totalAmount.toLocaleString()}
-                  </td>
-                </tr>
+                {charges.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="border border-gray-300 px-4 py-6 text-center text-gray-500">No charges</td>
+                  </tr>
+                ) : (
+                  charges.map((ch) => {
+                    const isDiscount = ch.chargeType === 'discount';
+                    const typeLabel = ch.chargeType.toUpperCase();
+                    const amountDisplay = isDiscount ? `- ${fmtINR(Math.abs(ch.amount))}` : fmtINR(ch.amount);
+                    return (
+                      <tr key={ch.id} className={isDiscount ? 'bg-red-50' : ''}>
+                        <td className="border border-gray-300 px-4 py-2 text-left font-medium">{typeLabel}</td>
+                        <td className={`border border-gray-300 px-4 py-2 ${isDiscount ? 'text-red-700' : ''}`}>
+                          {ch.description || ch.chargeType}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-right">{ch.quantity}</td>
+                        <td className="border border-gray-300 px-4 py-2 text-right">{fmtINR(ch.unitAmount)}</td>
+                        <td className={`border border-gray-300 px-4 py-2 text-right font-medium ${isDiscount ? 'text-red-700' : ''}`}>{amountDisplay}</td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Totals */}
+          {/* Payments & Refunds */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Payments & Refunds</h3>
+            <table className="w-full border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="border border-gray-300 px-4 py-2 text-left">Date</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">Mode</th>
+                  <th className="border border-gray-300 px-4 py-2 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="border border-gray-300 px-4 py-6 text-center text-gray-500">No payments or refunds</td>
+                  </tr>
+                ) : (
+                  payments.map((p) => {
+                    const isRefund = p.paymentType === 'refund';
+                    const amountDisplay = isRefund ? `- ${fmtINR(Math.abs(p.amount))}` : fmtINR(p.amount);
+                    return (
+                      <tr key={p.id} className={isRefund ? 'bg-yellow-50' : ''}>
+                        <td className="border border-gray-300 px-4 py-2">{formatDate(p.createdAt)}</td>
+                        <td className="border border-gray-300 px-4 py-2">{p.method || '—'}</td>
+                        <td className={`border border-gray-300 px-4 py-2 text-right font-medium ${isRefund ? 'text-yellow-700' : ''}`}>{amountDisplay}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Summary (reconciles with booking_financials) */}
           <div className="mb-8">
             <div className="flex justify-end">
-              <div className="w-64">
+              <div className="w-full max-w-md">
                 <div className="flex justify-between py-2 border-b">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">₹{booking.totalAmount.toLocaleString()}</span>
+                  <span className="text-gray-600">Charges</span>
+                  <span className="font-medium">{fmtINR(financials?.chargesTotal ?? 0)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
-                  <span className="text-gray-600">Tax:</span>
-                  <span className="font-medium">₹0.00</span>
+                  <span className="text-gray-600">Discounts</span>
+                  <span className="font-medium text-red-700">- {fmtINR(Math.abs(financials?.discountsTotal ?? 0))}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-gray-600">Taxes</span>
+                  <span className="font-medium">{fmtINR(financials?.taxesTotal ?? 0)}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-gray-600">Gross</span>
+                  <span className="font-medium">{fmtINR(financials?.grossTotal ?? 0)}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-gray-600">Payments</span>
+                  <span className="font-medium">{fmtINR(financials?.paymentsTotal ?? 0)}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-gray-600">Refunds</span>
+                  <span className="font-medium text-yellow-700">- {fmtINR(Math.abs(financials?.refundsTotal ?? 0))}</span>
                 </div>
                 <div className="flex justify-between py-2 text-lg font-bold">
-                  <span>Total:</span>
-                  <span>₹{booking.totalAmount.toLocaleString()}</span>
+                  <span>Balance Due</span>
+                  <span>{fmtINR(financials?.balanceDue ?? 0)}</span>
                 </div>
+                <p className="mt-2 text-xs text-gray-500 text-right">Totals shown are authoritative from booking_financials</p>
               </div>
             </div>
           </div>
 
-          {/* Payment Information */}
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Information:</h3>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600 mb-1">Payment Status: 
-                <span className={`ml-2 font-medium ${
-                  booking.paymentStatus === 'paid' ? 'text-green-600' : 
-                  booking.paymentStatus === 'partial' ? 'text-yellow-600' : 'text-red-600'
-                }`}>
-                  {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
-                </span>
-              </p>
-              {booking.paymentStatus === 'paid' && (
-                <p className="text-sm text-gray-600">Amount Paid: ₹{booking.totalAmount.toLocaleString()}</p>
-              )}
+          {/* Optional: keep a small status note (non-authoritative) */}
+          {booking.paymentStatus && (
+            <div className="mb-8 print:hidden">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Status</h3>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">Status:
+                  <span className={`ml-2 font-medium ${
+                    booking.paymentStatus === 'paid' ? 'text-green-600' :
+                    booking.paymentStatus === 'partial' ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1)}
+                  </span>
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Special Requests */}
           {booking.specialRequests && !isCancellationInvoice && (

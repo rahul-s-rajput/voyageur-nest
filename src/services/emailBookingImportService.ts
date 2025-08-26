@@ -5,6 +5,7 @@ import { propertyService } from './propertyService';
 import { bookingService } from '../lib/supabase';
 import type { Booking } from '../types/booking';
 import { notificationService } from './notificationService';
+import { GuestProfileService } from './guestProfileService';
 
 export class EmailBookingImportService {
   /**
@@ -112,6 +113,40 @@ export class EmailBookingImportService {
     }
 
     const provider = parsed.ota_platform === 'booking_com' ? 'booking_com' : parsed.ota_platform === 'gommt' ? 'gommt' : 'other';
+
+    // Guest Profile Creation/Linking Logic
+    let guestProfileId: string | undefined;
+    if (parsed.guest_name || parsed.contact_email || parsed.contact_phone) {
+      try {
+        const existingGuest = await GuestProfileService.findGuestByContact(
+          parsed.contact_email || undefined,
+          parsed.contact_phone || undefined
+        );
+
+        if (existingGuest) {
+          guestProfileId = existingGuest.id;
+          await GuestProfileService.updateGuestProfile({
+            id: existingGuest.id,
+            name: parsed.guest_name || (existingGuest as any).name,
+            email: parsed.contact_email || (existingGuest as any).email,
+            phone: parsed.contact_phone || (existingGuest as any).phone,
+          });
+          console.log(`Linked OTA booking to existing guest profile: ${existingGuest.id}`);
+        } else {
+          const newGuest = await GuestProfileService.createGuestProfile({
+            name: parsed.guest_name || 'Guest',
+            email: parsed.contact_email,
+            phone: parsed.contact_phone,
+          } as any);
+          guestProfileId = newGuest.id;
+          console.log(`Created new guest profile for OTA booking: ${newGuest.id}`);
+        }
+      } catch (error) {
+        console.error('Failed to create/link guest profile for email import:', error);
+        // Continue without blocking booking creation
+      }
+    }
+
     const bookingPayload = {
       propertyId: resolvedPropertyId,
       guestName: parsed.guest_name || 'Guest',
@@ -129,6 +164,7 @@ export class EmailBookingImportService {
       contactEmail: parsed.contact_email || undefined,
       specialRequests: parsed.special_requests || undefined,
       // Persist source context (respect bookings.source CHECK constraint)
+      guest_profile_id: guestProfileId,
       source: 'ota',
       source_details: parsed.booking_reference ? { provider, ota_ref: parsed.booking_reference } : { provider },
     } as const;
@@ -175,6 +211,10 @@ export class EmailBookingImportService {
         // Update source info if present
         (updatePayload as any).source = (bookingPayload as any).source;
         (updatePayload as any).source_details = (bookingPayload as any).source_details;
+        // Attach guest profile link if resolved
+        if (guestProfileId) {
+          (updatePayload as any).guest_profile_id = guestProfileId;
+        }
         const updated = await bookingService.updateBooking(candidate.id, updatePayload);
         bookingId = updated?.id;
       } else {

@@ -3,10 +3,9 @@ import { InvoiceData } from '../types/invoice';
 
 interface InvoicePreviewProps {
   data: InvoiceData;
-  onPrint?: () => void;
 }
 
-export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data, onPrint }) => {
+export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
   // Calculate tariff and GST from grand total
   // Grand Total = Room Charges + CGST + SGST
   // Grand Total = Room Charges + (Room Charges * 0.06) + (Room Charges * 0.06)

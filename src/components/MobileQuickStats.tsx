@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { 
   UserCheck, 
   Clock, 
@@ -8,6 +8,8 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { Booking } from '../types/booking';
+import { useCurrentPropertyId } from '../contexts/PropertyContext';
+import { bookingComplianceService } from '../services/bookingComplianceService';
 
 interface MobileQuickStatsProps {
   bookings: Booking[];
@@ -15,6 +17,38 @@ interface MobileQuickStatsProps {
 }
 
 const MobileQuickStats: React.FC<MobileQuickStatsProps> = ({ bookings, className = '' }) => {
+  const propertyId = useCurrentPropertyId();
+  const [enforcementToday, setEnforcementToday] = useState<number>(0);
+  const [enforcementOverdue, setEnforcementOverdue] = useState<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!propertyId) {
+        setEnforcementToday(0);
+        setEnforcementOverdue(0);
+        return;
+      }
+      try {
+        const [today, overdue] = await Promise.all([
+          bookingComplianceService.getTodayCount(propertyId),
+          bookingComplianceService.getOverdueCount(propertyId)
+        ]);
+        if (!cancelled) {
+          setEnforcementToday(today);
+          setEnforcementOverdue(overdue);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setEnforcementToday(0);
+          setEnforcementOverdue(0);
+        }
+        console.error('Failed to load enforcement counts', e);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [propertyId]);
   const quickStats = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     const activeBookings = bookings.filter(b => !b.cancelled);
@@ -97,6 +131,32 @@ const MobileQuickStats: React.FC<MobileQuickStatsProps> = ({ bookings, className
             <div className="text-xs text-gray-500">Pending</div>
             <div className={`text-sm font-semibold ${quickStats.pendingPayments > 0 ? 'text-red-600' : 'text-gray-900'}`}>
               {quickStats.pendingPayments}
+            </div>
+          </div>
+        </div>
+
+        {/* Enforcement Today */}
+        <div className="flex items-center space-x-2">
+          <div className={`p-1.5 rounded ${enforcementToday > 0 ? 'bg-amber-100' : 'bg-gray-100'}`}>
+            <AlertCircle className={`w-3 h-3 ${enforcementToday > 0 ? 'text-amber-600' : 'text-gray-400'}`} />
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">Actions Today</div>
+            <div className={`text-sm font-semibold ${enforcementToday > 0 ? 'text-amber-600' : 'text-gray-900'}`}>
+              {enforcementToday}
+            </div>
+          </div>
+        </div>
+
+        {/* Enforcement Overdue */}
+        <div className="flex items-center space-x-2">
+          <div className={`p-1.5 rounded ${enforcementOverdue > 0 ? 'bg-red-100' : 'bg-gray-100'}`}>
+            <AlertCircle className={`w-3 h-3 ${enforcementOverdue > 0 ? 'text-red-600' : 'text-gray-400'}`} />
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">Overdue</div>
+            <div className={`text-sm font-semibold ${enforcementOverdue > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+              {enforcementOverdue}
             </div>
           </div>
         </div>

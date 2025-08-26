@@ -250,10 +250,6 @@ function MainApp() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleBackToHome = () => {
     setCurrentView('home');
   };
@@ -405,7 +401,6 @@ function MainApp() {
           ) : (
             <InvoicePreview 
               data={invoiceData}
-              onPrint={handlePrint}
             />
         )}
       </div>

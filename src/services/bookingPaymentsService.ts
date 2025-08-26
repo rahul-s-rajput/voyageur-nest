@@ -19,6 +19,7 @@ export interface AddPaymentInput {
   method?: string;
   referenceNo?: string;
   amount: number; // > 0
+  createdAt?: string; // ISO timestamp for backdating
 }
 
 const ALLOWED_PAYMENT_TYPES: PaymentType[] = ['payment', 'refund', 'adjustment'];
@@ -71,7 +72,7 @@ export const bookingPaymentsService = {
     await verifyBookingScope(propertyId, bookingId);
     validateAmount(input.amount);
 
-    const payload = {
+    const payload: any = {
       property_id: propertyId,
       booking_id: bookingId,
       payment_type: 'payment' as const,
@@ -79,6 +80,7 @@ export const bookingPaymentsService = {
       reference_no: input.referenceNo ?? null,
       amount: input.amount,
     };
+    if (input.createdAt) payload.created_at = input.createdAt;
 
     const { data, error } = await supabase
       .from('booking_payments')
@@ -94,7 +96,7 @@ export const bookingPaymentsService = {
     await verifyBookingScope(propertyId, bookingId);
     validateAmount(input.amount);
 
-    const payload = {
+    const payload: any = {
       property_id: propertyId,
       booking_id: bookingId,
       payment_type: 'refund' as const,
@@ -102,6 +104,7 @@ export const bookingPaymentsService = {
       reference_no: input.referenceNo ?? null,
       amount: input.amount,
     };
+    if (input.createdAt) payload.created_at = input.createdAt;
 
     const { data, error } = await supabase
       .from('booking_payments')

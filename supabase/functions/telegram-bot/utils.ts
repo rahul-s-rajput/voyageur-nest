@@ -107,7 +107,6 @@ export function formatBookingSummary(
     `🏠 Room: ${booking.room_no}`,
     `📅 ${booking.check_in} → ${booking.check_out}`,
     `👨‍👩‍👧 Guests: ${pax} (${ac.adults}/${ac.children})`,
-    `💰 Amount: ${booking.total_amount}`,
     `📊 Status: ${booking.cancelled ? "❌ Cancelled" : booking.status}`,
   ].join("\n");
 

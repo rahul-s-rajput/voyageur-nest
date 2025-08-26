@@ -26,6 +26,10 @@ import { registerBooking } from "./features/booking.ts";
 import { registerTodayOps } from "./features/today.ts";
 import { registerExpenseCapture } from "./features/expense.ts";
 import { registerReport } from "./features/report.ts";
+import { getBookingFinancials as svcGetBookingFinancials } from "./services/financials.ts";
+import { searchMenuItems as svcSearchMenuItems, getMenuItemById as svcGetMenuItemById } from "./services/menu.ts";
+import { createBookingCharge as svcCreateBookingCharge, listBookingCharges as svcListBookingCharges, voidBookingCharge as svcVoidBookingCharge } from "./services/charges.ts";
+import { listBookingPayments as svcListBookingPayments, createBookingPayment as svcCreateBookingPayment, voidBookingPayment as svcVoidBookingPayment } from "./services/payments.ts";
 
 // --- Config ---
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
@@ -43,6 +47,51 @@ async function getRoomMaxOccupancy(propertyId: string, roomNo: string): Promise<
 async function loadBookingById(id: string): Promise<any | null> {
   if (!supabase) return null;
   return await svcLoadBookingById(supabase, id);
+}
+
+async function getBookingFinancials(propertyId: string, bookingId: string): Promise<any | null> {
+  if (!supabase) return null;
+  return await svcGetBookingFinancials(supabase, propertyId, bookingId);
+}
+
+async function searchMenuItems(propertyId: string, query: string, limit = 10): Promise<any[]> {
+  if (!supabase) return [];
+  return await svcSearchMenuItems(supabase, propertyId, query, limit);
+}
+
+async function getMenuItemById(propertyId: string, id: string): Promise<any | null> {
+  if (!supabase) return null;
+  return await svcGetMenuItemById(supabase, propertyId, id);
+}
+
+async function createBookingCharge(payload: any): Promise<any | null> {
+  if (!supabase) return null;
+  return await svcCreateBookingCharge(supabase as any, payload);
+}
+
+async function listBookingCharges(propertyId: string, bookingId: string, limit = 5, offset = 0, includeVoided = false): Promise<any[]> {
+  if (!supabase) return [];
+  return await svcListBookingCharges(supabase, propertyId, bookingId, limit, offset, includeVoided);
+}
+
+async function voidBookingCharge(propertyId: string, chargeId: string): Promise<void> {
+  if (!supabase) return;
+  await svcVoidBookingCharge(supabase, propertyId, chargeId);
+}
+
+async function listBookingPayments(propertyId: string, bookingId: string, limit = 5, offset = 0, includeVoided = false): Promise<any[]> {
+  if (!supabase) return [];
+  return await svcListBookingPayments(supabase, propertyId, bookingId, limit, offset, includeVoided);
+}
+
+async function createBookingPayment(payload: any): Promise<any | null> {
+  if (!supabase) return null;
+  return await svcCreateBookingPayment(supabase as any, payload);
+}
+
+async function voidBookingPayment(propertyId: string, paymentId: string): Promise<void> {
+  if (!supabase) return;
+  await svcVoidBookingPayment(supabase, propertyId, paymentId);
 }
 
 // Allow env to override whitelist; else fallback to hardcoded IDs.
@@ -267,6 +316,15 @@ registerBooking(bot, {
   clearWizard,
   getSelectedPropertyId,
   formatBookingSummary,
+  getBookingFinancials,
+  searchMenuItems,
+  getMenuItemById,
+  createBookingCharge,
+  listBookingCharges,
+  voidBookingCharge,
+  listBookingPayments,
+  createBookingPayment,
+  voidBookingPayment,
 });
 
 registerTodayOps(bot, {

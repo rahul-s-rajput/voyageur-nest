@@ -57,6 +57,7 @@ export const bookingService = {
       id: booking.id,
       propertyId: booking.property_id,
       guestName: booking.guest_name,
+      guestProfileId: booking.guest_profile_id,
       roomNo: booking.room_no,
       numberOfRooms: booking.number_of_rooms || 1,
       checkIn: booking.check_in,
@@ -95,6 +96,7 @@ export const bookingService = {
       .insert({
         property_id: booking.propertyId,
         guest_name: booking.guestName,
+        guest_profile_id: (booking as any).guest_profile_id || (booking as any).guestProfileId || null,
         room_no: booking.roomNo,
         number_of_rooms: booking.numberOfRooms || 1,
         check_in: booking.checkIn,
@@ -104,9 +106,6 @@ export const bookingService = {
         status: booking.status,
         cancelled: booking.cancelled,
         total_amount: booking.totalAmount.toString(),
-        payment_status: booking.paymentStatus,
-        payment_amount: booking.paymentAmount?.toString() || null,
-        payment_mode: booking.paymentMode || null,
         contact_phone: booking.contactPhone,
         contact_email: booking.contactEmail,
         special_requests: booking.specialRequests,
@@ -122,11 +121,34 @@ export const bookingService = {
       throw new Error(`Failed to create booking: ${error.message}`)
     }
 
+    // After creating booking, create a matching 'room' charge entry for financials unification
+    try {
+      const roomAmount = data.total_amount ? parseFloat(data.total_amount) : 0;
+      if (roomAmount > 0) {
+        await supabase
+          .from('booking_charges')
+          .insert({
+            property_id: data.property_id,
+            booking_id: data.id,
+            charge_type: 'room',
+            description: 'Room charge',
+            quantity: 1,
+            unit_amount: roomAmount,
+            amount: roomAmount,
+            created_at: data.created_at
+          });
+      }
+    } catch (e) {
+      // Don't block booking creation if charge creation fails; log for diagnostics
+      console.error('Failed to create room charge for booking:', e);
+    }
+
     // Transform database fields to match interface
     return {
       id: data.id,
       propertyId: data.property_id,
       guestName: data.guest_name,
+      guestProfileId: data.guest_profile_id,
       roomNo: data.room_no,
       numberOfRooms: data.number_of_rooms || 1,
       checkIn: data.check_in,
@@ -165,9 +187,7 @@ export const bookingService = {
     if (updates.status !== undefined) updateData.status = updates.status
     if (updates.cancelled !== undefined) updateData.cancelled = updates.cancelled
     if (updates.totalAmount !== undefined) updateData.total_amount = updates.totalAmount.toString()
-    if (updates.paymentStatus !== undefined) updateData.payment_status = updates.paymentStatus
-    if (updates.paymentAmount !== undefined) updateData.payment_amount = updates.paymentAmount?.toString() || null
-    if (updates.paymentMode !== undefined) updateData.payment_mode = updates.paymentMode || null
+    if ((updates as any).guest_profile_id !== undefined || updates.guestProfileId !== undefined) updateData.guest_profile_id = (updates as any).guest_profile_id ?? updates.guestProfileId
     if (updates.contactPhone !== undefined) updateData.contact_phone = updates.contactPhone
     if (updates.contactEmail !== undefined) updateData.contact_email = updates.contactEmail
     if (updates.specialRequests !== undefined) updateData.special_requests = updates.specialRequests
@@ -190,6 +210,7 @@ export const bookingService = {
       id: data.id,
       propertyId: data.property_id,
       guestName: data.guest_name,
+      guestProfileId: data.guest_profile_id,
       roomNo: data.room_no,
       numberOfRooms: data.number_of_rooms || 1,
       checkIn: data.check_in,
@@ -231,6 +252,7 @@ export const bookingService = {
       id: data.id,
       propertyId: data.property_id,
       guestName: data.guest_name,
+      guestProfileId: data.guest_profile_id,
       roomNo: data.room_no,
       numberOfRooms: data.number_of_rooms || 1,
       checkIn: data.check_in,
@@ -483,6 +505,99 @@ export const checkInService = {
       form_completed_at: data.form_completed_at,
       created_at: data.created_at
     }
+  }),
+
+  updateCheckInData: withErrorHandling(async (id: string, updates: Partial<CheckInFormData>): Promise<CheckInData | null> => {
+    const updateData: any = {
+      form_completed_at: new Date().toISOString()
+    }
+
+    if (updates.firstName !== undefined) updateData.first_name = updates.firstName
+    if (updates.lastName !== undefined) updateData.last_name = updates.lastName
+    if (updates.email !== undefined) updateData.email = updates.email
+    if (updates.phone !== undefined) updateData.phone = updates.phone
+    if (updates.dateOfBirth !== undefined) updateData.date_of_birth = updates.dateOfBirth
+    if (updates.nationality !== undefined) updateData.nationality = updates.nationality
+    if (updates.idType !== undefined) updateData.id_type = updates.idType
+    if (updates.idNumber !== undefined) updateData.id_number = updates.idNumber
+    if (updates.address !== undefined) updateData.address = updates.address
+    if (updates.city !== undefined) updateData.city = updates.city
+    if (updates.state !== undefined) updateData.state = updates.state
+    if (updates.country !== undefined) updateData.country = updates.country
+    if (updates.zipCode !== undefined) updateData.zip_code = updates.zipCode
+    if (updates.emergencyContactName !== undefined) updateData.emergency_contact_name = updates.emergencyContactName
+    if (updates.emergencyContactPhone !== undefined) updateData.emergency_contact_phone = updates.emergencyContactPhone
+    if (updates.emergencyContactRelation !== undefined) updateData.emergency_contact_relation = updates.emergencyContactRelation
+    if (updates.purposeOfVisit !== undefined) updateData.purpose_of_visit = updates.purposeOfVisit
+    if (updates.arrivalDate !== undefined) updateData.arrival_date = updates.arrivalDate
+    if (updates.departureDate !== undefined) updateData.departure_date = updates.departureDate
+    if (updates.roomNumber !== undefined) updateData.room_number = updates.roomNumber
+    if (updates.numberOfGuests !== undefined) updateData.number_of_guests = updates.numberOfGuests
+    if (updates.additionalGuests !== undefined) updateData.additional_guests = updates.additionalGuests
+    if (updates.specialRequests !== undefined) updateData.special_requests = updates.specialRequests
+    if (updates.preferences !== undefined) updateData.preferences = updates.preferences
+    if (updates.termsAccepted !== undefined) updateData.terms_accepted = updates.termsAccepted
+    if (updates.marketingConsent !== undefined) updateData.marketing_consent = updates.marketingConsent
+    if (updates.id_photo_urls !== undefined) updateData.id_photo_urls = updates.id_photo_urls
+
+    const { data, error } = await supabase
+      .from('checkin_data')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      throw new Error(`Failed to update check-in data: ${error.message}`)
+    }
+
+    return {
+      id: data.id,
+      booking_id: data.booking_id,
+      guest_profile_id: data.guest_profile_id,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      email: data.email,
+      phone: data.phone,
+      dateOfBirth: data.date_of_birth,
+      nationality: data.nationality,
+      idType: data.id_type,
+      idNumber: data.id_number,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      country: data.country,
+      zipCode: data.zip_code,
+      emergencyContactName: data.emergency_contact_name,
+      emergencyContactPhone: data.emergency_contact_phone,
+      emergencyContactRelation: data.emergency_contact_relation,
+      purposeOfVisit: data.purpose_of_visit,
+      arrivalDate: data.arrival_date,
+      departureDate: data.departure_date,
+      roomNumber: data.room_number,
+      numberOfGuests: data.number_of_guests,
+      additionalGuests: data.additional_guests || [],
+      specialRequests: data.special_requests,
+      preferences: data.preferences || {
+        wakeUpCall: false,
+        newspaper: false,
+        extraTowels: false,
+        extraPillows: false,
+        roomService: false,
+        doNotDisturb: false
+      },
+      termsAccepted: data.terms_accepted || false,
+      marketingConsent: data.marketing_consent || false,
+      id_document_urls: data.id_document_urls,
+      id_photo_urls: data.id_photo_urls || [],
+      id_verification_status: data.id_verification_status || 'pending',
+      verification_notes: data.verification_notes,
+      verified_by: data.verified_by,
+      verified_at: data.verified_at,
+      extracted_id_data: data.extracted_id_data,
+      form_completed_at: data.form_completed_at,
+      created_at: data.created_at
+    }
   })
 }
 
@@ -493,11 +608,11 @@ export const expenseService = {
       .from('expenses')
       .select('*')
       .order('date', { ascending: false })
-    
+
     if (error) {
       throw new Error(`Failed to load expenses: ${error.message}`)
     }
-    
+
     return data
   }),
 
@@ -507,11 +622,11 @@ export const expenseService = {
       .insert(expenseData)
       .select()
       .single()
-    
+
     if (error) {
       throw new Error(`Failed to create expense: ${error.message}`)
     }
-    
+
     return data
   })
 }

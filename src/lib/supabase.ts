@@ -23,7 +23,6 @@ export {
 export {
   performanceMonitor,
   withPerformanceMonitoring,
-  withEnhancedErrorHandling,
   healthChecker,
   SupabaseError
 } from './supabase/monitoring'
@@ -33,7 +32,6 @@ export { bookingPaymentsService } from '../services/bookingPaymentsService'
 
 import { supabase } from './supabase/index'
 import { bookingService, invoiceCounterService } from './supabase/services'
-import { withEnhancedErrorHandling } from './supabase/monitoring'
 import { Booking, BookingFilters } from '../types/booking'
 import { CheckInData, CheckInFormData } from '../types/checkin'
 
@@ -125,6 +123,7 @@ export const legacyBookingService = {
         id: booking.id,
         propertyId: booking.property_id,
         guestName: booking.guest_name,
+        guestProfileId: (booking as any).guest_profile_id,
         roomNo: booking.room_no,
         numberOfRooms: booking.number_of_rooms || 1,
         checkIn: booking.check_in,
@@ -169,6 +168,7 @@ export const legacyBookingService = {
         .insert({
           property_id: booking.propertyId,
           guest_name: booking.guestName,
+          guest_profile_id: (booking as any).guest_profile_id || (booking as any).guestProfileId || null,
           room_no: booking.roomNo,
           number_of_rooms: booking.numberOfRooms || 1,
           check_in: booking.checkIn,
@@ -202,6 +202,7 @@ export const legacyBookingService = {
         id: data.id,
         propertyId: data.property_id,
         guestName: data.guest_name,
+        guestProfileId: (data as any).guest_profile_id,
         roomNo: data.room_no,
         numberOfRooms: data.number_of_rooms || 1,
         checkIn: data.check_in,
@@ -259,6 +260,7 @@ export const legacyBookingService = {
       if (updates.status !== undefined) updateData.status = updates.status
       if (updates.cancelled !== undefined) updateData.cancelled = updates.cancelled
       if (updates.totalAmount !== undefined) updateData.total_amount = updates.totalAmount
+      if ((updates as any).guest_profile_id !== undefined || updates.guestProfileId !== undefined) updateData.guest_profile_id = (updates as any).guest_profile_id ?? updates.guestProfileId
       if (updates.paymentStatus !== undefined) updateData.payment_status = updates.paymentStatus
       if (updates.paymentAmount !== undefined) updateData.payment_amount = updates.paymentAmount || null
       if (updates.paymentMode !== undefined) updateData.payment_mode = updates.paymentMode || null
@@ -288,6 +290,7 @@ export const legacyBookingService = {
         id: data.id,
         propertyId: data.property_id,
         guestName: data.guest_name,
+        guestProfileId: (data as any).guest_profile_id,
         roomNo: data.room_no,
         numberOfRooms: data.number_of_rooms || 1,
         checkIn: data.check_in,
@@ -402,6 +405,7 @@ export const legacyBookingService = {
         id: data.id,
         propertyId: data.property_id,
         guestName: data.guest_name,
+        guestProfileId: (data as any).guest_profile_id,
         roomNo: data.room_no,
         numberOfRooms: data.number_of_rooms || 1,
         checkIn: data.check_in,
@@ -449,6 +453,7 @@ export const legacyBookingService = {
               id: bookingData.id,
               propertyId: bookingData.property_id,
               guestName: bookingData.guest_name,
+              guestProfileId: (bookingData as any).guest_profile_id,
               roomNo: bookingData.room_no,
               numberOfRooms: bookingData.number_of_rooms || 1,
               checkIn: bookingData.check_in,

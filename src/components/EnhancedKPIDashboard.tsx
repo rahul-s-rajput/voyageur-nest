@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
-  Users, 
   Calendar, 
   DollarSign, 
   Clock, 
@@ -17,6 +16,7 @@ import { Booking } from '../types/booking';
 import { useProperty } from '../contexts/PropertyContext';
 import MobileQuickStats from './MobileQuickStats';
 import ExpenseService from '../services/expenseService';
+import { bookingComplianceService } from '../services/bookingComplianceService';
 
 interface EnhancedKPIDashboardProps {
   bookings: Booking[];
@@ -40,6 +40,8 @@ interface KPIMetric {
 const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, className = '' }) => {
   const { currentProperty } = useProperty();
   const [monthExpenseTotal, setMonthExpenseTotal] = useState<number>(0);
+  const [enforcementToday, setEnforcementToday] = useState<number>(0);
+  const [enforcementOverdue, setEnforcementOverdue] = useState<number>(0);
   
   // Load approved expenses for current month for the active property
   useEffect(() => {
@@ -62,12 +64,44 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
     loadExpenses();
   }, [currentProperty?.id]);
 
+  // Load enforcement counts for banner
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        if (!currentProperty?.id) {
+          if (!cancelled) {
+            setEnforcementToday(0);
+            setEnforcementOverdue(0);
+          }
+          return;
+        }
+        const [today, overdue] = await Promise.all([
+          bookingComplianceService.getTodayCount(currentProperty.id),
+          bookingComplianceService.getOverdueCount(currentProperty.id)
+        ]);
+        if (!cancelled) {
+          setEnforcementToday(today);
+          setEnforcementOverdue(overdue);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setEnforcementToday(0);
+          setEnforcementOverdue(0);
+        }
+        console.error('Failed to load enforcement counts for KPI banner', e);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [currentProperty?.id]);
+
   const kpiMetrics = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const thisWeekStart = new Date();
     thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
-    const thisWeekStartStr = thisWeekStart.toISOString().split('T')[0];
+    // const thisWeekStartStr = thisWeekStart.toISOString().split('T')[0];
     
     const thisMonth = new Date().getMonth();
     const thisYear = new Date().getFullYear();
@@ -281,6 +315,33 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
       {/* Mobile Quick Stats - Only visible on mobile */}
       <div className="block sm:hidden">
         <MobileQuickStats bookings={bookings} />
+      </div>
+
+      {/* Enforcement Alerts Banner - hidden on mobile (MobileQuickStats shows compact counters) */}
+      <div className="hidden sm:block">
+        <div
+          className={`rounded-lg border p-3 flex items-center gap-3 ${
+            enforcementToday + enforcementOverdue > 0
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-green-50 border-green-200'
+          }`}
+        >
+          <AlertCircle
+            className={`w-5 h-5 ${
+              enforcementToday + enforcementOverdue > 0 ? 'text-amber-600' : 'text-green-600'
+            }`}
+          />
+          <div className="flex-1 text-sm">
+            {enforcementToday + enforcementOverdue > 0 ? (
+              <div className="text-amber-800">
+                Enforcement alerts: <span className="font-semibold">{enforcementToday}</span> today •{' '}
+                <span className="font-semibold">{enforcementOverdue}</span> overdue
+              </div>
+            ) : (
+              <div className="text-green-800">No enforcement alerts. All good!</div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* High Priority Metrics - Hidden on mobile, visible on tablet+ */}

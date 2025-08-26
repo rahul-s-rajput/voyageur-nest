@@ -15,7 +15,7 @@ import {
   Clock
 } from 'lucide-react';
 import { GuestProfileService } from '../services/guestProfileService';
-import type { GuestProfile, GuestBookingHistory, GuestProfileViewProps } from '../types/guest';
+import type { GuestProfile, GuestBookingHistory, GuestEmailMessage, GuestProfileViewProps } from '../types/guest';
 
 export const GuestProfileView: React.FC<GuestProfileViewProps> = ({ 
   guestId, 
@@ -26,7 +26,8 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
   const [bookingHistory, setBookingHistory] = useState<GuestBookingHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'privacy'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'communications' | 'privacy'>('profile');
+  const [emails, setEmails] = useState<GuestEmailMessage[]>([]);
 
   useEffect(() => {
     loadGuestData();
@@ -49,12 +50,30 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
 
       setGuest(guestData);
       setBookingHistory(historyData);
+      // Load recent communications if email is available
+      if (guestData?.email) {
+        try {
+          const comms = await GuestProfileService.getCommunicationHistoryByEmail(guestData.email, 5);
+          setEmails(comms);
+        } catch (e) {
+          console.warn('Failed to load communications', e);
+        }
+      } else {
+        setEmails([]);
+      }
     } catch (err) {
       console.error('Error loading guest data:', err);
       setError('Failed to load guest data');
     } finally {
       setLoading(false);
     }
+  };
+
+  const extractTags = (text?: string): string[] => {
+    if (!text) return [];
+    const matches = text.match(/#([A-Za-z0-9_]+)/g) || [];
+    const tags = matches.map(t => t.replace('#', ''));
+    return Array.from(new Set(tags));
   };
 
   const handlePrivacyUpdate = async (field: string, value: boolean) => {
@@ -89,6 +108,16 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
       year: 'numeric',
       month: 'short',
       day: 'numeric'
+    });
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -165,6 +194,7 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
             {[
               { id: 'profile', label: 'Profile', icon: User },
               { id: 'history', label: 'Booking History', icon: History },
+              { id: 'communications', label: 'Communications', icon: Mail },
               { id: 'privacy', label: 'Privacy Settings', icon: Shield }
             ].map(tab => (
               <button
@@ -272,7 +302,17 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
               {guest.notes && (
                 <div className="bg-yellow-50 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Staff Notes</h3>
-                  <p className="text-gray-700">{guest.notes}</p>
+                  {/* Hashtag chips */}
+                  {extractTags(guest.notes).length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {extractTags(guest.notes).map(tag => (
+                        <span key={tag} className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-gray-700 whitespace-pre-line">{guest.notes}</p>
                 </div>
               )}
             </div>
@@ -299,15 +339,44 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
                                 {formatDate(booking.check_in)} - {formatDate(booking.check_out)}
                               </p>
                             </div>
+                            {/* Property badge */}
+                            <div className="flex items-center space-x-2">
+                              <MapPin className="h-4 w-4 text-gray-400" />
+                              <span className="text-sm text-gray-700">
+                                {booking.property_name || 'Unknown property'}
+                              </span>
+                            </div>
                             <div className="text-center">
                               <p className="text-sm text-gray-500">Guests</p>
                               <p className="font-medium">{booking.no_of_pax}</p>
+                            </div>
+                            {/* Group-size chip */}
+                            <div className="text-center">
+                              {(() => {
+                                const pax = booking.no_of_pax;
+                                const label = pax <= 1 ? 'Solo' : pax === 2 ? 'Couple' : pax <= 5 ? 'Family' : 'Group';
+                                const classes = label === 'Solo'
+                                  ? 'bg-gray-100 text-gray-800'
+                                  : label === 'Couple'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : label === 'Family'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : 'bg-rose-100 text-rose-800';
+                                return (
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${classes}`}>{label}</span>
+                                );
+                              })()}
                             </div>
                             <div className="text-center">
                               <p className="text-sm text-gray-500">Amount</p>
                               <p className="font-medium">{formatCurrency(booking.total_amount)}</p>
                             </div>
                           </div>
+                          {booking.additional_guest_names && (
+                            <p className="text-sm text-gray-600 mt-2">
+                              <span className="font-medium">With:</span> {booking.additional_guest_names}
+                            </p>
+                          )}
                           {booking.special_requests && (
                             <p className="text-sm text-gray-600 mt-2">
                               <span className="font-medium">Special Requests:</span> {booking.special_requests}
@@ -331,6 +400,40 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
                             {booking.payment_status}
                           </span>
                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'communications' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Recent Communications</h3>
+              {!guest.email ? (
+                <div className="text-center py-8">
+                  <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No email on file for this guest.</p>
+                </div>
+              ) : emails.length === 0 ? (
+                <div className="text-center py-8">
+                  <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No recent emails found</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {emails.map((m) => (
+                    <div key={m.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{m.subject || '(no subject)'}</p>
+                          <p className="text-sm text-gray-500 truncate">{m.snippet}</p>
+                          <p className="text-xs text-gray-500 mt-1 truncate">From: {m.sender} → To: {m.recipient}</p>
+                        </div>
+                        {m.received_at && (
+                          <span className="text-xs text-gray-400 ml-4 whitespace-nowrap">{formatDateTime(m.received_at)}</span>
+                        )}
                       </div>
                     </div>
                   ))}

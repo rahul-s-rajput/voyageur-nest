@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Eye, Edit, Trash2, Filter, Download, Users, Calendar, Mail, Phone } from 'lucide-react';
+import { Search, Plus, Eye, Edit, Trash2, Filter, Download, Users, Calendar, Mail, Phone, GitMerge } from 'lucide-react';
 import { GuestProfileService } from '../services/guestProfileService';
 import { GuestProfileForm } from './GuestProfileForm';
 import { GuestProfileView } from './GuestProfileView';
+import { GuestDuplicateManager } from './GuestDuplicateManager';
 import type { 
   GuestProfile, 
   GuestProfileFilters, 
@@ -25,6 +26,9 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
   const [editingGuest, setEditingGuest] = useState<GuestProfile | null>(null);
   const [viewingGuest, setViewingGuest] = useState<GuestProfile | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDuplicateManager, setShowDuplicateManager] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState<number | null>(null);
+  const [loadingDupCount, setLoadingDupCount] = useState<boolean>(false);
   
   const [filters, setFilters] = useState<GuestProfileFilters>({
     search: '',
@@ -41,6 +45,11 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
   useEffect(() => {
     loadGuests();
   }, [filters]);
+
+  useEffect(() => {
+    // Load duplicate cluster count once on mount
+    void loadDuplicateCount();
+  }, []);
 
   useEffect(() => {
     const delayedSearch = setTimeout(() => {
@@ -61,6 +70,19 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
       setError(err instanceof Error ? err.message : 'Failed to load guest profiles');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDuplicateCount = async () => {
+    try {
+      setLoadingDupCount(true);
+      const clusters = await GuestProfileService.findDuplicateClusters();
+      setDuplicateCount(clusters.length);
+    } catch (e) {
+      console.warn('Failed to load duplicate clusters count', e);
+      setDuplicateCount(null);
+    } finally {
+      setLoadingDupCount(false);
     }
   };
 
@@ -116,8 +138,10 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
         City: guest.city || '',
         State: guest.state || '',
         Country: guest.country || '',
-        'Total Bookings': guest.total_bookings,
-        'Last Visit': guest.last_visit_date ? new Date(guest.last_visit_date).toLocaleDateString() : '',
+        'Total Bookings': (guest.total_stays ?? guest.total_bookings ?? 0).toString(),
+        'Last Visit': (guest.last_stay_date || guest.last_visit_date)
+          ? new Date((guest.last_stay_date || guest.last_visit_date) as string).toLocaleDateString()
+          : '',
         'Created Date': new Date(guest.created_at).toLocaleDateString()
       }));
 
@@ -170,6 +194,24 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
         
         {showActions && (
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => {
+                setShowDuplicateManager(true);
+                // Also refresh count when opening
+                void loadDuplicateCount();
+              }}
+              className="relative flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
+              title="Find and merge duplicate profiles"
+            >
+              <GitMerge className="h-4 w-4" />
+              <span>Find Duplicates</span>
+              {duplicateCount !== null && (
+                <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-white text-amber-700">
+                  {loadingDupCount ? '…' : duplicateCount}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={handleExportData}
               className="flex items-center space-x-2 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
@@ -400,11 +442,13 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                        <span className="text-sm text-gray-900">{guest.total_bookings}</span>
+                        <span className="text-sm text-gray-900">{guest.total_stays ?? guest.total_bookings ?? 0}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {guest.last_visit_date ? formatDate(guest.last_visit_date) : 'Never'}
+                      {(guest.last_stay_date || guest.last_visit_date)
+                        ? formatDate((guest.last_stay_date || guest.last_visit_date) as string)
+                        : 'Never'}
                     </td>
                     {showActions && (
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -429,6 +473,7 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
                           >
                             <Edit className="h-4 w-4" />
                           </button>
+                          {/* Duplicate management moved to top-level button */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -475,6 +520,17 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
           onEdit={() => {
             setEditingGuest(viewingGuest);
             setViewingGuest(null);
+          }}
+        />
+      )}
+
+      {showDuplicateManager && (
+        <GuestDuplicateManager
+          onClose={() => setShowDuplicateManager(false)}
+          onMerged={() => {
+            setShowDuplicateManager(false);
+            loadGuests();
+            void loadDuplicateCount();
           }}
         />
       )}

@@ -103,11 +103,15 @@ export interface GuestBookingHistory {
   check_in: string;
   check_out: string;
   no_of_pax: number;
+  additional_guest_names?: string;
   total_amount: number;
   payment_status: 'paid' | 'partial' | 'unpaid';
   status: 'confirmed' | 'pending' | 'checked-in' | 'checked-out';
   special_requests?: string;
   created_at: string;
+  // Multi-property
+  property_id?: string;
+  property_name?: string;
 }
 
 export interface GuestProfileViewProps {
@@ -161,4 +165,28 @@ export interface DataDeletionRequest {
   approved_at?: string;
   completed_at?: string;
   notes?: string;
+}
+
+// Lightweight communications type for recent emails
+export interface GuestEmailMessage {
+  id: string;
+  sender: string | null;
+  recipient: string | null;
+  subject: string | null;
+  snippet: string | null;
+  received_at: string | null;
+}
+
+// Duplicate detection & merge
+export interface DuplicateCandidate {
+  profile: GuestProfile;
+  reasons: string[];
+  score: number; // higher means more likely duplicate
+}
+
+export interface MergeResult {
+  primary: GuestProfile;
+  mergedIds: string[];
+  bookingsReassigned: number;
+  profileUpdated: boolean;
 }
