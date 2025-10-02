@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { 
   BarChart3, 
   DollarSign, 
