@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2 } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
@@ -55,6 +55,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  // Prevent duplicate auto-finalize submissions per booking
+  const autoFinalizeAttemptedFor = useRef<string | null>(null);
 
   // Charges / Payments / Financials state
   const propertyId = useCurrentPropertyId();
@@ -146,6 +148,101 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   }, [booking]);
 
 
+
+  // Auto-close QR modal when booking gets checked in (e.g., after form completion)
+  useEffect(() => {
+    if (booking && showQRCode && booking.status === 'checked-in') {
+      setShowQRCode(false);
+    }
+  }, [booking?.status, showQRCode]);
+
+  // Also auto-close QR when we detect form completion via check-in data
+  useEffect(() => {
+    if (showQRCode && checkInData?.form_completed_at) {
+      setShowQRCode(false);
+    }
+  }, [showQRCode, checkInData?.form_completed_at]);
+
+  // While QR is open, poll for check-in form completion so we can auto-finalize
+  useEffect(() => {
+    if (!showQRCode || !booking) return;
+    let active = true;
+    const POLL_MS = 5000;
+    const MAX_MS = 10 * 60 * 1000;
+    const start = Date.now();
+
+    const interval = setInterval(async () => {
+      if (!active) return;
+      // Stop polling after timeout
+      if (Date.now() - start > MAX_MS) {
+        clearInterval(interval);
+        return;
+      }
+      try {
+        const data = await checkInService.getCheckInDataByBookingId(booking.id);
+        setCheckInData(data);
+        if (data?.form_completed_at) {
+          clearInterval(interval);
+        }
+      } catch (e) {
+        // non-blocking
+      }
+    }, POLL_MS);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [showQRCode, booking?.id]);
+
+  // When status flips to checked-in, refetch check-in data to update the details panel
+  useEffect(() => {
+    const refreshOnCheckedIn = async () => {
+      if (!booking || booking.status !== 'checked-in') return;
+      try {
+        const data = await checkInService.getCheckInDataByBookingId(booking.id);
+        setCheckInData(data);
+      } catch (e) {
+        // non-blocking
+      }
+    };
+    refreshOnCheckedIn();
+  }, [booking?.status]);
+
+  // Reset auto-finalize guard when booking changes
+  useEffect(() => {
+    if (booking?.id && autoFinalizeAttemptedFor.current !== booking.id) {
+      autoFinalizeAttemptedFor.current = null;
+    }
+  }, [booking?.id]);
+
+  // Auto-finalize check-in when form completion is detected but status isn't updated yet
+  useEffect(() => {
+    const maybeFinalize = async () => {
+      if (!booking) return;
+      if (!checkInData?.form_completed_at) return;
+      if (booking.status === 'checked-in') return;
+      // Guard to avoid repeated submissions for the same booking
+      if (autoFinalizeAttemptedFor.current === booking.id) return;
+
+      autoFinalizeAttemptedFor.current = booking.id;
+      try {
+        const res = await updateBookingWithValidation(booking.id, { status: 'checked-in' as Booking['status'] });
+        if (res.success && res.booking) {
+          onUpdate(res.booking);
+          showSuccess('Checked in', 'Form completed. Guest has been checked in.');
+          // Close QR if still open
+          setShowQRCode(false);
+        } else if (res.errors && res.errors.length) {
+          // If backend still blocks, surface the message and allow manual action
+          showError('Check-in update failed', res.errors.join(', '));
+        }
+      } catch (e: any) {
+        showError('Check-in update failed', e?.message || 'Unexpected error while finalizing check-in');
+      }
+    };
+    maybeFinalize();
+  }, [checkInData?.form_completed_at, booking?.id, booking?.status]);
 
   useEffect(() => {
     const loadInvoiceNumber = async () => {
@@ -517,6 +614,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         setValidationErrors([]);
       } else if (result.errors) {
         setValidationErrors(result.errors);
+        // If backend indicates check-in form is incomplete, auto-open QR modal
+        if (result.errors.some(e => e.toLowerCase().includes('check-in form must be completed'))) {
+          setShowQRCode(true);
+        }
       }
     } catch (error) {
       console.error('Error updating booking:', error);

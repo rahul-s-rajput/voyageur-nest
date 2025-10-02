@@ -31,7 +31,8 @@ export { bookingChargesService } from '../services/bookingChargesService'
 export { bookingPaymentsService } from '../services/bookingPaymentsService'
 
 import { supabase } from './supabase/index'
-import { bookingService, invoiceCounterService } from './supabase/services'
+import { bookingService, invoiceCounterService, checkInService } from './supabase/services'
+import { bookingFinancialsService } from '../services/bookingFinancialsService'
 import { Booking, BookingFilters } from '../types/booking'
 import { CheckInData, CheckInFormData } from '../types/checkin'
 
@@ -1387,6 +1388,57 @@ export const updateBookingWithValidation = async (
 
     // Skip conflict validation for cancelled bookings
     const skipConflictValidation = currentBooking.cancelled || updatedBookingData.cancelled;
+
+    // Enforce status-change specific validations before running general validations
+    const targetStatus = updates.status;
+    if (targetStatus && targetStatus !== currentBooking.status) {
+      // 1) Check-in requires completed check-in form
+      if (targetStatus === 'checked-in') {
+        try {
+          const checkIn = await checkInService.getCheckInDataByBookingId(id);
+          const completed = Boolean(checkIn?.form_completed_at);
+          if (!completed) {
+            return {
+              success: false,
+              errors: [
+                'Cannot check-in: Check-in form must be completed. Please open the QR code and complete the check-in form.'
+              ]
+            };
+          }
+        } catch (e) {
+          console.error('Check-in validation failed', e);
+          return {
+            success: false,
+            errors: ['Unable to verify check-in form completion. Please try again.']
+          };
+        }
+      }
+
+      // 2) Check-out requires zero balance due
+      if (targetStatus === 'checked-out') {
+        try {
+          const fin = await bookingFinancialsService.getByBooking(
+            currentBooking.propertyId,
+            id
+          );
+          const balanceDue = Number(fin.balanceDue || 0);
+          if (balanceDue > 0.01) {
+            return {
+              success: false,
+              errors: [
+                `Cannot check-out: Balance due must be zero. Current balance due is ₹${balanceDue.toFixed(2)}.`
+              ]
+            };
+          }
+        } catch (e) {
+          console.error('Check-out validation failed', e);
+          return {
+            success: false,
+            errors: ['Unable to verify payment status for check-out. Please try again.']
+          };
+        }
+      }
+    }
 
     // Validate the updated booking data
     const validation = await validateBooking(validationData, id, skipConflictValidation);

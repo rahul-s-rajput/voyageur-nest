@@ -5,9 +5,8 @@ import { BookingList } from './BookingList';
 import { CalendarViewManager } from './CalendarViewManager';
 import { Booking, BookingFilters, ViewMode } from '../types/booking';
 import { NewBookingModal } from './NewBookingModal';
-import { BookingDetails } from './BookingDetails';
 import { BulkEditModal } from './BulkEditModal';
-import { bookingService, getSchedulingConflicts } from '../lib/supabase';
+import { getSchedulingConflicts } from '../lib/supabase';
 import EnhancedKPIDashboard from './EnhancedKPIDashboard';
 import { BulkEditResult } from '../types/bulkEdit';
 
@@ -22,6 +21,7 @@ interface HomePageProps {
   onCreateInvoice: (booking: Booking) => void;
   onCancelBooking: (bookingId: string) => void;
   onCreateCancellationInvoice: (booking: Booking) => void;
+  onOpenActions?: () => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -34,6 +34,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onCreateInvoice,
   onCancelBooking,
   onCreateCancellationInvoice,
+  onOpenActions,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<BookingFilters>({
@@ -41,7 +42,6 @@ export const HomePage: React.FC<HomePageProps> = ({
   });
   const [showFilters, setShowFilters] = useState(false);
   const [showNewBookingModal, setShowNewBookingModal] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
@@ -154,7 +154,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Enhanced KPI Dashboard */}
-      <EnhancedKPIDashboard bookings={bookings} />
+      <EnhancedKPIDashboard bookings={bookings} onOpenActions={onOpenActions} />
 
         {/* Controls */}
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border">
@@ -426,35 +426,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         />
       )}
 
-      {/* Booking Details Modal */}
-      {selectedBooking && (
-        <BookingDetails
-          booking={selectedBooking}
-          isOpen={!!selectedBooking}
-          onClose={() => setSelectedBooking(null)}
-          onUpdate={(updatedBooking) => {
-            setSelectedBooking(updatedBooking);
-          }}
-          onCancel={async (bookingId) => {
-            try {
-              const success = await bookingService.cancelBooking(bookingId);
-              if (success && selectedBooking?.id === bookingId) {
-                setSelectedBooking(prev => prev ? { ...prev, cancelled: true } : null);
-              }
-            } catch (error) {
-              console.error('Error cancelling booking:', error);
-            }
-          }}
-          onDelete={async (bookingId) => {
-            try {
-              await onDeleteBooking(bookingId);
-              setSelectedBooking(null);
-            } catch (error) {
-              console.error('Error deleting booking from details modal:', error);
-            }
-          }}
-        />
-      )}
+      {/* Booking Details Modal is controlled by parent (BookingManagement) */}
 
       {/* Bulk Edit Modal */}
       {showBulkEditModal && (

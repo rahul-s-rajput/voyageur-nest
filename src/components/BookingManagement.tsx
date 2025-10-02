@@ -7,7 +7,7 @@ import { CancellationInvoicePreview } from '../components/CancellationInvoicePre
 import { BookingDetails } from '../components/BookingDetails';
 import { Booking, ViewMode } from '../types/booking';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
-import { invoiceCounterService, bookingService, emailMessageService } from '../lib/supabase';
+import { invoiceCounterService, bookingService, emailMessageService, updateBookingWithValidation, checkInService } from '../lib/supabase';
 import { NewBookingModal } from '../components/NewBookingModal';
 import { InvoiceTemplate } from '../components/InvoiceTemplate';
 import { useProperty } from '../contexts/PropertyContext';
@@ -342,6 +342,10 @@ const BookingManagement: React.FC = () => {
     setCurrentView('home');
   };
 
+  const handleOpenActions = () => {
+    setCurrentView('actions');
+  };
+
   // Actions view helpers
   const openBookingById = async (bookingId: string) => {
     try {
@@ -363,11 +367,58 @@ const BookingManagement: React.FC = () => {
 
   const handleCheckIn = async (bookingId: string) => {
     try {
-      const updated = await bookingService.updateBooking(bookingId, { status: 'checked-in' as Booking['status'] });
-      if (updated) {
+      const result = await updateBookingWithValidation(bookingId, { status: 'checked-in' as Booking['status'] });
+      if (result.success) {
         setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-in' } : b));
+        // Reflect status change in currently open BookingDetails (use functional updater to avoid stale closure)
+        setSelectedBooking(prev => (prev && prev.id === bookingId ? { ...prev, status: 'checked-in' } : prev));
         pushToast('success', 'Checked in', 'Guest has been checked in');
         await loadViolations();
+        return;
+      }
+
+      const errors = result.errors || [];
+      // If check-in form is incomplete, auto-open QR and wait for completion
+      if (errors.some(e => e.toLowerCase().includes('check-in form must be completed'))) {
+        try { sessionStorage.setItem('open_qr_for_booking_id', bookingId); } catch {}
+        await openBookingById(bookingId);
+        pushToast('info', 'Check-in form required', 'QR code opened. Complete the form to continue.');
+
+        // Poll for form completion and auto-complete check-in
+        const POLL_MS = 5000;
+        const MAX_MS = 600000; // 10 minutes
+        let elapsed = 0;
+        while (elapsed < MAX_MS) {
+          await new Promise(r => setTimeout(r, POLL_MS));
+          try {
+            const data = await checkInService.getCheckInDataByBookingId(bookingId);
+            if (data?.form_completed_at) {
+              const finalize = await updateBookingWithValidation(bookingId, { status: 'checked-in' as Booking['status'] });
+              if (finalize.success && finalize.booking) {
+                setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-in' } : b));
+                // Update currently open booking details view as well (functional updater avoids stale capture)
+                setSelectedBooking(prev => (prev && prev.id === bookingId ? { ...prev, status: 'checked-in' } : prev));
+                pushToast('success', 'Checked in', 'Check-in completed after form submission.');
+                await loadViolations();
+              } else if (finalize.errors) {
+                pushToast('error', 'Check-in failed', finalize.errors.join('; '));
+              }
+              return;
+            }
+          } catch (e) {
+            // keep polling; transient errors are acceptable
+          }
+          elapsed += POLL_MS;
+        }
+        pushToast('warning', 'Waiting for check-in form', 'Timed out waiting for form completion.');
+        return;
+      }
+
+      // Other validation errors
+      if (errors.length > 0) {
+        pushToast('error', 'Check-in failed', errors.join('; '));
+      } else {
+        pushToast('error', 'Check-in failed', 'Could not update booking status');
       }
     } catch (e) {
       console.error('Check-in failed', e);
@@ -377,11 +428,18 @@ const BookingManagement: React.FC = () => {
 
   const handleCheckOut = async (bookingId: string) => {
     try {
-      const updated = await bookingService.updateBooking(bookingId, { status: 'checked-out' as Booking['status'] });
-      if (updated) {
+      const result = await updateBookingWithValidation(bookingId, { status: 'checked-out' as Booking['status'] });
+      if (result.success) {
         setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-out' } : b));
         pushToast('success', 'Checked out', 'Guest has been checked out');
         await loadViolations();
+        return;
+      }
+      const errors = result.errors || [];
+      if (errors.length > 0) {
+        pushToast('error', 'Check-out failed', errors.join('; '));
+      } else {
+        pushToast('error', 'Check-out failed', 'Could not update booking status');
       }
     } catch (e) {
       console.error('Check-out failed', e);
@@ -542,7 +600,7 @@ const BookingManagement: React.FC = () => {
             />
           </div>
         )}
-        {/* (Enforcement quick access banner removed) */}
+        
         {previewOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-lg w-full max-w-full sm:max-w-2xl max-h-[85vh] mx-4 p-4 flex flex-col">
@@ -763,10 +821,11 @@ const BookingManagement: React.FC = () => {
             onCreateInvoice={handleCreateInvoice}
             onCancelBooking={handleCancelBooking}
             onCreateCancellationInvoice={handleCreateCancellationInvoice}
+            onOpenActions={handleOpenActions}
           />
         </div>
         
-        {/* Modals */}
+        {/* Booking Details Modal (home view) */}
         <BookingDetails
           booking={selectedBooking}
           isOpen={showBookingDetails}
@@ -901,6 +960,13 @@ const BookingManagement: React.FC = () => {
                           <td className="p-2">
                             <div className="flex justify-end gap-2">
                               <button
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                                title="Refresh"
+                                onClick={loadViolations}
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                              <button
                                 className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
                                 onClick={() => openBookingById(v.id)}
                               >Open</button>
@@ -977,6 +1043,13 @@ const BookingManagement: React.FC = () => {
                           <td className="p-2">
                             <div className="flex justify-end gap-2">
                               <button
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                                title="Refresh"
+                                onClick={loadViolations}
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                              <button
                                 className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
                                 onClick={() => openBookingById(v.id)}
                               >Open</button>
@@ -1038,7 +1111,7 @@ const BookingManagement: React.FC = () => {
           </div>
         )}
 
-        {/* Booking details modal inline to allow opening from Actions view */}
+        {/* Booking Details Modal (actions view) */}
         <BookingDetails
           booking={selectedBooking}
           isOpen={showBookingDetails}
@@ -1135,35 +1208,11 @@ const BookingManagement: React.FC = () => {
           onCreateInvoice={handleCreateInvoice}
           onCancelBooking={handleCancelBooking}
           onCreateCancellationInvoice={handleCreateCancellationInvoice}
+          onOpenActions={handleOpenActions}
         />
       </div>
 
-      {/* Modals */}
-      <BookingDetails
-        booking={selectedBooking}
-        isOpen={showBookingDetails}
-        onClose={() => {
-          setShowBookingDetails(false);
-          setSelectedBooking(null);
-        }}
-        onUpdate={(updatedBooking) => {
-          setBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
-          setSelectedBooking(updatedBooking);
-        }}
-        onCancel={handleCancelBooking}
-        onDelete={async (bookingId) => {
-          await handleDeleteBooking(bookingId);
-        }}
-      />
-
-      <NewBookingModal
-        isOpen={showNewBookingModal}
-        onClose={() => setShowNewBookingModal(false)}
-        onBookingCreated={(booking) => {
-          setBookings(prev => [...prev, booking]);
-          setShowNewBookingModal(false);
-        }}
-      />
+      {/* Modals handled above in this view's return */}
 
       {showInvoice && invoiceBooking && (
         <InvoiceTemplate

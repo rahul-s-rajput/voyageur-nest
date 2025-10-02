@@ -21,6 +21,7 @@ import { bookingComplianceService } from '../services/bookingComplianceService';
 interface EnhancedKPIDashboardProps {
   bookings: Booking[];
   className?: string;
+  onOpenActions?: () => void;
 }
 
 interface KPIMetric {
@@ -37,7 +38,7 @@ interface KPIMetric {
   priority: 'high' | 'medium' | 'low';
 }
 
-const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, className = '' }) => {
+const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, className = '', onOpenActions }) => {
   const { currentProperty } = useProperty();
   const [monthExpenseTotal, setMonthExpenseTotal] = useState<number>(0);
   const [enforcementToday, setEnforcementToday] = useState<number>(0);
@@ -320,10 +321,14 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
       {/* Enforcement Alerts Banner - hidden on mobile (MobileQuickStats shows compact counters) */}
       <div className="hidden sm:block">
         <div
-          className={`rounded-lg border p-3 flex items-center gap-3 ${
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpenActions?.()}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenActions?.(); }}}
+          className={`rounded-lg border p-3 flex items-center gap-3 cursor-pointer ${
             enforcementToday + enforcementOverdue > 0
-              ? 'bg-amber-50 border-amber-200'
-              : 'bg-green-50 border-green-200'
+              ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+              : 'bg-green-50 border-green-200 hover:bg-green-100'
           }`}
         >
           <AlertCircle
