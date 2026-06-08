@@ -13,6 +13,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:receipt": "tsx scripts/test-openrouter-receipt.ts",
     "migrate:menu": "tsx scripts/apply-menu-migration.ts",
     "seed:menu": "tsx scripts/seed-menu.ts",
     "migrate:device-tokens": "tsx scripts/apply-device-tokens-migration.ts",
