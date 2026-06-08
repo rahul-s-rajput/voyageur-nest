@@ -13,6 +13,12 @@
  */
 import { readFileSync } from 'fs';
 import path from 'path';
+import { config as loadEnv } from 'dotenv';
+
+// Load the key from .env.local (preferred) then .env, without overriding any
+// value already present in the environment.
+loadEnv({ path: '.env.local' });
+loadEnv();
 
 const SYSTEM_PROMPT = [
   'You are a strict JSON extractor for receipts and invoices. Output only JSON without code fences.',
