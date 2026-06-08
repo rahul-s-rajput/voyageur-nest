@@ -102,16 +102,17 @@ describe('Data Validation Utils', () => {
   describe('isValidBookingStatus', () => {
     it('should return true for valid booking statuses', () => {
       expect(isValidBookingStatus('confirmed')).toBe(true);
+      expect(isValidBookingStatus('pending')).toBe(true);
       expect(isValidBookingStatus('checked-in')).toBe(true);
       expect(isValidBookingStatus('checked-out')).toBe(true);
-      expect(isValidBookingStatus('cancelled')).toBe(true);
       expect(isValidBookingStatus('no-show')).toBe(true);
     });
 
     it('should return false for invalid booking statuses', () => {
       expect(isValidBookingStatus('invalid')).toBe(false);
       expect(isValidBookingStatus('')).toBe(false);
-      expect(isValidBookingStatus('pending')).toBe(false);
+      // 'cancelled' is a separate boolean flag on Booking, not a status value
+      expect(isValidBookingStatus('cancelled')).toBe(false);
     });
   });
 

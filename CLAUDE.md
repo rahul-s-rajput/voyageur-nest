@@ -1,3 +1,147 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**Voyageur Nest** is a hotel/property booking management system for a guesthouse in Manali, India. It began as an invoice generator and grew into a full property-management suite: bookings, guest check-in, OTA calendar sync, F&B menu, expenses, analytics/KPIs, multilingual support, and a Telegram bot. It is a single-page React app backed by Supabase (Postgres + Auth + Storage + Realtime + Edge Functions).
+
+## Commands
+
+```bash
+npm run dev          # Start Vite dev server
+npm run build        # Production build
+npm run preview      # Preview production build
+npm run lint         # ESLint over the repo
+npm run typecheck    # tsc --noEmit (type-check only, no emit)
+
+npm run test                 # Vitest watch mode
+npm run test -- <pattern>    # Run a single test file/suite by name pattern
+npm run test:ui              # Vitest UI
+npm run test:coverage        # Coverage (v8 provider)
+npm run test:e2e             # E2E tests via vitest.e2e.config.ts
+
+# Data/migration helper scripts (run with tsx; need env vars set)
+npm run migrate:menu
+npm run seed:menu
+npm run backfill:translations
+npm run migrate:device-tokens
+npm run cleanup:device-tokens
+```
+
+There is no separate "run one test" script — use `npm run test -- <pattern>` (Vitest filters by file path / test name).
+
+### Node version (important on this machine)
+
+Vite 5 and Vitest 1.6 require **Node 18+**, but the default `node` on PATH here is **v16** (too old — Vitest/Vite will crash with module-resolution errors). Node 22 is installed via nvm. Run tooling with Node 22 explicitly:
+
+```bash
+# nvm-windows: switch the shell to Node 22, then use normal npm scripts
+nvm use 22.22.2
+
+# …or invoke the Node 22 binary directly (Git Bash), without switching:
+N22="/c/Users/rajpu/AppData/Local/nvm/v22.22.2"; export PATH="$N22:$PATH"
+node ./node_modules/typescript/lib/tsc.js --noEmit        # typecheck (verified clean)
+node ./node_modules/vitest/vitest.mjs run                 # run tests once (verified passing)
+node ./node_modules/vitest/vitest.mjs run src/services/ai # a single dir/file
+```
+
+`node_modules` is git-ignored and was not installed by default — run `npm install` (under Node 22) before typechecking/testing.
+
+## Environment
+
+Copy `.env.example` to `.env.local`. Required: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. Also used: `VITE_SUPABASE_SERVICE_ROLE_KEY` (scripts), `VITE_GEMINI_API_KEY` (AI translation/extraction), and `VITE_AI_*` flags for AI rate-limiting/debugging. All client vars must be `VITE_`-prefixed (Vite only exposes those to the browser).
+
+## Architecture
+
+### Routing & app shell (`src/App.tsx`)
+- Provider stack: `AuthErrorBoundary` → `AuthProvider` → `PropertyProvider` → `NotificationProvider` → `Router`.
+- Public routes: `/checkin/:bookingId` (+ `/hi` Hindi variant) for guest digital check-in, `/menu` (lazy-loaded F&B menu).
+- Admin routes: `/admin/*` wrapped in `ProtectedRoute requireAdmin`. Everything else redirects to `/admin`.
+- `AdminPage` (`src/pages/AdminPage.tsx`) is a tabbed dashboard; the active tab is synced to the URL (`/admin/<tab>`) and persisted in `localStorage`. Tabs: bookings, properties, analytics, guests, tokens, ota-calendar, manual-updates, menu, notifications-settings.
+- Note: `MainApp` in `App.tsx` holds legacy invoice/booking view state, but the live entry point is the `/admin` route tree, not `MainApp`.
+
+### Supabase access (`src/lib/supabase/`)
+- **Single unified client** in `src/lib/supabase/index.ts` — there is no separate "admin" vs "public" client. Public and authenticated access are both gated by **Row Level Security (RLS)** policies in the database. Uses PKCE flow, session persistence in localStorage, and realtime capped at 5 events/sec.
+- `src/lib/supabase.ts` is a backward-compat barrel that re-exports the client plus domain services (`bookingService`, `invoiceCounterService`, `checkInService`, `expenseService`, `bookingChargesService`, `bookingPaymentsService`) and monitoring helpers. Prefer importing from here for established services.
+- `index.ts` also exports an `api` object with ready-made queries and an `auth` helper. `getAdminClient()` exists for legacy device-token flows but returns the same unified client.
+
+### Layered design
+`components/` (UI) → `hooks/` (React Query + realtime wiring) → `services/` (business logic, the only place that talks to Supabase for domain data) → `lib/supabase` (client). Business logic lives in services, **not** components. Generated DB types are in `src/lib/types/database.types.ts` and type the client (`createClient<Database>`); hand-written domain types live in `src/types/`.
+
+### Multi-property model
+The app is multi-property. `PropertyContext` (`src/contexts/PropertyContext.tsx`) provides `currentProperty`, the `properties[]` list, and `gridCalendarSettings` (view type, date range, pricing toggle, selected rooms, booking source — persisted to localStorage with past-date validation). Most services/queries are scoped by `propertyId`; thread the current property id through new queries. DB-side, a `current_property_id()` SQL function (from JWT claim / request header) drives property-scoped RLS — **if unset it returns NULL and silently filters nothing**, so RLS must be tested in an auth-aware environment, not a bare anon client.
+
+### Edge Functions (`supabase/functions/`, Deno)
+Server-side logic that can't run in the browser: `parse-email`, `gmail-poll`, `gmail-auth-callback`, `send-email`, `send-sms`, `send-push`, `translation-worker`, and a full `telegram-bot` (with its own `features/`, `services/`, `state/`, `ui/`). These are **excluded from ESLint** (`supabase/functions/**`) and are **Deno, not Node** — they import from URLs (e.g. grammY from `deno.land/x`), use Deno APIs, and must not assume browser/Node globals.
+
+### Database migrations (`migrations/`)
+Raw `.sql` files applied manually (Supabase SQL editor) or via the `scripts/apply-*.ts` helpers, which run statements through an `exec_sql` RPC. There is no automatic migration runner in the build. The `supabase/` dir does **not** contain a `migrations/` folder — SQL lives in the top-level `migrations/`. Migration order matters for the financials subsystem (see below).
+
+## Subsystem deep-dives
+
+### Bookings & financials
+- **Money is modeled as charges + payments, aggregated by a DB view — not as columns on `bookings`.**
+  - `booking_charges` (types: `room | fnb | misc | discount | tax | service_fee`) and `booking_payments` (types: `payment | refund | adjustment`) are the source of truth. Both use **soft-voiding** (`is_voided`), never hard deletes; aggregates exclude voided rows. `amount` is computed server-side (`quantity × unit_amount`) to prevent tampering.
+  - The `booking_financials` **view** computes `gross_total`, `payments_total`, `balance_due`, and derived status (`no-charges | paid | partial | unpaid`). Read it via `bookingFinancialsService.getByBooking()` (read-only).
+  - On booking creation a `room` charge is auto-inserted from `total_amount` (`src/lib/supabase/services.ts`). **If you create bookings bypassing this, `booking_financials` shows `charges_total = 0`.**
+  - **Discounts and taxes are currently neutered** — the view hardcodes them to 0 (`booking_financials_remove_discounts_taxes.sql`). Those charge types are insertable but excluded from totals.
+  - Legacy `bookings.payment_status` / `payment_amount` still exist for back-compat and were backfilled into `booking_payments`. Treat the charges/payments tables as canonical.
+- Services: `bookingChargesService`, `bookingPaymentsService`, `bookingFinancialsService`, `bookingComplianceService` (enforcement-view counts), `bookingService` + `invoiceCounterService` (in `src/lib/supabase/services.ts`).
+- **Invoice/folio numbers** use the format `520/{counter}` from a single global `invoice_counter` table (starts at 391) — **not property-scoped**.
+- **DB triggers enforce property consistency**: a charge/payment's `property_id` must match its parent booking's.
+- **Date convention**: check-out is exclusive (overlap test is `check_in < end && check_out > start`); same-day checkout→checkin is allowed.
+- Availability/conflict logic: `roomBookingService`, `availabilityService`, `conflictDetectionService`.
+
+### OTA sync & email ingestion
+- **OTA calendar sync** (`icalService`, `otaPlatformService`, `otaMonitoringService`, `manualUpdateService`): iCal import/export (`Asia/Kolkata` TZ) for Airbnb/VRBO; Booking.com & GoMMT/MakeMyTrip are **manual-update** flows that generate human-readable checklists (`manual_update_checklists`). Property-specific platform configs override global ones (`property_ota_platforms` view). Sync health/alerts come from `ota_sync_logs` + `calendar_conflicts`.
+- **Email→booking pipeline is pull-based** (no webhook):
+  1. `gmail-poll` edge function (cron) refreshes OAuth, walks Gmail history, **sender allow-list** (booking.com / goibibo / go-mmt), upserts raw mail to `email_messages` (`processed=false`).
+  2. `parse-email` edge function drains `email_parse_queue`: Gemini classifies then extracts structured booking data → `email_ai_extractions` (+ `email_preview_cache`). Booking.com notification-only mails skip Gemini and infer event type from the subject.
+  3. **Client-side** `emailBookingImportService` turns extractions into booking create/modify/cancel, resolving property via `property_hint` (falls back to first property), linking guest profiles, and thread-linking follow-up emails. Auto-imports at confidence ≥ 0.8, else flagged for review.
+- Client mirror/heuristic parser: `aiEmailParserService` (modes `heuristic | gemini | auto`). Receipts: `receiptAIExtractionService` + telegram-bot's `lib/receipt-extractor.ts`.
+
+### Analytics, KPIs & AI insights
+- **All KPI aggregation happens client-side** in services (`analytics/kpiCalculator`, `bookingAnalyticsService`, `expenseAnalyticsService`, `chartDataService`), surfaced through React Query hooks (`useKPI`, `useChartData`, `useOverviewAnalytics`) with ~5min stale time. Occupancy needs an accurate `totalRooms` (0 ⇒ 0%); use `expenseAnalyticsService` (applies shared-expense fractioning) rather than querying `expenses` directly to avoid double-counting. Some `chartDataService` paths return mock data when empty.
+- **Realtime stack** (`analytics/RealtimeManager` orchestrating `UpdateQueue`, `CrossTabSync`, `OfflineQueue`): subscribes to `bookings`/`expenses` Postgres changes for the current property, throttles/batches updates (DELETE>UPDATE>INSERT) to invalidate React Query caches, dedupes work across tabs via BroadcastChannel leader election, and queues offline changes in IndexedDB. Note `OfflineQueue` sync is currently stubbed; `RealtimeManager` is per-property (re-init on switch).
+- **AI service** (`src/services/ai/`, Gemini `gemini-2.5-flash`): `AIService` → `PromptBuilder` → `RateLimiter` (client-only sliding window, `VITE_AI_RPM` default 6) → `geminiClient` → `AIResponseValidator` (schema + coverage check) → `AIResponseCache` (10min in-memory). On any failure it falls back to heuristic insights (`AIFallbackService`); results always carry usage/cost meta. Tuned via `VITE_AI_*` env flags.
+
+### Auth, RLS & guest check-in
+- **Hybrid admin auth** (`AuthContext`, `AdminAuth`): Supabase email/password by default, plus an optional **legacy device-token** system (UUID in `device_tokens`, stored in `localStorage` as `admin_device_token`) gated by `VITE_ENABLE_DEVICE_TOKEN_AUTH`. Sessions auto-refresh (~50min) and sync across tabs via BroadcastChannel/localStorage (`src/lib/auth/`). Admin role comes from `admin_profiles`/`user_roles` + `is_admin()` SQL helper.
+- **RLS tiers**: public (menu, room_types, properties), mixed (bookings/guest_profiles — anon can create, sometimes select/update for check-in), admin-only (expenses, notifications, audit_log). Anon guest-profile access is intentionally broad to support check-in matching — keep that in mind for privacy.
+- **Guest check-in flow**: `QRCodeGenerator` → public `/checkin/:bookingId` → `CheckInForm` (rate-limited via `serverRateLimiter`, auto-matches/creates guest profile by email then phone) → `IDPhotoUpload` validates by magic-number, compresses, and uploads to the **private `id-documents`** bucket with 1-year signed URLs (`src/lib/storage.ts`). Data lands in `checkin_data` (`src/types/checkin.ts`).
+
+### F&B, i18n, notifications, Telegram bot
+- **F&B menu**: public `/menu` (`components/FnB/MenuPage.tsx`, `menuService`, `menuStorage` → `menu-photos` bucket with 1h signed URLs). Localized names come from `menu_category_translations`/`menu_item_translations` with English fallback; seed via `npm run seed:menu`.
+- **Translations**: three layers — `lib/translation.ts` (Gemini batch translate + localStorage cache), `lib/translationService.ts` (`databaseTranslationService` singleton: synchronous English fallback that upgrades to a DB `translations` table), and the `translation-worker` edge function (fills `*_translations` tables from `translation_jobs`). UI uses `useTranslation()` (`t`/`tAsync`).
+- **Notifications**: `notificationService` (realtime channel on `notifications` + web push via `public/notifications-sw.js` and VAPID key, persisted to `notification_subscriptions`; delivery over in-app/email/SMS/webhook edge functions) and a `reminderService` rule engine (schedule/condition/event triggers).
+- **Telegram bot** (`supabase/functions/telegram-bot/`, grammY): whitelisted-user bot with a wizard **state machine** (`state/wizard.ts` → `bot_wizard_state` table) for creating bookings, adding charges/payments, and logging expenses (manual or AI receipt OCR). Organized into `features/` (core, booking, today, expense, report) over `services/`.
+
+### Room grid calendar (core scheduling UI)
+`components/RoomGridCalendar/` is a **custom grid** (no react-big-calendar; `react-big-calendar` exists only in older `BookingCalendar.tsx`). `ResponsiveGridCalendar` branches to Mobile/Tablet/Desktop views via `useBreakpoint()` (from `useWindowSize`), with swipe (Framer Motion) and long-press (`useLongPress`) on mobile cells. Data comes from `useGridCalendar`; live updates from `useRealTimeGrid` (Supabase `bookings` subscription). Wrap in `GridCalendarErrorBoundary`.
+
+## Conventions
+
+- **Path aliases** (`vite.config.ts` + `vitest.config.ts`): `@` → `src`, plus `@/components`, `@/lib`, `@/ui`, `@/hooks`, `@/utils`.
+- **UI stack — default to shadcn/Radix + Tailwind**: `src/components/ui/` holds ~50 shadcn-style primitives built on Radix, using the `cn()` helper (`clsx` + `tailwind-merge`, `src/lib/utils.ts`) and `class-variance-authority` for variants (`components.json`, slate base). Reserve **MUI** for data grids (`@mui/x-data-grid`) and date pickers (`@mui/x-date-pickers`, `LocalizationProvider` in `main.tsx`); PrimeReact appears in a few data-heavy spots. **Icons**: `lucide-react` is the default, `@heroicons/react` for some navigation. Match the surrounding component when editing.
+- **Dates/time**: standardize on **IST (Asia/Kolkata)**; see IST helpers in `App.tsx`. `date-fns`, `dayjs`, and `moment` all appear — use whichever the file already uses.
+- **PDF/Excel export**: invoices use `@react-pdf/renderer` (`src/lib/pdf/`, custom font handling for the ₹ symbol); spreadsheets use `xlsx-js-style` (`src/lib/*ExcelExport.ts`).
+- **Testing**: Vitest + Testing Library + jsdom. `src/tests/setup.ts` starts an **MSW** server with `onUnhandledRequest: 'error'` (unmocked requests fail), mocks `react-hot-toast` + `matchMedia`, and sets dummy Supabase env vars. Tests live in `src/tests/{unit,integration,e2e}`, `src/**/__tests__/`, and co-located `*.test.ts(x)`. Run one with `npm run test -- <pattern>`.
+- **State**: TanStack Query for server state; React Context for cross-cutting state (auth, property, notifications). Realtime goes through Supabase channels (analytics `RealtimeManager`, grid hooks).
+- **Responsive/mobile**: breakpoints from `useBreakpoint()` (mobile <640, tablet 640–1024, desktop ≥1024, plus small/medium/large mobile); enforce touch targets (`min-h-[44px] md:min-h-[36px]`).
+
+## Reference docs
+
+- `docs/architecture/{tech-stack,source-tree,coding-standards}.md` — partly **aspirational/templated** (e.g. `source-tree.md` describes a `pages/`-heavy layout that doesn't match the actual `components/`-centric tree, and lists tools like Sentry/Resend/Twilio/Stripe that aren't all wired up). **Trust the actual source tree over these.**
+- `docs/implementation-plans/`, `docs/implementation/`, and `docs/stories/` — feature plans and BMAD-style user stories (this repo uses the BMAD agent framework; configs in `.bmad-core/`, mirrored in `.trae/`).
+- Root-level `*_FIX.md` / `*_GUIDE.md` files document specific past fixes (check-in, expense approval, guest profile linking/RLS, tokens, translations, Excel export, pricing-rules auth).
+
+---
+
+# UI Design Mode (superdesign)
+
+The instructions below apply only when explicitly asked to design UI / frontend interfaces.
+
 When asked to design UI & frontend interface
 When asked to design UI & frontend interface
 # Role

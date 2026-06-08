@@ -37,6 +37,7 @@ export class RealtimeManager {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private isActive = false;
 
   constructor(config: RealtimeManagerConfig) {
     this.config = config;
@@ -55,6 +56,7 @@ export class RealtimeManager {
 
   async initialize() {
     try {
+      this.isActive = true;
       // Initialize subsystems
       await Promise.all([
         this.crossTabSync.initialize(),
@@ -127,8 +129,10 @@ export class RealtimeManager {
   }
 
   private handleBookingChange(payload: RealtimePostgresChangesPayload<any>) {
+    // Ignore stale events that arrive after cleanup/teardown.
+    if (!this.isActive) return;
     console.log('Booking change detected:', payload);
-    
+
     const update: DataUpdate = {
       type: 'booking',
       event: payload.eventType,
@@ -150,8 +154,10 @@ export class RealtimeManager {
   }
 
   private handleExpenseChange(payload: RealtimePostgresChangesPayload<any>) {
+    // Ignore stale events that arrive after cleanup/teardown.
+    if (!this.isActive) return;
     console.log('Expense change detected:', payload);
-    
+
     const update: DataUpdate = {
       type: 'expense',
       event: payload.eventType,
@@ -256,8 +262,9 @@ export class RealtimeManager {
       try {
         // Unsubscribe existing channels
         await this.cleanup();
-        
-        // Reinitialize channels
+
+        // Reinitialize channels (reactivate after cleanup deactivated us)
+        this.isActive = true;
         this.setupBookingsChannel();
         this.setupExpensesChannel();
         
@@ -328,6 +335,9 @@ export class RealtimeManager {
   }
 
   public async cleanup() {
+    // Mark inactive so any stale events arriving after teardown are ignored.
+    this.isActive = false;
+
     // Clean up channels
     for (const channel of this.channels.values()) {
       await supabase.removeChannel(channel);

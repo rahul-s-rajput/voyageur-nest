@@ -91,25 +91,36 @@ vi.mock('../../../lib/supabase', () => ({
 }));
 
 // Mock PropertyContext
+const mockCurrentProperty = {
+  id: 'test-property-id',
+  name: 'Test Property',
+  address: 'Test Address',
+  phone: '123-456-7890',
+  email: 'test@example.com',
+  totalRooms: 10,
+  isActive: true,
+  createdAt: '2024-01-01T00:00:00Z',
+  updatedAt: '2024-01-01T00:00:00Z'
+};
+
 vi.mock('../../../contexts/PropertyContext', () => ({
   PropertyProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   useProperty: () => ({
-    currentProperty: {
-      id: 'test-property-id',
-      name: 'Test Property',
-      address: 'Test Address',
-      phone: '123-456-7890',
-      email: 'test@example.com',
-      totalRooms: 10,
-      isActive: true,
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
-    },
-    properties: [],
+    currentProperty: mockCurrentProperty,
+    properties: [mockCurrentProperty],
     switchProperty: vi.fn(),
     isLoading: false,
     error: null
-  })
+  }),
+  // Derived hooks consumed by child components (MobileQuickStats, EnhancedKPIDashboard)
+  useCurrentPropertyId: () => mockCurrentProperty.id,
+  useIsMultiProperty: () => false,
+  usePropertyOperations: () => ({
+    addProperty: vi.fn(),
+    updateProperty: vi.fn(),
+    deleteProperty: vi.fn(),
+    refreshProperties: vi.fn(),
+  }),
 }));
 
 const mockBookings = [
@@ -165,7 +176,7 @@ describe('HomePage', () => {
     renderWithPropertyContext();
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
     
     // Should show calendar view by default (not list)
@@ -178,7 +189,7 @@ describe('HomePage', () => {
     renderWithPropertyContext({ onViewModeChange: mockOnViewModeChange });
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Initially should show calendar view (CalendarViewManager)
@@ -203,7 +214,7 @@ describe('HomePage', () => {
     renderWithPropertyContext();
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Should have Grid button
@@ -215,7 +226,7 @@ describe('HomePage', () => {
     renderWithPropertyContext({ onViewModeChange: mockOnViewModeChange });
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Click Grid view button
@@ -231,7 +242,7 @@ describe('HomePage', () => {
     renderWithPropertyContext({ onSelectBooking: mockOnSelectBooking });
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Click select booking button in calendar view
@@ -250,7 +261,7 @@ describe('HomePage', () => {
     });
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Should show booking list in list view mode
@@ -268,7 +279,7 @@ describe('HomePage', () => {
     renderWithPropertyContext();
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     expect(screen.getByRole('button', { name: /new booking/i })).toBeInTheDocument();
@@ -278,7 +289,7 @@ describe('HomePage', () => {
     renderWithPropertyContext();
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     const newBookingButton = screen.getByRole('button', { name: /new/i });
@@ -294,7 +305,7 @@ describe('HomePage', () => {
     renderWithPropertyContext();
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Should have filter toggle buttons
@@ -312,7 +323,7 @@ describe('HomePage', () => {
     renderWithPropertyContext();
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Component should render without errors on mobile
@@ -327,7 +338,7 @@ describe('HomePage', () => {
     );
     
     await waitFor(() => {
-      expect(screen.getByText('Total Bookings')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
 
     // Should show list view

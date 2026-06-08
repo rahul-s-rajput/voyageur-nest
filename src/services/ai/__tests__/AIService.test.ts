@@ -78,12 +78,18 @@ describe('AIService.generateInsights (fallback + cache + meta)', () => {
     expect(typeof res1.meta.promptTokens).toBe('number');
     expect(typeof res1.meta.responseTokens).toBe('number');
 
+    // rule-based-only: zero-cost meta, never an LLM model
+    expect(res1.meta.cost).toBe(0);
+    expect(res1.meta.model).not.toMatch(/gemini/i);
+
     const ids = new Set(res1.insights.map(i => i.id));
     expect(ids.has('rev_drop')).toBe(true);
     expect(ids.has('low_occ')).toBe(true);
     expect(ids.has('high_expenses')).toBe(true);
     expect(ids.has('high_cancellations')).toBe(true);
     expect(ids.has('short_stays')).toBe(true);
+    // new deterministic rule fires on the fixture (conversion 20% < 60%)
+    expect(ids.has('low_conversion')).toBe(true);
 
     // Second call should hit cache
     const res2 = await AIService.generateInsights(ctx);

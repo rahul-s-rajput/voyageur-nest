@@ -32,8 +32,7 @@ vi.mock('./DesktopGridView', () => ({
 
 // Now import everything after mocks
 import { ResponsiveGridCalendar } from './ResponsiveGridCalendar';
-import { Room } from '../../types/property';
-import { Booking } from '../../types/booking';
+import { Room, RoomGridData } from '../../types/property';
 import { useBreakpoint } from '../../hooks/useWindowSize';
 
 const mockRooms: Room[] = [
@@ -65,19 +64,21 @@ const mockRooms: Room[] = [
   },
 ];
 
-const mockBookings: Booking[] = [
-  {
-    id: '1',
-    roomNo: '101',
-    guestName: 'John Doe',
-    checkIn: '2024-01-15',
-    checkOut: '2024-01-17',
-    status: 'confirmed',
-    totalAmount: 10000,
-    createdAt: '2024-01-01',
-    updatedAt: '2024-01-01'
+// The component consumes `gridData: RoomGridData[]`, deriving rooms/availability from it.
+const mockGridData: RoomGridData[] = mockRooms.map(room => ({
+  room,
+  availability: {
+    '2024-01-15': { status: 'available', price: room.basePrice },
+    '2024-01-16': { status: 'available', price: room.basePrice },
+    '2024-01-17': { status: 'available', price: room.basePrice },
   },
-];
+  bookings: [],
+  pricing: {
+    '2024-01-15': room.basePrice,
+    '2024-01-16': room.basePrice,
+    '2024-01-17': room.basePrice,
+  },
+}));
 
 const mockDateRange = [
   new Date('2024-01-15'),
@@ -87,9 +88,8 @@ const mockDateRange = [
 
 describe('ResponsiveGridCalendar', () => {
   const defaultProps = {
-    rooms: mockRooms,
+    gridData: mockGridData,
     dateRange: mockDateRange,
-    bookings: mockBookings,
   };
 
   beforeEach(() => {
@@ -219,7 +219,7 @@ describe('ResponsiveGridCalendar', () => {
     expect(screen.getByTestId('mobile-grid')).toBeInTheDocument();
   });
 
-  it('properly passes bookingsByRoom to child components', () => {
+  it('properly derives rooms from gridData for child components', () => {
     const mockedUseBreakpoint = vi.mocked(useBreakpoint);
     mockedUseBreakpoint.mockReturnValue({
       isMobile: false,
@@ -228,39 +228,10 @@ describe('ResponsiveGridCalendar', () => {
       width: 1024,
     });
 
-    const multipleBookings: Booking[] = [
-      ...mockBookings,
-      {
-        id: '2',
-        roomNo: '102',
-        guestName: 'Jane Smith',
-        checkIn: '2024-01-16',
-        checkOut: '2024-01-18',
-        status: 'pending',
-        totalAmount: 15000,
-        createdAt: '2024-01-01',
-        updatedAt: '2024-01-01'
-      },
-      {
-        id: '3',
-        roomNo: '101',
-        guestName: 'Bob Johnson',
-        checkIn: '2024-01-18',
-        checkOut: '2024-01-20',
-        status: 'confirmed',
-        totalAmount: 10000,
-        createdAt: '2024-01-01',
-        updatedAt: '2024-01-01'
-      }
-    ];
+    render(<ResponsiveGridCalendar {...defaultProps} />);
 
-    render(
-      <ResponsiveGridCalendar 
-        {...defaultProps}
-        bookings={multipleBookings}
-      />
-    );
-    
+    // The desktop view receives the rooms extracted from gridData.
     expect(screen.getByTestId('desktop-grid')).toBeInTheDocument();
+    expect(screen.getByText('Desktop Grid - 2 rooms')).toBeInTheDocument();
   });
 });

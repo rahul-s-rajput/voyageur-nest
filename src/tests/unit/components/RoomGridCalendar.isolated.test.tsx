@@ -33,6 +33,18 @@ vi.mock('date-fns', () => ({
   endOfWeek: vi.fn((date) => new Date(date)),
   startOfMonth: vi.fn((date) => new Date(date)),
   endOfMonth: vi.fn((date) => new Date(date)),
+  startOfDay: vi.fn((date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }),
+  differenceInCalendarDays: vi.fn((later, earlier) => {
+    const a = new Date(later);
+    const b = new Date(earlier);
+    a.setHours(0, 0, 0, 0);
+    b.setHours(0, 0, 0, 0);
+    return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
+  }),
   eachDayOfInterval: vi.fn(({ start, end }) => {
     const dates = [];
     const current = new Date(start);
@@ -314,23 +326,20 @@ describe('RoomGridCalendar - Isolated Tests', () => {
 
   describe('Error Handling', () => {
     it('should handle retry button click', () => {
-      const mockReload = vi.fn();
-      Object.defineProperty(window, 'location', {
-        value: { reload: mockReload },
-        writable: true
-      });
-
+      const mockRefreshData = vi.fn();
       mockUseGridCalendar.mockReturnValue({
         ...defaultHookReturn,
-        error: 'Test error'
+        error: 'Test error',
+        refreshData: mockRefreshData
       });
 
       render(<RoomGridCalendar {...defaultProps} />, { wrapper: TestWrapper });
-      
+
       const retryButton = screen.getByText('Retry');
       fireEvent.click(retryButton);
-      
-      expect(mockReload).toHaveBeenCalled();
+
+      // Retry triggers the hook's refreshData (re-fetch), not a full page reload
+      expect(mockRefreshData).toHaveBeenCalled();
     });
   });
 });

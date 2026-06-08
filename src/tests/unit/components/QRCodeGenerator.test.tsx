@@ -11,6 +11,19 @@ vi.mock('qrcode.react', () => ({
   ),
 }))
 
+// Mock the notification hook so the component can render without a full
+// NotificationProvider (which pulls in Supabase realtime subscriptions).
+const mockShowSuccess = vi.fn()
+vi.mock('../../../components/NotificationContainer', () => ({
+  useNotification: () => ({
+    showSuccess: mockShowSuccess,
+    showError: vi.fn(),
+    showWarning: vi.fn(),
+    showInfo: vi.fn(),
+    showNotification: vi.fn(),
+  }),
+}))
+
 // Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
@@ -84,7 +97,7 @@ describe('QRCodeGenerator', () => {
     // Wait for the async operation
     await new Promise(resolve => setTimeout(resolve, 0))
 
-    expect(global.alert).toHaveBeenCalledWith('Check-in link copied to clipboard!')
+    expect(mockShowSuccess).toHaveBeenCalledWith('Copied!', 'Check-in link copied to clipboard!')
   })
 
   it('should handle clipboard copy failure gracefully', async () => {
@@ -103,7 +116,7 @@ describe('QRCodeGenerator', () => {
     // Wait for the async operation
     await new Promise(resolve => setTimeout(resolve, 0))
 
-    expect(global.alert).toHaveBeenCalledWith('Check-in link copied to clipboard!')
+    expect(mockShowSuccess).toHaveBeenCalledWith('Copied!', 'Check-in link copied to clipboard!')
   })
 
   it('should render download button', () => {

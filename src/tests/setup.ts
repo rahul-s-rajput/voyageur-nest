@@ -10,6 +10,11 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
   cleanup()
   server.resetHandlers()
+  // Prevent state leaking across tests (e.g. PropertyContext persists the
+  // selected property id to localStorage, which would otherwise bleed into
+  // later tests and make ordering matter).
+  try { window.localStorage.clear() } catch {}
+  try { window.sessionStorage.clear() } catch {}
 })
 
 // Close server after all tests

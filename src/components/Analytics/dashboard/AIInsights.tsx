@@ -55,7 +55,7 @@ export function AIInsights() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>AI Insights Error</CardTitle>
+          <CardTitle>Insights Error</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-red-600">{error instanceof Error ? error.message : 'Failed to load AI insights'}</p>
@@ -68,7 +68,7 @@ export function AIInsights() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">AI Insights</h2>
+        <h2 className="text-xl font-semibold">Insights</h2>
         <Button variant="outline" onClick={handleRefresh} disabled={isFetching}>Refresh</Button>
       </div>
 

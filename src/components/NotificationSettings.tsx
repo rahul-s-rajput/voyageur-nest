@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { notificationService, type NotificationConfig, type NotificationType } from '../services/notificationService';
 
 const NOTIFICATION_TYPES: { value: NotificationType; label: string }[] = [
-  { value: 'email_parsed', label: 'New Email Parsed (OTA)' },
   { value: 'booking_event', label: 'Booking Events (New/Modify/Cancel)' },
   { value: 'expense_event', label: 'Expense Events (Approve/Reject)' },
   { value: 'budget_event', label: 'Budget Events (Create/Update/Delete)' },

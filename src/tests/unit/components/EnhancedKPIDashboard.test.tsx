@@ -1,11 +1,14 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import EnhancedKPIDashboard from '../../../components/EnhancedKPIDashboard';
 import { Booking } from '../../../types/booking';
 import { Property } from '../../../types/property';
+import { useProperty } from '../../../contexts/PropertyContext';
 
-// Mock the PropertyContext
+// Mock the PropertyContext.
+// useProperty is mocked as a vi.fn so individual tests can override its return
+// value (e.g. zero-room property, missing property) via mockReturnValue.
 const mockCurrentProperty: Property = {
   id: 'prop-1',
   name: 'Test Property',
@@ -16,10 +19,29 @@ const mockCurrentProperty: Property = {
 };
 
 vi.mock('../../../contexts/PropertyContext', () => ({
-  useProperty: () => ({
+  useProperty: vi.fn(() => ({
     currentProperty: mockCurrentProperty
-  })
+  }))
 }));
+
+const mockedUseProperty = vi.mocked(useProperty);
+
+// Each KPI metric renders inside a card as a `label` div followed by a sibling
+// `value` div (and optional `subValue` div). Many cards share the same bare
+// value (e.g. several "1"s), so assertions must be scoped to a specific metric
+// by its label rather than using a global getByText.
+const getMetricCard = (label: string): HTMLElement => {
+  const labelEl = screen.getByText(label);
+  // The label and value live inside the same `.flex-1` wrapper within the card.
+  const wrapper = labelEl.parentElement as HTMLElement;
+  expect(wrapper).toBeTruthy();
+  return wrapper;
+};
+
+const expectMetricValue = (label: string, value: string) => {
+  const card = getMetricCard(label);
+  expect(within(card).getByText(value)).toBeInTheDocument();
+};
 
 // Mock MobileQuickStats component
 vi.mock('../../../components/MobileQuickStats', () => ({
@@ -55,6 +77,8 @@ describe('EnhancedKPIDashboard', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Restore the default property after any per-test override.
+    mockedUseProperty.mockReturnValue({ currentProperty: mockCurrentProperty } as ReturnType<typeof useProperty>);
   });
 
   describe('Data Validation', () => {
@@ -67,9 +91,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should only count the valid booking
-      expect(screen.getByText('1')).toBeInTheDocument(); // Active Bookings count
+      expectMetricValue('Active Bookings', '1');
     });
 
     it('should filter out bookings with invalid amounts', () => {
@@ -81,9 +105,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should only count the valid booking
-      expect(screen.getByText('1')).toBeInTheDocument(); // Active Bookings count
+      expectMetricValue('Active Bookings', '1');
     });
 
     it('should filter out cancelled bookings', () => {
@@ -94,9 +118,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should count only non-cancelled bookings
-      expect(screen.getByText('2')).toBeInTheDocument(); // Active Bookings count
+      expectMetricValue('Active Bookings', '2');
     });
   });
 
@@ -118,16 +142,16 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // 2 occupied rooms out of 10 total = 20% occupancy
-      expect(screen.getByText('20% rate')).toBeInTheDocument();
+      expectMetricValue('Current Occupancy', '20% rate');
     });
 
     it('should handle zero total rooms gracefully', () => {
       const mockPropertyWithZeroRooms = { ...mockCurrentProperty, totalRooms: 0 };
-      vi.mocked(require('../../../contexts/PropertyContext').useProperty).mockReturnValue({
+      mockedUseProperty.mockReturnValue({
         currentProperty: mockPropertyWithZeroRooms
-      });
+      } as ReturnType<typeof useProperty>);
 
       const bookings = [
         createMockBooking({ 
@@ -138,9 +162,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should show 0% when no rooms available
-      expect(screen.getByText('0% rate')).toBeInTheDocument();
+      expectMetricValue('Current Occupancy', '0% rate');
     });
   });
 
@@ -160,9 +184,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Total revenue should be 3000, paid revenue should be 2800
-      expect(screen.getByText('₹3.0k')).toBeInTheDocument(); // Total Revenue
+      expectMetricValue('Total Revenue', '₹3.0k');
     });
 
     it('should calculate partial payments correctly', () => {
@@ -180,9 +204,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Pending should be 3000 - 500 = 2500
-      expect(screen.getByText('₹2.5k')).toBeInTheDocument(); // Pending Payments
+      expectMetricValue('Pending Payments', '₹2.5k');
     });
 
     it('should handle missing paymentAmount gracefully', () => {
@@ -195,9 +219,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should use totalAmount when paymentAmount is missing for paid bookings
-      expect(screen.getByText('₹1.0k')).toBeInTheDocument(); // Total Revenue
+      expectMetricValue('Total Revenue', '₹1.0k');
     });
   });
 
@@ -210,28 +234,32 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should show 1 check-in today and 1 check-out today
-      const todayCheckIns = screen.getAllByText('1')[0]; // First occurrence should be check-ins
-      expect(todayCheckIns).toBeInTheDocument();
+      expectMetricValue('Today Check-ins', '1');
+      expectMetricValue('Today Check-outs', '1');
     });
 
     it('should calculate this month bookings correctly', () => {
       const thisMonth = new Date().getMonth();
       const thisYear = new Date().getFullYear();
       const thisMonthDate = new Date(thisYear, thisMonth, 15).toISOString().split('T')[0];
+      const thisMonthCheckout = new Date(thisYear, thisMonth, 16).toISOString().split('T')[0];
       const lastMonthDate = new Date(thisYear, thisMonth - 1, 15).toISOString().split('T')[0];
+      const lastMonthCheckout = new Date(thisYear, thisMonth - 1, 16).toISOString().split('T')[0];
 
+      // checkOut must be after checkIn or the booking is filtered out as invalid;
+      // the component attributes "This Month" by the booking's checkIn month.
       const bookings = [
-        createMockBooking({ checkIn: thisMonthDate }),
-        createMockBooking({ checkIn: lastMonthDate }),
-        createMockBooking({ checkIn: thisMonthDate })
+        createMockBooking({ checkIn: thisMonthDate, checkOut: thisMonthCheckout }),
+        createMockBooking({ checkIn: lastMonthDate, checkOut: lastMonthCheckout }),
+        createMockBooking({ checkIn: thisMonthDate, checkOut: thisMonthCheckout })
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should count only this month's bookings (2)
-      expect(screen.getByText('2')).toBeInTheDocument(); // This Month count
+      expectMetricValue('This Month', '2');
     });
   });
 
@@ -245,17 +273,17 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // 2 paid out of 4 total = 50%
-      expect(screen.getByText('50%')).toBeInTheDocument(); // Payment Rate
+      expectMetricValue('Payment Rate', '50%');
       expect(screen.getByText('2/4 paid')).toBeInTheDocument();
     });
 
     it('should handle empty bookings array', () => {
       render(<EnhancedKPIDashboard bookings={[]} />);
-      
+
       // Should show 0% payment rate
-      expect(screen.getByText('0%')).toBeInTheDocument();
+      expectMetricValue('Payment Rate', '0%');
       expect(screen.getByText('0/0 paid')).toBeInTheDocument();
     });
   });
@@ -274,21 +302,21 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Average should be (2 + 4) / 2 = 3.0 days
-      expect(screen.getByText('3.0 days')).toBeInTheDocument();
+      expectMetricValue('Avg Stay', '3.0 days');
     });
   });
 
   describe('Property Context Integration', () => {
     it('should recalculate KPIs when property changes', () => {
       const { rerender } = render(<EnhancedKPIDashboard bookings={[]} />);
-      
+
       // Mock property change
       const newProperty = { ...mockCurrentProperty, totalRooms: 20 };
-      vi.mocked(require('../../../contexts/PropertyContext').useProperty).mockReturnValue({
+      mockedUseProperty.mockReturnValue({
         currentProperty: newProperty
-      });
+      } as ReturnType<typeof useProperty>);
 
       rerender(<EnhancedKPIDashboard bookings={[]} />);
       
@@ -297,9 +325,9 @@ describe('EnhancedKPIDashboard', () => {
     });
 
     it('should handle missing property gracefully', () => {
-      vi.mocked(require('../../../contexts/PropertyContext').useProperty).mockReturnValue({
+      mockedUseProperty.mockReturnValue({
         currentProperty: null
-      });
+      } as ReturnType<typeof useProperty>);
 
       const bookings = [
         createMockBooking({ 
@@ -310,9 +338,9 @@ describe('EnhancedKPIDashboard', () => {
       ];
 
       render(<EnhancedKPIDashboard bookings={bookings} />);
-      
+
       // Should show 0% occupancy when no property is selected
-      expect(screen.getByText('0% rate')).toBeInTheDocument();
+      expectMetricValue('Current Occupancy', '0% rate');
     });
   });
 });

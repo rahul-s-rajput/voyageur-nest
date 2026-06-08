@@ -25,29 +25,24 @@ vi.mock('../../../lib/supabase', () => ({
   getAdminClient: vi.fn()
 }))
 
-// Mock RoomBookingService
+// Mock RoomBookingService.
+// getPropertyRoomsWithBookings dynamically imports the `roomBookingService`
+// SINGLETON (not the class) and calls getBatchRoomAvailability on it, so the
+// mock module must export that singleton instance.
+const mockRoomBookingService = {
+  getBatchRoomAvailability: vi.fn(),
+  getBookingsForRoom: vi.fn()
+}
 vi.mock('../../../services/roomBookingService', () => ({
-  RoomBookingService: vi.fn().mockImplementation(() => ({
-    getRoomAvailability: vi.fn(),
-    getBookingsForRoom: vi.fn()
-  }))
+  RoomBookingService: vi.fn().mockImplementation(() => mockRoomBookingService),
+  roomBookingService: mockRoomBookingService
 }))
 
 describe('PropertyService - Room Grid Data', () => {
   let propertyService: PropertyService
-  let mockRoomBookingService: any
 
   beforeEach(() => {
     propertyService = new PropertyService()
-    mockRoomBookingService = {
-      getRoomAvailability: vi.fn(),
-      getBookingsForRoom: vi.fn()
-    }
-    
-    // Mock the dynamic import
-    vi.doMock('../../../services/roomBookingService', () => ({
-      RoomBookingService: vi.fn().mockImplementation(() => mockRoomBookingService)
-    }))
   })
 
   afterEach(() => {
@@ -117,18 +112,30 @@ describe('PropertyService - Room Grid Data', () => {
       '2024-01-03': 6000
     }
 
+    // Build batch-shaped (keyed by room number) responses from the per-room
+    // fixtures so every room in a test resolves to the same availability/pricing.
+    const buildBatchAvailability = (rooms: Room[]) =>
+      Object.fromEntries(rooms.map(r => [r.roomNumber, mockAvailability]))
+    const buildBatchPricing = (rooms: Room[]) =>
+      Object.fromEntries(rooms.map(r => [r.roomNumber, mockPricing]))
+
     beforeEach(() => {
+      mockRoomBookingService.getBatchRoomAvailability.mockReset()
+      mockRoomBookingService.getBookingsForRoom.mockReset()
+
       // Mock getRooms method
       vi.spyOn(propertyService, 'getRooms').mockResolvedValue(mockRooms)
-      
-      // Mock getRoomPricingForDates method
-      vi.spyOn(propertyService, 'getRoomPricingForDates').mockResolvedValue(mockPricing)
-      
-      // Mock room booking service methods
-      mockRoomBookingService.getRoomAvailability.mockResolvedValue(mockAvailability)
-      
-      // Mock private method getPropertyBookingsForRoom
-      vi.spyOn(propertyService as any, 'getPropertyBookingsForRoom').mockResolvedValue(mockBookings)
+
+      // Batch availability comes from the roomBookingService singleton.
+      mockRoomBookingService.getBatchRoomAvailability.mockResolvedValue(
+        buildBatchAvailability(mockRooms)
+      )
+
+      // Batch bookings + batch pricing are private PropertyService methods.
+      vi.spyOn(propertyService as any, 'getBatchPropertyBookings').mockResolvedValue(mockBookings)
+      vi.spyOn(propertyService as any, 'getBatchRoomPricing').mockResolvedValue(
+        buildBatchPricing(mockRooms)
+      )
     })
 
     it('should return complete room grid data for all rooms', async () => {
@@ -139,16 +146,19 @@ describe('PropertyService - Room Grid Data', () => {
       )
 
       expect(result).toHaveLength(2)
+      // Source adds a `roomNo` compatibility field onto each room.
       expect(result[0]).toEqual({
-        room: mockRooms[0],
+        room: { ...mockRooms[0], roomNo: mockRooms[0].roomNumber },
         availability: mockAvailability,
+        // mockBookings is for room '101', and the source filters bookings by
+        // roomNo === room.roomNumber, so only room 101 receives them.
         bookings: mockBookings,
         pricing: mockPricing
       })
       expect(result[1]).toEqual({
-        room: mockRooms[1],
+        room: { ...mockRooms[1], roomNo: mockRooms[1].roomNumber },
         availability: mockAvailability,
-        bookings: mockBookings,
+        bookings: [],
         pricing: mockPricing
       })
     })
@@ -255,11 +265,17 @@ describe('PropertyService - Room Grid Data', () => {
       expect(result.map(r => r.room.roomNumber)).toContain('Penthouse')
     })
 
-    it('should handle individual room processing errors gracefully', async () => {
-      // Mock one room to fail
-      mockRoomBookingService.getRoomAvailability
-        .mockResolvedValueOnce(mockAvailability)
-        .mockRejectedValueOnce(new Error('Room service error'))
+    it('should fall back to empty data for rooms missing from the batch results', async () => {
+      // The batch implementation builds the grid from batch maps keyed by room
+      // number. If a room is absent from the availability/pricing maps (e.g. it
+      // had no data), the source falls back to {} for that room rather than
+      // failing the whole request. Provide data only for room 101.
+      mockRoomBookingService.getBatchRoomAvailability.mockResolvedValue({
+        '101': mockAvailability
+      })
+      ;(propertyService as any).getBatchRoomPricing.mockResolvedValue({
+        '101': mockPricing
+      })
 
       const result = await propertyService.getPropertyRoomsWithBookings(
         mockPropertyId,
@@ -268,11 +284,14 @@ describe('PropertyService - Room Grid Data', () => {
       )
 
       expect(result).toHaveLength(2)
-      
-      // First room should have normal data
+
+      // Room 101 has full data.
+      expect(result[0].room.roomNumber).toBe('101')
       expect(result[0].availability).toEqual(mockAvailability)
-      
-      // Second room should have empty fallback data
+      expect(result[0].pricing).toEqual(mockPricing)
+
+      // Room 102 is missing from the batch maps -> empty fallback data.
+      expect(result[1].room.roomNumber).toBe('102')
       expect(result[1].availability).toEqual({})
       expect(result[1].bookings).toEqual([])
       expect(result[1].pricing).toEqual({})
@@ -294,8 +313,15 @@ describe('PropertyService - Room Grid Data', () => {
       )
 
       expect(propertyService.getRooms).toHaveBeenCalledWith(mockPropertyId)
-      expect(mockRoomBookingService.getRoomAvailability).toHaveBeenCalledTimes(2)
-      expect(propertyService.getRoomPricingForDates).toHaveBeenCalledTimes(2)
+      // The batch implementation makes ONE call each, passing all room numbers.
+      const roomNumbers = mockRooms.map(r => r.roomNumber)
+      expect(mockRoomBookingService.getBatchRoomAvailability).toHaveBeenCalledTimes(1)
+      expect(mockRoomBookingService.getBatchRoomAvailability).toHaveBeenCalledWith(
+        roomNumbers,
+        expect.any(Array)
+      )
+      expect((propertyService as any).getBatchPropertyBookings).toHaveBeenCalledTimes(1)
+      expect((propertyService as any).getBatchRoomPricing).toHaveBeenCalledTimes(1)
     })
 
     it('should generate correct date range for availability calculation', async () => {
@@ -305,7 +331,8 @@ describe('PropertyService - Room Grid Data', () => {
         mockEndDate
       )
 
-      // Check that generateDateRange was called with correct dates
+      // Check that the generated date range (inclusive start..end) is passed
+      // through to the batch availability call.
       const expectedDates = [
         new Date('2024-01-01'),
         new Date('2024-01-02'),
@@ -316,8 +343,9 @@ describe('PropertyService - Room Grid Data', () => {
         new Date('2024-01-07')
       ]
 
-      expect(mockRoomBookingService.getRoomAvailability).toHaveBeenCalledWith(
-        mockRooms[0].roomNumber,
+      const roomNumbers = mockRooms.map(r => r.roomNumber)
+      expect(mockRoomBookingService.getBatchRoomAvailability).toHaveBeenCalledWith(
+        roomNumbers,
         expectedDates
       )
     })
@@ -332,7 +360,7 @@ describe('PropertyService - Room Grid Data', () => {
       )
 
       expect(result).toEqual([])
-      expect(mockRoomBookingService.getRoomAvailability).not.toHaveBeenCalled()
+      expect(mockRoomBookingService.getBatchRoomAvailability).not.toHaveBeenCalled()
     })
   })
 
