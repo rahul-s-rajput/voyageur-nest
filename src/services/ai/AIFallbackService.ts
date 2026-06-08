@@ -78,6 +78,84 @@ export function generateFallback(ctx: AIContext): AIInsightsResult {
     });
   }
 
+  // ADR decline
+  if (deltas && deltas.adrDeltaPct < -5) {
+    insights.push({
+      id: 'adr_decline',
+      title: 'ADR is sliding',
+      description: `Average daily rate dropped ${Math.abs(deltas.adrDeltaPct).toFixed(1)}% vs previous period. Tighten discounting and revisit rate plans.`,
+      severity: deltas.adrDeltaPct < -15 ? 'high' : 'medium',
+      tags: ['revenue','pricing','adr'],
+      actions: [{ label: 'Review pricing rules', type: 'adjust-pricing' }],
+    });
+  }
+
+  // RevPAR decline (combined rate + occupancy pressure)
+  if (deltas && deltas.revparDeltaPct < -10) {
+    insights.push({
+      id: 'revpar_decline',
+      title: 'RevPAR weakening',
+      description: `RevPAR fell ${Math.abs(deltas.revparDeltaPct).toFixed(1)}% vs previous period, signalling combined rate and occupancy pressure.`,
+      severity: 'high',
+      tags: ['revenue','revpar','pricing'],
+    });
+  }
+
+  // Profit margin compression
+  if (deltas && deltas.marginDeltaPct < -10) {
+    insights.push({
+      id: 'margin_compression',
+      title: 'Profit margin compressing',
+      description: `Profit margin is down ${Math.abs(deltas.marginDeltaPct).toFixed(1)}% (now ${Number((kpi as any).profitMarginPct ?? 0).toFixed(1)}%). Costs are outpacing revenue.`,
+      severity: 'high',
+      tags: ['expenses','cost-control','margin'],
+      actions: [{ label: 'Review expense categories', type: 'review-expenses' }],
+    });
+  }
+
+  // Channel concentration risk (single source dominates bookings)
+  const topSource = (kpi.booking.sourceDistribution || [])
+    .slice()
+    .sort((a: any, b: any) => b.value - a.value)[0] as any;
+  if (topSource && topSource.value >= 70) {
+    insights.push({
+      id: 'channel_concentration',
+      title: 'Over-reliant on one channel',
+      description: `${topSource.name} drives ${Number(topSource.value).toFixed(0)}% of bookings. Diversify channels to reduce dependency and commission risk.`,
+      severity: 'medium',
+      tags: ['revenue','channels','anomaly'],
+      actions: [{ label: 'Diversify booking channels', type: 'navigate', payload: { to: 'channels' } }],
+    });
+  }
+
+  // Expense category concentration (one category dominates spend)
+  const topExpenseCat = (kpi.expenses.byCategory || [])
+    .slice()
+    .sort((a: any, b: any) => b.total - a.total)[0] as any;
+  if (topExpenseCat && (kpi.expenses.totalExpenses || 0) > 0
+      && topExpenseCat.total / kpi.expenses.totalExpenses >= 0.4) {
+    insights.push({
+      id: 'expense_category_concentration',
+      title: 'One category dominates spend',
+      description: `${topExpenseCat.categoryName} is ${Math.round((topExpenseCat.total / kpi.expenses.totalExpenses) * 100)}% of total expenses. Audit this category for savings.`,
+      severity: 'medium',
+      tags: ['expenses','cost-control'],
+      actions: [{ label: 'Review expense categories', type: 'review-expenses' }],
+    });
+  }
+
+  // Low booking confirmation rate
+  const conversionRate = (kpi.booking as any).bookingConversionRate;
+  if (typeof conversionRate === 'number' && conversionRate < 60) {
+    insights.push({
+      id: 'low_conversion',
+      title: 'Low booking confirmation rate',
+      description: `Only ${conversionRate.toFixed(1)}% of confirmed+pending bookings are confirmed. Follow up on pending reservations and deposits.`,
+      severity: conversionRate < 40 ? 'high' : 'medium',
+      tags: ['anomaly','guests','conversion'],
+    });
+  }
+
   const forecasts: AIForecast[] = [];
   if (deltas) {
     const nextRevenue = Math.max(0, kpi.booking.totalRevenue * (1 + deltas.revenueDeltaPct / 100));
