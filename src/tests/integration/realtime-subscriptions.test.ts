@@ -1,16 +1,37 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RealtimeManager } from '../../services/analytics/RealtimeManager';
 import { supabase } from '../../lib/supabase';
 
 // Mock Supabase for integration tests
-jest.mock('../../lib/supabase', () => ({
+vi.mock('../../lib/supabase', () => ({
   supabase: {
-    channel: jest.fn(),
-    removeChannel: jest.fn(),
+    channel: vi.fn(),
+    removeChannel: vi.fn(),
     realtime: {
-      onOpen: jest.fn(),
-      onClose: jest.fn(),
-      onError: jest.fn(),
+      onOpen: vi.fn(),
+      onClose: vi.fn(),
+      onError: vi.fn(),
     }
+  }
+}));
+
+// Mock persistence/cross-tab subsystems: they depend on indexedDB / BroadcastChannel
+// which are unavailable in jsdom. These are out of scope for the RealtimeManager
+// channel/subscription behavior being verified here.
+vi.mock('../../services/analytics/OfflineQueue', () => ({
+  OfflineQueue: class {
+    initialize = vi.fn().mockResolvedValue(undefined);
+    processPendingUpdates = vi.fn().mockResolvedValue(undefined);
+    cleanup = vi.fn().mockResolvedValue(undefined);
+  }
+}));
+
+vi.mock('../../services/analytics/CrossTabSync', () => ({
+  CrossTabSync: class {
+    initialize = vi.fn().mockResolvedValue(undefined);
+    subscribe = vi.fn().mockReturnValue(() => {});
+    broadcast = vi.fn();
+    cleanup = vi.fn().mockResolvedValue(undefined);
   }
 }));
 
@@ -20,16 +41,16 @@ describe('Realtime Subscriptions Integration', () => {
 
   beforeEach(() => {
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     
     // Create mock channel
     mockChannel = {
-      on: jest.fn().mockReturnThis(),
-      subscribe: jest.fn().mockReturnThis(),
-      unsubscribe: jest.fn(),
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+      unsubscribe: vi.fn(),
     };
     
-    (supabase.channel as jest.Mock).mockReturnValue(mockChannel);
+    (supabase.channel as ReturnType<typeof vi.fn>).mockReturnValue(mockChannel);
     
     realtimeManager = new RealtimeManager({
       propertyId: 'test-property-123',
@@ -88,7 +109,7 @@ describe('Realtime Subscriptions Integration', () => {
 
   describe('real-time event handling', () => {
     it('should handle booking INSERT events', async () => {
-      const updateSpy = jest.fn();
+      const updateSpy = vi.fn();
       realtimeManager.subscribe('booking-update', updateSpy);
 
       await realtimeManager.initialize();
@@ -125,7 +146,7 @@ describe('Realtime Subscriptions Integration', () => {
     });
 
     it('should handle expense UPDATE events', async () => {
-      const updateSpy = jest.fn();
+      const updateSpy = vi.fn();
       realtimeManager.subscribe('expense-update', updateSpy);
 
       await realtimeManager.initialize();
@@ -167,7 +188,7 @@ describe('Realtime Subscriptions Integration', () => {
     });
 
     it('should handle DELETE events', async () => {
-      const updateSpy = jest.fn();
+      const updateSpy = vi.fn();
       realtimeManager.subscribe('booking-update', updateSpy);
 
       await realtimeManager.initialize();
@@ -201,7 +222,7 @@ describe('Realtime Subscriptions Integration', () => {
 
   describe('connection state management', () => {
     it('should update connection state based on subscription status', async () => {
-      const connectionSpy = jest.fn();
+      const connectionSpy = vi.fn();
       realtimeManager.subscribe('connection-state', connectionSpy);
 
       await realtimeManager.initialize();
@@ -223,28 +244,32 @@ describe('Realtime Subscriptions Integration', () => {
     });
 
     it('should attempt reconnection on errors', async () => {
-      jest.useFakeTimers();
-      
-      await realtimeManager.initialize();
+      vi.useFakeTimers();
 
-      const subscriptionCallback = mockChannel.subscribe.mock.calls[0][0];
+      try {
+        await realtimeManager.initialize();
 
-      // Simulate error to trigger reconnection
-      subscriptionCallback('CHANNEL_ERROR');
+        const subscriptionCallback = mockChannel.subscribe.mock.calls[0][0];
 
-      // Fast-forward time to trigger reconnection
-      jest.advanceTimersByTime(1000);
+        // Simulate error to trigger reconnection
+        subscriptionCallback('CHANNEL_ERROR');
 
-      // Should attempt to create new channels
-      expect(supabase.channel).toHaveBeenCalledTimes(4); // 2 initial + 2 reconnect
+        // Fast-forward time to trigger reconnection. The reconnect handler is
+        // async (awaits cleanup before recreating channels), so use the async
+        // timer API to flush the pending promises.
+        await vi.advanceTimersByTimeAsync(1000);
 
-      jest.useRealTimers();
+        // Should attempt to create new channels
+        expect(supabase.channel).toHaveBeenCalledTimes(4); // 2 initial + 2 reconnect
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
   describe('cache invalidation', () => {
     it('should invalidate relevant caches for booking changes', async () => {
-      const cacheSpy = jest.fn();
+      const cacheSpy = vi.fn();
       realtimeManager.subscribe('cache-invalidation', cacheSpy);
 
       await realtimeManager.initialize();
@@ -265,7 +290,7 @@ describe('Realtime Subscriptions Integration', () => {
     });
 
     it('should invalidate relevant caches for expense changes', async () => {
-      const cacheSpy = jest.fn();
+      const cacheSpy = vi.fn();
       realtimeManager.subscribe('cache-invalidation', cacheSpy);
 
       await realtimeManager.initialize();
@@ -295,7 +320,7 @@ describe('Realtime Subscriptions Integration', () => {
     });
 
     it('should stop all subscriptions on cleanup', async () => {
-      const updateSpy = jest.fn();
+      const updateSpy = vi.fn();
       realtimeManager.subscribe('booking-update', updateSpy);
 
       await realtimeManager.initialize();

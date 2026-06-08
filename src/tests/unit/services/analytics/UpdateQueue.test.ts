@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { UpdateQueue } from '../../../../services/analytics/UpdateQueue';
 import { DataUpdate } from '../../../../services/analytics/RealtimeManager';
 
@@ -31,7 +32,7 @@ describe('UpdateQueue', () => {
     });
 
     it('should respect max queue size', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       // Fill queue to max capacity
       for (let i = 0; i < 12; i++) {
@@ -89,7 +90,7 @@ describe('UpdateQueue', () => {
 
   describe('update aggregation', () => {
     it('should aggregate updates of same entity', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       // Add multiple updates for same booking
       updateQueue.add({
@@ -118,7 +119,7 @@ describe('UpdateQueue', () => {
     });
 
     it('should prioritize DELETE over other events', () => {
-      const mergeMethod = (updateQueue as any).mergeEntityUpdates;
+      const mergeMethod = (updateQueue as any).mergeEntityUpdates.bind(updateQueue);
       
       const updates: DataUpdate[] = [
         {
@@ -177,11 +178,11 @@ describe('UpdateQueue', () => {
 
   describe('error handling', () => {
     it('should handle processing errors gracefully', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // Mock a processing method to throw error
       const originalMethod = (updateQueue as any).processAggregatedUpdate;
-      (updateQueue as any).processAggregatedUpdate = jest.fn().mockRejectedValue(
+      (updateQueue as any).processAggregatedUpdate = vi.fn().mockRejectedValue(
         new Error('Processing failed')
       );
 
@@ -196,7 +197,7 @@ describe('UpdateQueue', () => {
       await new Promise(resolve => setTimeout(resolve, 150));
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Error processing update queue:',
+        'Error processing booking updates:',
         expect.any(Error)
       );
 

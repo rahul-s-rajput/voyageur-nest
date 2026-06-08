@@ -10,15 +10,11 @@ vi.mock('../../../hooks/useRealTimeGrid', () => ({
   useRealTimeGrid: mockUseRealTimeGrid
 }));
 
-// Mock RealTimeIndicators to avoid import issues
+// Mock RealTimeIndicators to avoid import issues. The current component only
+// passes `pendingUpdates` to RealTimeStatusBar (no connectionStatus prop).
 vi.mock('../../../components/RoomGridCalendar/RealTimeIndicators', () => ({
-  RealTimeStatusBar: ({ connectionStatus, pendingUpdates }: { connectionStatus: string, pendingUpdates: any[] }) => (
+  RealTimeStatusBar: ({ pendingUpdates }: { pendingUpdates: any[] }) => (
     <div data-testid="real-time-status">
-      <div>
-        {connectionStatus === 'connected' && <span>Live updates active</span>}
-        {connectionStatus === 'connecting' && <span>Connecting...</span>}
-        {connectionStatus === 'disconnected' && <span>Connection lost - retrying...</span>}
-      </div>
       <div>
         {pendingUpdates.length > 0 && <span>{pendingUpdates.length} pending update{pendingUpdates.length !== 1 ? 's' : ''}</span>}
       </div>
@@ -32,16 +28,16 @@ import { GridUpdateManager, useGridUpdateContext } from '../../../components/Roo
 // Test component that uses the context
 const TestConsumer: React.FC = () => {
   const context = useGridUpdateContext();
-  
+
   return (
     <div>
-      <div data-testid="connection-status">{context.connectionStatus}</div>
+      <div data-testid="is-subscribed">{String(context.isSubscribed)}</div>
       <div data-testid="bookings-count">{context.bookings.length}</div>
       <div data-testid="rooms-count">{context.rooms.length}</div>
       <div data-testid="pending-updates">{context.pendingUpdates.length}</div>
       <div data-testid="last-update">{context.lastUpdateTime ? `Last updated: ${new Date(context.lastUpdateTime).toLocaleTimeString()}` : 'No updates yet'}</div>
-      <button 
-        onClick={() => context.applyOptimisticUpdate({
+      <button
+        onClick={() => context.sendOptimisticUpdate({
           type: 'booking_created',
           data: {
             bookingId: 'test-booking',
@@ -54,12 +50,6 @@ const TestConsumer: React.FC = () => {
         data-testid="apply-update"
       >
         Apply Update
-      </button>
-      <button 
-        onClick={() => context.clearPendingUpdates()}
-        data-testid="clear-updates"
-      >
-        Clear Updates
       </button>
     </div>
   );
@@ -75,13 +65,10 @@ describe('GridUpdateManager', () => {
   };
 
   const mockRealTimeGridReturn = {
-    connectionStatus: 'connected' as const,
-    pendingUpdates: [],
-    lastUpdateTime: null,
-    sendOptimisticUpdate: vi.fn(),
-    applyOptimisticUpdate: vi.fn(),
-    revertOptimisticUpdate: vi.fn(),
-    clearPendingUpdates: vi.fn()
+    isSubscribed: true,
+    pendingUpdates: [] as any[],
+    lastUpdateTime: null as number | null,
+    sendOptimisticUpdate: vi.fn()
   };
 
   beforeEach(() => {
@@ -91,22 +78,22 @@ describe('GridUpdateManager', () => {
 
   it('should render children and provide context', () => {
     render(<GridUpdateManager {...mockProps} />);
-    
-    expect(screen.getByTestId('connection-status')).toHaveTextContent('connected');
+
+    expect(screen.getByTestId('is-subscribed')).toHaveTextContent('true');
     expect(screen.getByTestId('bookings-count')).toHaveTextContent('0');
     expect(screen.getByTestId('rooms-count')).toHaveTextContent('0');
     expect(screen.getByTestId('pending-updates')).toHaveTextContent('0');
   });
 
-  it('should render real-time status bar', () => {
+  it('should not render real-time status bar when there are no pending updates', () => {
     render(<GridUpdateManager {...mockProps} />);
-    
-    expect(screen.getByText('Live updates active')).toBeInTheDocument();
+
+    expect(screen.queryByTestId('real-time-status')).not.toBeInTheDocument();
   });
 
   it('should call useRealTimeGrid with correct parameters', () => {
     render(<GridUpdateManager {...mockProps} />);
-    
+
     expect(mockUseRealTimeGrid).toHaveBeenCalledWith({
       dateRange: mockProps.dateRange,
       propertyId: mockProps.propertyId,
@@ -114,14 +101,14 @@ describe('GridUpdateManager', () => {
     });
   });
 
-  it('should handle optimistic updates through context', () => {
+  it('should forward optimistic updates to the hook through context', () => {
     render(<GridUpdateManager {...mockProps} />);
-    
+
     act(() => {
       fireEvent.click(screen.getByTestId('apply-update'));
     });
-    
-    expect(mockRealTimeGridReturn.applyOptimisticUpdate).toHaveBeenCalledWith({
+
+    expect(mockRealTimeGridReturn.sendOptimisticUpdate).toHaveBeenCalledWith({
       type: 'booking_created',
       data: {
         bookingId: 'test-booking',
@@ -131,16 +118,6 @@ describe('GridUpdateManager', () => {
       },
       timestamp: expect.any(String)
     });
-  });
-
-  it('should handle clearing pending updates', () => {
-    render(<GridUpdateManager {...mockProps} />);
-    
-    act(() => {
-      fireEvent.click(screen.getByTestId('clear-updates'));
-    });
-    
-    expect(mockRealTimeGridReturn.clearPendingUpdates).toHaveBeenCalled();
   });
 
   it('should display pending updates indicator when there are updates', () => {
@@ -161,36 +138,14 @@ describe('GridUpdateManager', () => {
     });
 
     render(<GridUpdateManager {...mockProps} />);
-    
+
     expect(screen.getByText('1 pending update')).toBeInTheDocument();
-  });
-
-  it('should display connection status correctly', () => {
-    mockUseRealTimeGrid.mockReturnValue({
-      ...mockRealTimeGridReturn,
-      connectionStatus: 'connecting'
-    });
-
-    render(<GridUpdateManager {...mockProps} />);
-    
-    expect(screen.getByText('Connecting...')).toBeInTheDocument();
-  });
-
-  it('should display disconnected status', () => {
-    mockUseRealTimeGrid.mockReturnValue({
-      ...mockRealTimeGridReturn,
-      connectionStatus: 'disconnected'
-    });
-
-    render(<GridUpdateManager {...mockProps} />);
-    
-    expect(screen.getByText('Connection lost - retrying...')).toBeInTheDocument();
   });
 
   it('should update bookings and rooms data through real-time events', async () => {
     const mockOnBookingsUpdate = vi.fn();
     const mockOnRoomsUpdate = vi.fn();
-    
+
     const propsWithCallbacks = {
       ...mockProps,
       onBookingsUpdate: mockOnBookingsUpdate,
@@ -205,7 +160,7 @@ describe('GridUpdateManager', () => {
     });
 
     render(<GridUpdateManager {...propsWithCallbacks} />);
-    
+
     // Simulate a booking update event wrapped in act
     if (capturedOnUpdate) {
       await act(async () => {
@@ -229,7 +184,7 @@ describe('GridUpdateManager', () => {
         });
       });
     }
-    
+
     // Wait for state updates to be reflected
     await waitFor(() => {
       expect(mockOnBookingsUpdate).toHaveBeenCalled();
@@ -245,11 +200,11 @@ describe('GridUpdateManager', () => {
     };
 
     render(<GridUpdateManager {...propsWithCallback} />);
-    
+
     act(() => {
       fireEvent.click(screen.getByTestId('apply-update'));
     });
-    
+
     expect(mockOnOptimisticUpdate).toHaveBeenCalledWith({
       type: 'booking_created',
       data: expect.any(Object),
@@ -265,18 +220,18 @@ describe('GridUpdateManager', () => {
     };
 
     const { container } = render(<GridUpdateManager {...propsWithClassName} />);
-    
+
     expect(container.firstChild).toHaveClass(`real-time-grid-container ${customClassName}`);
   });
 
   it('should throw error when useGridUpdateContext is used outside provider', () => {
     // Suppress console.error for this test
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    
+
     expect(() => {
       render(<TestConsumer />);
     }).toThrow('useGridUpdateContext must be used within a GridUpdateManager');
-    
+
     consoleSpy.mockRestore();
   });
 
@@ -288,7 +243,7 @@ describe('GridUpdateManager', () => {
     });
 
     render(<GridUpdateManager {...mockProps} />);
-    
+
     expect(screen.getByTestId('last-update')).toHaveTextContent(/Last updated:/);
   });
 
@@ -299,7 +254,7 @@ describe('GridUpdateManager', () => {
     });
 
     render(<GridUpdateManager {...mockProps} />);
-    
+
     expect(screen.getByText('No updates yet')).toBeInTheDocument();
   });
 
@@ -333,13 +288,13 @@ describe('GridUpdateManager', () => {
     });
 
     render(<GridUpdateManager {...mockProps} />);
-    
+
     expect(screen.getByText('2 pending updates')).toBeInTheDocument();
   });
 
   it('should handle room updates through real-time events', async () => {
     const mockOnRoomsUpdate = vi.fn();
-    
+
     const propsWithCallback = {
       ...mockProps,
       onRoomsUpdate: mockOnRoomsUpdate
@@ -353,7 +308,7 @@ describe('GridUpdateManager', () => {
     });
 
     render(<GridUpdateManager {...propsWithCallback} />);
-    
+
     // Simulate a room update event wrapped in act
     if (capturedOnUpdate) {
       await act(async () => {
@@ -378,7 +333,7 @@ describe('GridUpdateManager', () => {
         });
       });
     }
-    
+
     // Wait for state updates to be reflected
     await waitFor(() => {
       expect(mockOnRoomsUpdate).toHaveBeenCalled();

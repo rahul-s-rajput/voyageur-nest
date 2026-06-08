@@ -58,6 +58,18 @@ vi.mock('date-fns', () => ({
   endOfWeek: vi.fn((date) => new Date(date)),
   startOfMonth: vi.fn((date) => new Date(date)),
   endOfMonth: vi.fn((date) => new Date(date)),
+  startOfDay: vi.fn((date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }),
+  differenceInCalendarDays: vi.fn((later, earlier) => {
+    const a = new Date(later);
+    const b = new Date(earlier);
+    a.setHours(0, 0, 0, 0);
+    b.setHours(0, 0, 0, 0);
+    return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
+  }),
   eachDayOfInterval: vi.fn(({ start, end }) => {
     const dates = [];
     const current = new Date(start);
@@ -239,19 +251,20 @@ describe('RoomGridCalendar', () => {
 
     it('should show pricing when showPricing is true', async () => {
       render(<RoomGridCalendar {...defaultProps} showPricing={true} />, { wrapper: TestWrapper });
-      
+
+      // Price is rendered per date cell via formatCurrency (en-IN INR), once per column.
       await waitFor(() => {
-        expect(screen.getByText('₹1500/night')).toBeInTheDocument();
-        expect(screen.getByText('₹1200/night')).toBeInTheDocument();
+        expect(screen.getAllByText('₹1,500').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('₹1,200').length).toBeGreaterThan(0);
       });
     });
 
     it('should hide pricing when showPricing is false', async () => {
       render(<RoomGridCalendar {...defaultProps} showPricing={false} />, { wrapper: TestWrapper });
-      
+
       await waitFor(() => {
-        expect(screen.queryByText('₹1500/night')).not.toBeInTheDocument();
-        expect(screen.queryByText('₹1200/night')).not.toBeInTheDocument();
+        expect(screen.queryByText('₹1,500')).not.toBeInTheDocument();
+        expect(screen.queryByText('₹1,200')).not.toBeInTheDocument();
       });
     });
   });

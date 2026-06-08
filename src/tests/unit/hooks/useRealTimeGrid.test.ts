@@ -1,61 +1,82 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useRealTimeGrid } from '../../../hooks/useRealTimeGrid';
 
-// Mock Supabase
-const mockSupabase = {
-  channel: vi.fn(() => ({
-    on: vi.fn().mockReturnThis(),
-    subscribe: vi.fn().mockReturnThis(),
+// A single stable channel object so `.on` calls accumulate across the
+// chained `.on(...).on(...).subscribe()` invocations the hook performs.
+// Declared via vi.hoisted so the vi.mock factory (hoisted to top) can use it.
+const { channelMock, mockSupabase } = vi.hoisted(() => {
+  const channelMock: any = {
+    on: vi.fn(),
+    subscribe: vi.fn(),
     unsubscribe: vi.fn()
-  })),
-  removeChannel: vi.fn()
-};
+  };
+  // `.on(...)` is chainable; `.subscribe()` returns a truthy channel so the
+  // hook's subscriptionRef is set (drives `isSubscribed`).
+  channelMock.on.mockReturnValue(channelMock);
+  channelMock.subscribe.mockReturnValue(channelMock);
+  return {
+    channelMock,
+    mockSupabase: { channel: vi.fn(() => channelMock) }
+  };
+});
 
 vi.mock('../../../lib/supabase', () => ({
   supabase: mockSupabase
 }));
 
+import { useRealTimeGrid } from '../../../hooks/useRealTimeGrid';
+
+const getHandler = (table: 'bookings' | 'rooms') => {
+  const call = channelMock.on.mock.calls.find(c => c[1]?.table === table);
+  return call?.[2] as ((payload: any) => void) | undefined;
+};
+
 describe('useRealTimeGrid', () => {
   const mockDateRange = {
     start: new Date('2024-01-01'),
-    end: new Date('2024-01-07')
+    end: new Date('2024-01-31')
   };
   const mockPropertyId = 'test-property-id';
 
   beforeEach(() => {
     vi.clearAllMocks();
+    channelMock.on.mockReturnValue(channelMock);
+    channelMock.subscribe.mockReturnValue(channelMock);
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
-  it('should initialize with default state', () => {
+  it('should initialize with empty pending updates and no last update', () => {
     const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId
-      })
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId })
     );
 
-    expect(result.current.bookings).toEqual([]);
-    expect(result.current.rooms).toEqual([]);
-    expect(result.current.connectionStatus).toBe('connecting');
     expect(result.current.pendingUpdates).toEqual([]);
     expect(result.current.lastUpdateTime).toBeNull();
   });
 
-  it('should set up Supabase subscription on mount', () => {
-    renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId
-      })
+  it('should expose isSubscribed reflecting the subscription ref', () => {
+    // `isSubscribed` is derived from a ref, so the value returned on the
+    // initial render (before the mount effect commits the subscription) is
+    // false. This documents the hook's current observable behavior.
+    const { result } = renderHook(() =>
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId })
     );
 
-    expect(mockSupabase.channel).toHaveBeenCalledWith(`grid_bookings_${mockPropertyId}`);
-    expect(mockSupabase.channel().on).toHaveBeenCalledWith(
+    expect(result.current.isSubscribed).toBe(false);
+  });
+
+  it('should set up Supabase subscription on mount', () => {
+    renderHook(() =>
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId })
+    );
+
+    expect(mockSupabase.channel).toHaveBeenCalledWith(`grid_updates_${mockPropertyId}`);
+    expect(channelMock.on).toHaveBeenCalledWith(
       'postgres_changes',
       expect.objectContaining({
         event: '*',
@@ -65,7 +86,7 @@ describe('useRealTimeGrid', () => {
       }),
       expect.any(Function)
     );
-    expect(mockSupabase.channel().on).toHaveBeenCalledWith(
+    expect(channelMock.on).toHaveBeenCalledWith(
       'postgres_changes',
       expect.objectContaining({
         event: '*',
@@ -75,103 +96,13 @@ describe('useRealTimeGrid', () => {
       }),
       expect.any(Function)
     );
+    expect(channelMock.subscribe).toHaveBeenCalled();
   });
 
-  it('should handle booking created events', () => {
-    const mockOnUpdate = vi.fn();
+  it('should handle booking INSERT (created) events', () => {
+    const onUpdate = vi.fn();
     const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId,
-        onUpdate: mockOnUpdate
-      })
-    );
-
-    const mockBookingData = {
-      id: 'booking-1',
-      property_id: mockPropertyId,
-      guest_name: 'John Doe',
-      check_in: '2024-01-02',
-      check_out: '2024-01-04',
-      room_no: '101',
-      no_of_pax: 2,
-      contact_phone: '1234567890',
-      special_requests: 'Late checkout'
-    };
-
-    // Simulate booking created event
-    act(() => {
-      const onCallback = mockSupabase.channel().on.mock.calls.find(
-        call => call[1].table === 'bookings'
-      )[2];
-      onCallback({
-        eventType: 'INSERT',
-        new: mockBookingData,
-        old: null
-      });
-    });
-
-    expect(result.current.pendingUpdates).toHaveLength(1);
-    expect(result.current.pendingUpdates[0].type).toBe('booking_created');
-    expect(result.current.pendingUpdates[0].data.booking?.guestName).toBe('John Doe');
-    expect(mockOnUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'booking_created',
-      data: expect.objectContaining({
-        bookingId: 'booking-1',
-        propertyId: mockPropertyId
-      })
-    }));
-  });
-
-  it('should handle booking updated events', () => {
-    const mockOnUpdate = vi.fn();
-    const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId,
-        onUpdate: mockOnUpdate
-      })
-    );
-
-    const updatedBooking = {
-      id: 'booking-1',
-      property_id: mockPropertyId,
-      guest_name: 'John Smith',
-      check_in: '2024-01-02',
-      check_out: '2024-01-04',
-      room_no: '101',
-      special_requests: 'Early checkin',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T01:00:00Z'
-    };
-
-    // Update booking
-    act(() => {
-      const onCallback = mockSupabase.channel().on.mock.calls.find(
-        call => call[1].table === 'bookings'
-      )[2];
-      onCallback({
-        eventType: 'UPDATE',
-        new: updatedBooking,
-        old: null
-      });
-    });
-
-    expect(result.current.pendingUpdates).toHaveLength(1);
-    expect(result.current.pendingUpdates[0].type).toBe('booking_updated');
-    expect(mockOnUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'booking_updated'
-    }));
-  });
-
-  it('should handle booking deleted events', () => {
-    const mockOnUpdate = vi.fn();
-    const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId,
-        onUpdate: mockOnUpdate
-      })
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId, onUpdate })
     );
 
     const bookingData = {
@@ -183,210 +114,237 @@ describe('useRealTimeGrid', () => {
       room_no: '101'
     };
 
-    // Delete booking
     act(() => {
-      const onCallback = mockSupabase.channel().on.mock.calls.find(
-        call => call[1].table === 'bookings'
-      )[2];
-      onCallback({
-        eventType: 'DELETE',
-        new: null,
-        old: bookingData
-      });
+      getHandler('bookings')?.({ eventType: 'INSERT', new: bookingData, old: null });
     });
 
     expect(result.current.pendingUpdates).toHaveLength(1);
-    expect(result.current.pendingUpdates[0].type).toBe('booking_deleted');
-    expect(mockOnUpdate).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'booking_deleted'
+    expect(result.current.pendingUpdates[0].type).toBe('booking_created');
+    expect(result.current.pendingUpdates[0].data.booking?.guestName).toBe('John Doe');
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'booking_created',
+      data: expect.objectContaining({
+        bookingId: 'booking-1',
+        propertyId: mockPropertyId,
+        roomNo: '101'
+      })
     }));
   });
 
-  it('should filter bookings by date range', () => {
-    const mockOnUpdate = vi.fn();
-    const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId,
-        onUpdate: mockOnUpdate
-      })
+  it('should handle booking UPDATE (updated) events', () => {
+    const onUpdate = vi.fn();
+    renderHook(() =>
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId, onUpdate })
     );
 
-    const bookingInRange = {
+    const updatedBooking = {
+      id: 'booking-1',
+      property_id: mockPropertyId,
+      guest_name: 'John Smith',
+      check_in: '2024-01-02',
+      check_out: '2024-01-04',
+      room_no: '101'
+    };
+
+    act(() => {
+      getHandler('bookings')?.({ eventType: 'UPDATE', new: updatedBooking, old: null });
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ type: 'booking_updated' }));
+  });
+
+  it('should handle booking DELETE (deleted) events', () => {
+    const onUpdate = vi.fn();
+    renderHook(() =>
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId, onUpdate })
+    );
+
+    const bookingData = {
+      id: 'booking-1',
+      property_id: mockPropertyId,
+      room_no: '101'
+    };
+
+    act(() => {
+      getHandler('bookings')?.({ eventType: 'DELETE', new: null, old: bookingData });
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'booking_deleted',
+      data: expect.objectContaining({ bookingId: 'booking-1', roomNo: '101' })
+    }));
+  });
+
+  it('should handle room UPDATE events', () => {
+    const onUpdate = vi.fn();
+    renderHook(() =>
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId, onUpdate })
+    );
+
+    const roomData = {
+      id: 'room-1',
+      property_id: mockPropertyId,
+      room_no: '101',
+      base_price: 1500
+    };
+
+    act(() => {
+      getHandler('rooms')?.({ eventType: 'UPDATE', new: roomData, old: { ...roomData, base_price: 1200 } });
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'room_updated',
+      data: expect.objectContaining({ propertyId: mockPropertyId, roomNo: '101' })
+    }));
+  });
+
+  it('should ignore bookings outside the active date range', () => {
+    const onUpdate = vi.fn();
+    renderHook(() =>
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId, onUpdate })
+    );
+
+    const inRange = {
       id: 'booking-1',
       property_id: mockPropertyId,
       guest_name: 'John Doe',
       check_in: '2024-01-02',
       check_out: '2024-01-04',
-      room_no: '101',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
+      room_no: '101'
     };
-
-    const bookingOutOfRange = {
+    const outOfRange = {
       id: 'booking-2',
       property_id: mockPropertyId,
       guest_name: 'Jane Doe',
-      check_in: '2024-02-01',
-      check_out: '2024-02-03',
-      room_no: '102',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z'
+      check_in: '2024-03-01',
+      check_out: '2024-03-03',
+      room_no: '102'
     };
 
     act(() => {
-      const onCallback = mockSupabase.channel().on.mock.calls.find(
-        call => call[1].table === 'bookings'
-      )[2];
-      
-      // Add booking in range
-      onCallback({
-        eventType: 'INSERT',
-        new: bookingInRange,
-        old: null
-      });
-      
-      // Add booking out of range - this should be ignored
-      onCallback({
-        eventType: 'INSERT',
-        new: bookingOutOfRange,
-        old: null
-      });
+      const handler = getHandler('bookings')!;
+      handler({ eventType: 'INSERT', new: inRange, old: null });
+      handler({ eventType: 'INSERT', new: outOfRange, old: null });
     });
 
-    // Only the booking in range should generate an update
-    expect(mockOnUpdate).toHaveBeenCalledTimes(1);
-    expect(mockOnUpdate).toHaveBeenCalledWith(expect.objectContaining({
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
       type: 'booking_created',
-      data: expect.objectContaining({
-        bookingId: 'booking-1'
-      })
+      data: expect.objectContaining({ bookingId: 'booking-1' })
     }));
   });
 
-  it('should handle optimistic updates', () => {
+  it('should track pending updates and expose a numeric lastUpdateTime', () => {
     const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId
-      })
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId })
     );
 
-    const optimisticUpdate = {
-      type: 'booking_created' as const,
-      data: {
-        bookingId: 'temp-booking',
-        roomNo: 'room-101',
-        propertyId: mockPropertyId,
-        dateRange: mockDateRange
-      },
-      timestamp: new Date().toISOString()
-    };
-
     act(() => {
-      result.current.applyOptimisticUpdate(optimisticUpdate);
+      getHandler('bookings')?.({
+        eventType: 'INSERT',
+        new: {
+          id: 'booking-1',
+          property_id: mockPropertyId,
+          guest_name: 'John Doe',
+          check_in: '2024-01-15',
+          check_out: '2024-01-17',
+          room_no: '101'
+        },
+        old: null
+      });
     });
 
     expect(result.current.pendingUpdates).toHaveLength(1);
-    expect(result.current.pendingUpdates[0]).toEqual(optimisticUpdate);
+    expect(typeof result.current.lastUpdateTime).toBe('number');
   });
 
-  it('should revert optimistic updates', () => {
+  it('should clear pending updates after the timeout', () => {
     const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId
-      })
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId })
     );
 
-    const optimisticUpdate = {
-      type: 'booking_created' as const,
-      data: {
-        bookingId: 'temp-booking',
-        roomNo: 'room-101',
-        propertyId: mockPropertyId,
-        dateRange: mockDateRange
-      },
-      timestamp: new Date().toISOString()
-    };
-
     act(() => {
-      result.current.applyOptimisticUpdate(optimisticUpdate);
+      getHandler('bookings')?.({
+        eventType: 'INSERT',
+        new: {
+          id: 'booking-1',
+          property_id: mockPropertyId,
+          guest_name: 'John Doe',
+          check_in: '2024-01-15',
+          check_out: '2024-01-17',
+          room_no: '101'
+        },
+        old: null
+      });
     });
 
     expect(result.current.pendingUpdates).toHaveLength(1);
 
     act(() => {
-      result.current.revertOptimisticUpdate('booking_created_temp-booking_' + Date.now());
+      vi.advanceTimersByTime(1000);
     });
 
     expect(result.current.pendingUpdates).toHaveLength(0);
   });
 
-  it('should clear all pending updates', () => {
+  it('should send optimistic updates and notify onUpdate', () => {
+    const onUpdate = vi.fn();
     const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId
-      })
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId, onUpdate })
     );
 
-    const update1 = {
-      type: 'booking_created' as const,
-      data: { bookingId: 'booking-1', roomNo: 'room-101', propertyId: mockPropertyId, dateRange: mockDateRange },
-      timestamp: new Date().toISOString()
-    };
-
-    const update2 = {
+    const optimisticUpdate = {
       type: 'booking_updated' as const,
-      data: { bookingId: 'booking-2', roomNo: 'room-102', propertyId: mockPropertyId, dateRange: mockDateRange },
+      data: {
+        propertyId: mockPropertyId,
+        bookingId: 'booking-1',
+        booking: { id: 'booking-1', status: 'confirmed' } as any
+      },
       timestamp: new Date().toISOString()
     };
 
     act(() => {
-      result.current.applyOptimisticUpdate(update1);
-      result.current.applyOptimisticUpdate(update2);
+      result.current.sendOptimisticUpdate(optimisticUpdate);
     });
 
-    expect(result.current.pendingUpdates).toHaveLength(2);
-
-    act(() => {
-      result.current.clearPendingUpdates();
-    });
-
-    expect(result.current.pendingUpdates).toHaveLength(0);
-  });
-
-  it('should update connection status', () => {
-    const { result } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId
-      })
-    );
-
-    expect(result.current.connectionStatus).toBe('connecting');
-
-    // Simulate successful subscription
-    act(() => {
-      const subscribeCallback = mockSupabase.channel().subscribe;
-      subscribeCallback.mock.calls[0][0]('SUBSCRIBED');
-    });
-
-    expect(result.current.connectionStatus).toBe('connected');
+    expect(onUpdate).toHaveBeenCalledWith(optimisticUpdate);
+    expect(result.current.pendingUpdates).toHaveLength(1);
   });
 
   it('should cleanup subscription on unmount', () => {
     const { unmount } = renderHook(() =>
-      useRealTimeGrid({
-        dateRange: mockDateRange,
-        propertyId: mockPropertyId
-      })
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId })
     );
 
     unmount();
 
-    expect(mockSupabase.channel().unsubscribe).toHaveBeenCalled();
-    expect(mockSupabase.removeChannel).toHaveBeenCalled();
+    expect(channelMock.unsubscribe).toHaveBeenCalled();
+  });
+
+  it('should not emit updates after unmount/cleanup', () => {
+    const onUpdate = vi.fn();
+    const { unmount } = renderHook(() =>
+      useRealTimeGrid({ dateRange: mockDateRange, propertyId: mockPropertyId, onUpdate })
+    );
+
+    const handler = getHandler('bookings')!;
+    unmount();
+
+    act(() => {
+      handler({
+        eventType: 'INSERT',
+        new: {
+          id: 'booking-1',
+          property_id: mockPropertyId,
+          guest_name: 'John Doe',
+          check_in: '2024-01-15',
+          check_out: '2024-01-17',
+          room_no: '101'
+        },
+        old: null
+      });
+    });
+
+    expect(onUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'booking_created' }));
   });
 });

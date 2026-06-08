@@ -132,9 +132,10 @@ const renderWithPropertyContext = (props = {}) => {
 };
 
 describe('CalendarViewManager', () => {
-  // Helper functions for button selection
-  const getGridButton = () => screen.getByRole('button', { name: /room grid/i });
-  const getCalendarButton = () => screen.getByRole('button', { name: /calendar view/i });
+  // The view is now controlled externally via the `viewMode` prop
+  // ('calendar' | 'grid'); the component no longer renders internal
+  // toggle buttons (see source comment: "CalendarViewToggle component
+  // removed - using main tabs instead").
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -147,105 +148,98 @@ describe('CalendarViewManager', () => {
 
   it('renders with default traditional calendar view', async () => {
     renderWithPropertyContext();
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
     });
-    
+
     expect(screen.getByText('Traditional Calendar View')).toBeInTheDocument();
     expect(screen.queryByTestId('room-grid-calendar')).not.toBeInTheDocument();
   });
 
-  it('shows view toggle buttons', async () => {
-    renderWithPropertyContext();
-    
+  it('renders grid view when viewMode="grid"', async () => {
+    renderWithPropertyContext({ viewMode: 'grid' });
+
     await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
+      expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
     });
 
-    // Should have both view toggle buttons with correct text
-    expect(screen.getByRole('button', { name: /calendar view/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /room grid/i })).toBeInTheDocument();
+    expect(screen.getByText('Room Grid Calendar View')).toBeInTheDocument();
+    expect(screen.queryByTestId('booking-calendar')).not.toBeInTheDocument();
   });
 
-  it('switches to grid view when grid button is clicked', async () => {
-    renderWithPropertyContext();
-    
+  it('renders traditional view when viewMode="calendar"', async () => {
+    renderWithPropertyContext({ viewMode: 'calendar' });
+
     await waitFor(() => {
       expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
     });
 
-    // Click Grid view button
-    const gridButton = getGridButton();
-    fireEvent.click(gridButton);
-    
-    // Should show grid calendar
+    expect(screen.queryByTestId('room-grid-calendar')).not.toBeInTheDocument();
+  });
+
+  it('switches view when the viewMode prop changes', async () => {
+    const { rerender } = renderWithPropertyContext({ viewMode: 'calendar' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
+    });
+
+    rerender(
+      <PropertyProvider>
+        <CalendarViewManager {...defaultProps} viewMode="grid" />
+      </PropertyProvider>
+    );
+
     await waitFor(() => {
       expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
       expect(screen.queryByTestId('booking-calendar')).not.toBeInTheDocument();
     });
-    
-    expect(screen.getByText('Room Grid Calendar View')).toBeInTheDocument();
   });
 
-  it('switches back to traditional calendar view', async () => {
-    renderWithPropertyContext();
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
-    });
+  it('persists per-view state in localStorage under calendarState_ keys', async () => {
+    vi.useFakeTimers();
+    try {
+      renderWithPropertyContext({ viewMode: 'grid' });
 
-    // Switch to grid view first
-    const gridButton = getGridButton();
-    fireEvent.click(gridButton);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
-    });
+      // State is saved on a 30s interval keyed by view type.
+      vi.advanceTimersByTime(30000);
 
-    // Switch back to calendar view
-    const calendarButton = getCalendarButton();
-    fireEvent.click(calendarButton);
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
-      expect(screen.queryByTestId('room-grid-calendar')).not.toBeInTheDocument();
-    });
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'calendarState_grid',
+        expect.any(String)
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('persists view preference in localStorage', async () => {
-    renderWithPropertyContext();
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
+  it('loads persisted state for the active view from localStorage', async () => {
+    const persisted = JSON.stringify({
+      selectedDate: '2024-01-15T00:00:00.000Z',
+      dateRange: {
+        start: '2024-01-15T00:00:00.000Z',
+        end: '2024-01-22T00:00:00.000Z',
+      },
+      selectedBooking: null,
+      viewPreferences: {
+        traditional: { view: 'month', showWeekends: true },
+        grid: { viewType: 'week', showPricing: false, selectedRooms: [] },
+      },
     });
-
-    // Switch to grid view
-    const gridButton = getGridButton();
-    fireEvent.click(gridButton);
-    
-    // Should save preference to localStorage with correct key
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'preferredCalendarView',
-      'grid'
-    );
-  });
-
-  it('loads view preference from localStorage', async () => {
-    // Mock localStorage to return grid preference with correct key
     localStorageMock.getItem.mockImplementation((key) => {
-      if (key === 'preferredCalendarView') return 'grid';
+      if (key === 'calendarState_grid') return persisted;
       return null;
     });
-    
-    renderWithPropertyContext();
-    
-    // Should start with grid view based on localStorage
+
+    renderWithPropertyContext({ viewMode: 'grid' });
+
     await waitFor(() => {
       expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
     });
-    
-    expect(screen.queryByTestId('booking-calendar')).not.toBeInTheDocument();
+
+    // The persisted dateRange should flow through to the grid view.
+    expect(localStorageMock.getItem).toHaveBeenCalledWith('calendarState_grid');
   });
 
   it('handles booking selection from traditional calendar', async () => {
@@ -264,16 +258,8 @@ describe('CalendarViewManager', () => {
   });
 
   it('handles booking selection from grid calendar', async () => {
-    renderWithPropertyContext();
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
-    });
+    renderWithPropertyContext({ viewMode: 'grid' });
 
-    // Switch to grid view
-    const gridButton = getGridButton();
-    fireEvent.click(gridButton);
-    
     await waitFor(() => {
       expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
     });
@@ -298,62 +284,41 @@ describe('CalendarViewManager', () => {
   });
 
   it('passes correct props to RoomGridCalendar', async () => {
-    renderWithPropertyContext();
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
-    });
+    renderWithPropertyContext({ viewMode: 'grid' });
 
-    // Switch to grid view
-    const gridButton = screen.getByRole('button', { name: /grid/i });
-    fireEvent.click(gridButton);
-    
     await waitFor(() => {
       expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
     });
 
-    // Should display property ID
+    // Should display property ID derived from the property context
     expect(screen.getByText('Property ID: test-property-id')).toBeInTheDocument();
   });
 
   it('handles date range changes', async () => {
-    renderWithPropertyContext();
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
-    });
+    renderWithPropertyContext({ viewMode: 'grid' });
 
-    // Switch to grid view to see date range
-    const gridButton = getGridButton();
-    fireEvent.click(gridButton);
-    
     await waitFor(() => {
       expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
     });
 
-    // Should show current date range (will be current month by default)
+    // Should pass a date range through to the grid view
     expect(screen.getByText(/Date Range:/)).toBeInTheDocument();
   });
 
-  it('maintains state when switching between views', async () => {
-    renderWithPropertyContext();
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
-    });
+  it('maintains bookings when the view mode changes', async () => {
+    const { rerender } = renderWithPropertyContext({ viewMode: 'grid' });
 
-    // Switch to grid view
-    const gridButton = getGridButton();
-    fireEvent.click(gridButton);
-    
     await waitFor(() => {
       expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
     });
 
-    // Switch back to calendar view
-    const calendarButton = getCalendarButton();
-    fireEvent.click(calendarButton);
-    
+    // Switch back to calendar view via the prop
+    rerender(
+      <PropertyProvider>
+        <CalendarViewManager {...defaultProps} viewMode="calendar" />
+      </PropertyProvider>
+    );
+
     await waitFor(() => {
       expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
     });
@@ -362,7 +327,7 @@ describe('CalendarViewManager', () => {
     expect(screen.getByText('Bookings count: 2')).toBeInTheDocument();
   });
 
-  it('handles responsive design', async () => {
+  it('renders both views without errors regardless of window width', async () => {
     // Mock window.innerWidth for mobile view
     Object.defineProperty(window, 'innerWidth', {
       writable: true,
@@ -370,15 +335,21 @@ describe('CalendarViewManager', () => {
       value: 768,
     });
 
-    renderWithPropertyContext();
-    
+    const { rerender } = renderWithPropertyContext({ viewMode: 'calendar' });
+
     await waitFor(() => {
       expect(screen.getByTestId('booking-calendar')).toBeInTheDocument();
     });
 
-    // Component should render without errors on mobile
-    expect(getCalendarButton()).toBeInTheDocument();
-    expect(getGridButton()).toBeInTheDocument();
+    rerender(
+      <PropertyProvider>
+        <CalendarViewManager {...defaultProps} viewMode="grid" />
+      </PropertyProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('room-grid-calendar')).toBeInTheDocument();
+    });
   });
 
   it('handles empty bookings array', async () => {

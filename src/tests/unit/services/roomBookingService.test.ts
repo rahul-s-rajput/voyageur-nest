@@ -5,31 +5,44 @@ import { Booking } from '../../../types/booking';
 // Mock Supabase
 const mockSupabaseResponse = vi.fn();
 
-vi.mock('../../../lib/supabase', () => ({
-  supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn(() => {
-        const queryMock = {
-          eq: vi.fn().mockReturnThis(),
-          gte: vi.fn().mockReturnThis(),
-          lte: vi.fn().mockReturnThis(),
-          gt: vi.fn().mockReturnThis(),
-          limit: vi.fn(() => mockSupabaseResponse()),
-          order: vi.fn(() => mockSupabaseResponse()),
-          single: vi.fn(() => mockSupabaseResponse()),
-          or: vi.fn(() => {
-            // For detectRoomConflicts, .or() is the final call
-            // For getBookingsForRoom, .or() is followed by .order()
-            const orResult = mockSupabaseResponse();
-            orResult.order = vi.fn(() => mockSupabaseResponse());
-            return orResult;
-          })
-        };
-        return queryMock;
-      })
-    }))
-  }
-}));
+vi.mock('../../../lib/supabase', () => {
+  // The query builder is both chainable (every filter returns `this`) and
+  // awaitable (it implements `.then`, resolving to the current queued
+  // mockSupabaseResponse()). This mirrors the real Supabase builder, which can
+  // be awaited at ANY terminal point regardless of which filter came last
+  // (getBookingsForRoom ends on .order, getBatchRoomAvailability ends on .gte,
+  // batch pricing ends on .in, override lookup ends on .maybeSingle, etc.).
+  const makeQuery = () => {
+    const query: any = {};
+    const chain = () => query;
+    const resolve = () => mockSupabaseResponse();
+    // Chainable filters / modifiers
+    query.eq = vi.fn(chain);
+    query.gte = vi.fn(chain);
+    query.lte = vi.fn(chain);
+    query.gt = vi.fn(chain);
+    query.lt = vi.fn(chain);
+    query.in = vi.fn(chain);
+    query.or = vi.fn(chain);
+    query.order = vi.fn(chain);
+    // Terminal resolvers (return a thenable so they can be chained or awaited)
+    query.limit = vi.fn(resolve);
+    query.single = vi.fn(resolve);
+    query.maybeSingle = vi.fn(resolve);
+    // Make the builder itself awaitable
+    query.then = (onFulfilled: any, onRejected: any) =>
+      Promise.resolve(resolve()).then(onFulfilled, onRejected);
+    return query;
+  };
+
+  return {
+    supabase: {
+      from: vi.fn(() => ({
+        select: vi.fn(() => makeQuery())
+      }))
+    }
+  };
+});
 
 // Helper function to create Date objects from strings
 const createDate = (dateStr: string): Date => new Date(dateStr);
@@ -41,6 +54,11 @@ describe('RoomBookingService', () => {
   let roomBookingService: RoomBookingService;
 
   beforeEach(() => {
+    // mockReset (not just clearAllMocks) clears any queued mockResolvedValueOnce
+    // values left over from a previous test, preventing cross-test leakage.
+    mockSupabaseResponse.mockReset();
+    // Safe default so awaiting an unstubbed query never throws on destructure.
+    mockSupabaseResponse.mockResolvedValue({ data: null, error: null });
     vi.clearAllMocks();
     roomBookingService = new RoomBookingService();
   });
@@ -291,17 +309,19 @@ describe('RoomBookingService', () => {
         }
       ];
 
-      const mockRoomPricing = {
-        base_price: 1000,
-        seasonal_pricing: {}
-      };
+      // The 'rooms' table batch pricing query returns one row per room, keyed by
+      // room_number, with base_price / seasonal_pricing / availability_overrides.
+      const mockRoomPricing = [
+        { room_number: 'R101', base_price: 1000, seasonal_pricing: {}, availability_overrides: {} },
+        { room_number: 'R102', base_price: 1000, seasonal_pricing: {}, availability_overrides: {} }
+      ];
 
-      // Set up mock responses for 2 rooms, each making 2 calls (bookings + pricing)
+      // getBatchRoomAvailability issues exactly two batched queries in order:
+      //   1. getBatchRoomPricing -> from('rooms')...in('room_number')  (pricing)
+      //   2. batch bookings      -> from('bookings')...gte(...)        (bookings)
       mockSupabaseResponse
-        .mockResolvedValueOnce({ data: mockBookingsR101, error: null })  // R101 bookings
-        .mockResolvedValueOnce({ data: mockRoomPricing, error: null })   // R101 pricing
-        .mockResolvedValueOnce({ data: [], error: null })               // R102 bookings (empty)
-        .mockResolvedValueOnce({ data: mockRoomPricing, error: null });  // R102 pricing
+        .mockResolvedValueOnce({ data: mockRoomPricing, error: null })   // batch pricing (rooms)
+        .mockResolvedValueOnce({ data: mockBookingsR101, error: null }); // batch bookings
 
       const result = await roomBookingService.getBatchRoomAvailability(
         ['R101', 'R102'],
