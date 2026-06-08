@@ -13,7 +13,7 @@ declare const Deno: any;
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, apikey",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info, x-client-version, x-supabase-api-version, x-requested-with",
   "Vary": "Origin",
 };
 
