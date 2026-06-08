@@ -140,7 +140,9 @@ function resolveModels(): string[] {
   return Array.from(new Set(models)).slice(0, 3); // de-dupe, keep order; OpenRouter caps at 3
 }
 
-export default async (req: Request): Promise<Response> => {
+// Use Deno.serve() (not `export default`) so raw/API deploys register the
+// handler and actually start serving — otherwise every request hangs.
+Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
@@ -216,4 +218,4 @@ export default async (req: Request): Promise<Response> => {
       headers: { "Content-Type": "application/json", ...CORS },
     });
   }
-};
+});
