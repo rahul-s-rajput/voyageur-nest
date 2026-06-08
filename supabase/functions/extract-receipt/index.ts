@@ -5,7 +5,9 @@
 // OpenAI-compatible Chat Completions API with a free vision model plus a
 // free-to-free fallback chain. Same request/response contract as before, so
 // the client service + expense tabs are unchanged.
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+// No runtime imports on purpose: the Deno edge runtime already provides Deno,
+// fetch, Response, etc. globally. Avoiding the jsr type-only import keeps
+// raw/API (non-bundled) deploys booting instantly.
 declare const Deno: any;
 
 const CORS = {
