@@ -23,9 +23,10 @@ export interface ReceiptExtractionResult {
   reasoning?: string | null;
 }
 
+// Cross-provider free vision models; OpenRouter caps the `models` array at 3.
 const DEFAULT_MODELS = [
   "moonshotai/kimi-k2.6:free",
-  "google/gemma-4-31b-it:free",
+  "nex-agi/nex-n2-pro:free",
   "nvidia/nemotron-nano-12b-v2-vl:free",
 ];
 
@@ -78,7 +79,7 @@ function toBase64(bytes: Uint8Array): string {
 function resolveModels(): string[] {
   const single = (Deno.env.get("OPENROUTER_MODEL") || "").trim();
   const list = (Deno.env.get("OPENROUTER_MODELS") || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-  return Array.from(new Set([single, ...list, ...DEFAULT_MODELS].filter(Boolean)));
+  return Array.from(new Set([single, ...list, ...DEFAULT_MODELS].filter(Boolean))).slice(0, 3);
 }
 
 function parseJsonLoose(raw: string): any {

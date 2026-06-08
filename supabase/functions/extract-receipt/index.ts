@@ -16,11 +16,13 @@ const CORS = {
 };
 
 // Free vision models, tried in order (OpenRouter routes to the next on failure).
+// Cross-provider on purpose so one provider being rate-limited doesn't sink the
+// request. OpenRouter caps the `models` array at 3 — keep this <= 3.
 // Override with the OPENROUTER_MODEL / OPENROUTER_MODELS env vars if needed.
 const DEFAULT_MODELS = [
-  "moonshotai/kimi-k2.6:free",
-  "google/gemma-4-31b-it:free",
-  "nvidia/nemotron-nano-12b-v2-vl:free",
+  "moonshotai/kimi-k2.6:free",      // Moonshot
+  "nex-agi/nex-n2-pro:free",        // nex-agi
+  "nvidia/nemotron-nano-12b-v2-vl:free", // NVIDIA
 ];
 
 export interface ReceiptExtractionLineItem {
@@ -133,7 +135,7 @@ function resolveModels(): string[] {
   const single = (Deno.env.get("OPENROUTER_MODEL") || "").trim();
   const list = (Deno.env.get("OPENROUTER_MODELS") || "").split(",").map((s: string) => s.trim()).filter(Boolean);
   const models = [single, ...list, ...DEFAULT_MODELS].filter(Boolean);
-  return Array.from(new Set(models)); // de-dupe, keep order
+  return Array.from(new Set(models)).slice(0, 3); // de-dupe, keep order; OpenRouter caps at 3
 }
 
 export default async (req: Request): Promise<Response> => {

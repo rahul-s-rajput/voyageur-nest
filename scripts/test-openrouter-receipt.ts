@@ -52,8 +52,8 @@ async function main() {
   const bytes = readFileSync(path.resolve(imgPath));
   const dataUrl = `data:${mimeFor(imgPath)};base64,${bytes.toString('base64')}`;
   const models = (process.env.OPENROUTER_MODELS
-    || 'moonshotai/kimi-k2.6:free,google/gemma-4-31b-it:free,nvidia/nemotron-nano-12b-v2-vl:free')
-    .split(',').map((s) => s.trim()).filter(Boolean);
+    || 'moonshotai/kimi-k2.6:free,nex-agi/nex-n2-pro:free,nvidia/nemotron-nano-12b-v2-vl:free')
+    .split(',').map((s) => s.trim()).filter(Boolean).slice(0, 3); // OpenRouter caps at 3
 
   const userPrompt = `Return valid JSON only (no code fences). Extract: expense_date (YYYY-MM-DD|null), amount (number|null), currency (ISO|null), vendor (string|null), category_hint (string|null), line_items[] (description, quantity?, unit_amount?, tax_amount?, line_total?), confidence (0-1), reasoning (string|null).\nLocale: en-IN; Preferred currency: INR.`;
 
