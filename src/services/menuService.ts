@@ -23,9 +23,22 @@ export const menuService = {
     }));
   },
 
-  async listCategoriesLocalized(propertyId: string, _locale?: string): Promise<MenuCategory[]> {
-    // Menu is English-only; the Gemini menu-translation pipeline was retired.
-    return this.listCategories(propertyId);
+  async listCategoriesLocalized(propertyId: string, locale: string): Promise<MenuCategory[]> {
+    const base = await this.listCategories(propertyId);
+    // Fast path for English base locales
+    if (!locale || locale.toLowerCase().startsWith('en')) return base;
+    try {
+      const { data: tr, error } = await supabase
+        .from('menu_category_translations')
+        .select('category_id, name')
+        .in('category_id', base.map(c => c.id))
+        .eq('locale', locale);
+      if (error) throw error;
+      const map = new Map((tr || []).map((r: any) => [r.category_id, r.name as string]));
+      return base.map(c => map.has(c.id) ? { ...c, name: map.get(c.id)! } : c);
+    } catch {
+      return base;
+    }
   },
 
   async createCategory(propertyId: string, input: { name: string; isActive?: boolean; sortOrder?: number }): Promise<MenuCategory> {
@@ -126,8 +139,21 @@ export const menuService = {
       updatedAt: row.updated_at,
     }));
 
-    // Menu is English-only; the Gemini menu-translation pipeline was retired.
-    return baseItems;
+    const locale = params.locale || '';
+    if (!locale || locale.toLowerCase().startsWith('en') || baseItems.length === 0) return baseItems;
+
+    try {
+      const { data: tr, error } = await supabase
+        .from('menu_item_translations')
+        .select('item_id, name, description')
+        .in('item_id', baseItems.map(i => i.id))
+        .eq('locale', locale);
+      if (error) throw error;
+      const byId = new Map((tr || []).map((r: any) => [r.item_id, { name: r.name as string, description: r.description as string | null }]));
+      return baseItems.map(i => byId.has(i.id) ? { ...i, name: byId.get(i.id)!.name || i.name, description: byId.get(i.id)!.description ?? i.description } : i);
+    } catch {
+      return baseItems;
+    }
   },
 
   async createItem(input: CreateMenuItemInput): Promise<MenuItem> {
