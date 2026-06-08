@@ -6,8 +6,20 @@ import { Booking } from '../types/booking';
 export const isValidDate = (dateString: string): boolean => {
   if (!dateString || typeof dateString !== 'string') return false;
   
+  // Enforce strict YYYY-MM-DD format first
+  if (!dateString.match(/^\d{4}-\d{2}-\d{2}$/)) return false;
+
   const date = new Date(dateString);
-  return !isNaN(date.getTime()) && !!dateString.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (isNaN(date.getTime())) return false;
+
+  // Reject calendar-invalid dates that JS silently rolls over
+  // (e.g. '2024-02-30' -> Mar 1). Compare the parsed UTC parts back to the input.
+  const [year, month, day] = dateString.split('-').map(Number);
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day
+  );
 };
 
 /**
@@ -98,9 +110,10 @@ export const isValidBooking = (booking: Booking): boolean => {
   // Validate booking status
   if (!isValidBookingStatus(booking.status)) return false;
   
-  // Validate room and guest numbers
-  if (booking.numberOfRooms && booking.numberOfRooms <= 0) return false;
-  if (booking.noOfPax && booking.noOfPax <= 0) return false;
+  // Validate room and guest numbers (reject explicit non-positive values,
+  // including 0, while still allowing undefined/null which default later)
+  if (booking.numberOfRooms != null && booking.numberOfRooms <= 0) return false;
+  if (booking.noOfPax != null && booking.noOfPax <= 0) return false;
   
   return true;
 };
@@ -116,15 +129,23 @@ export const filterValidBookings = (bookings: Booking[]): Booking[] => {
  * Validates and sanitizes booking data for KPI calculations
  */
 export const sanitizeBookingForKPI = (booking: Booking): Booking | null => {
-  if (!isValidBooking(booking)) return null;
-  
-  return {
+  // Coerce numeric fields up front so string-typed values (e.g. '1000')
+  // are parsed before validation. This is the whole point of this helper.
+  const coerced: Booking = {
     ...booking,
-    // Ensure numeric fields are properly parsed
-    totalAmount: parseFloat(booking.totalAmount.toString()),
-    paymentAmount: booking.paymentAmount !== undefined ? parseFloat(booking.paymentAmount.toString()) : 0,
+    totalAmount:
+      booking.totalAmount != null ? parseFloat(booking.totalAmount.toString()) : (undefined as any),
+    paymentAmount:
+      booking.paymentAmount != null ? parseFloat(booking.paymentAmount.toString()) : undefined,
     numberOfRooms: booking.numberOfRooms || 1,
     noOfPax: booking.noOfPax || 1
+  };
+
+  if (!isValidBooking(coerced)) return null;
+
+  return {
+    ...coerced,
+    paymentAmount: coerced.paymentAmount !== undefined ? coerced.paymentAmount : 0
   };
 };
 
