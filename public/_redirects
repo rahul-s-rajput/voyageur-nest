@@ -1,0 +1,4 @@
+# SPA fallback: let React Router handle all client-side routes
+# (e.g. /checkin/:bookingId, /admin/*, /menu). Without this, Netlify
+# serves its own 404 for any direct navigation / shared link.
+/*    /index.html   200
