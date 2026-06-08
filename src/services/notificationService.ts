@@ -6,7 +6,6 @@ export type NotificationType =
   | 'update'
   | 'deadline'
   | 'booking_event'
-  | 'email_parsed'
   | 'expense_event'
   | 'budget_event';
 
