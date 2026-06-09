@@ -39,7 +39,7 @@ const RoomManagement: React.FC<RoomManagementProps> = ({ property: propProperty 
     try {
       setLoading(true);
       const rooms = await propertyService.getRoomsByProperty(activeProperty.id);
-      setRooms(rooms);
+      setRooms(rooms ?? []);
     } catch (error) {
       console.error('Error loading rooms:', error);
       toast.error('Failed to load rooms');

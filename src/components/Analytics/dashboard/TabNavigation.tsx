@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
-import { 
-  BarChart3, 
-  DollarSign, 
-  Calendar, 
-  Receipt, 
-  Brain, 
-  FileText,
+import {
+  DollarSign,
+  Calendar,
+  Receipt,
+  Brain,
   Home
 } from "lucide-react";
 import { cn } from "../../../lib/utils";
@@ -23,14 +21,13 @@ const tabs = [
   { id: "bookings", label: "Bookings", icon: Calendar },
   { id: "expenses", label: "Expenses", icon: Receipt },
   { id: "insights", label: "AI Insights", icon: Brain },
-  { id: "custom", label: "Custom", icon: FileText },
 ];
 
 export function TabNavigation({ activeTab, onTabChange, className }: TabNavigationProps) {
   return (
     <div className={cn("w-full", className)}>
       <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 h-auto p-1 bg-secondary/50 rounded-xl">
+        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 h-auto p-1 bg-secondary/50 rounded-xl">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (

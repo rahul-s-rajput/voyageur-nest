@@ -6,13 +6,9 @@ import { FinancialReports } from "./dashboard/FinancialReports";
 import { BookingAnalytics } from "./dashboard/BookingAnalytics";
 import { ExpenseAnalytics } from "./dashboard/ExpenseAnalytics";
 import { AIInsights } from "./dashboard/AIInsights";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/Card";
 import { Button } from "../ui/Button";
-import { 
-  FileText,
-  Settings
-} from "lucide-react";
- 
+import { Settings } from "lucide-react";
+
 
 
 export default function AnalyticsDashboard() {
@@ -31,8 +27,6 @@ export default function AnalyticsDashboard() {
         return <ExpenseAnalytics />;
       case "insights":
         return <AIInsights />;
-      case "custom":
-        return <CustomReports />;
       default:
         return <OverviewDashboard />;
     }
@@ -77,33 +71,5 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
     </div>
-  );
-}
-
-function CustomReports() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Custom Report Builder
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="p-4 border rounded-lg">
-          <h4 className="font-medium mb-2">Exports</h4>
-          <p className="text-sm text-gray-600">
-            Use the Export button in the filter bar above to export the current report with applied filters.
-          </p>
-        </div>
-        <div className="p-4 border rounded-lg">
-          <h4 className="font-medium mb-2">Advanced Builder</h4>
-          <p className="text-sm text-gray-600 mb-4">Custom report builder coming soon...</p>
-          <Button variant="outline" disabled className="w-full">
-            Coming Soon
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

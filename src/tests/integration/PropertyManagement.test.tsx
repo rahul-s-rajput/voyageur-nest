@@ -12,11 +12,11 @@ import { Property, Room } from '../../types/property';
 vi.mock('../../services/propertyService');
 
 // PropertyDashboard.loadDashboardData() fetches all bookings via bookingService to
-// compute occupancy/revenue breakdowns. In jsdom the real Supabase client cannot
-// reach the network, so we stub just getBookings to resolve with an empty list.
-// Everything else from the module is preserved via importOriginal. With bookings
-// resolved, the dashboard builds its property breakdown from the loaded properties
-// and renders the property cards / stats.
+// compute today's occupancy for the current property. In jsdom the real Supabase
+// client cannot reach the network, so we stub just getBookings to resolve with an
+// empty list. Everything else from the module is preserved via importOriginal. The
+// expense summary it also loads is wrapped in its own try/catch, so an unmocked
+// ExpenseService call degrades to an empty summary without failing the render.
 vi.mock('../../lib/supabase', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/supabase')>();
   return {
@@ -104,9 +104,13 @@ describe('Property Management Integration', () => {
 
     // Mock property service methods
     vi.mocked(propertyService.getAllProperties).mockResolvedValue(mockProperties);
-    vi.mocked(propertyService.getPropertyById).mockImplementation((id) => 
+    vi.mocked(propertyService.getPropertyById).mockImplementation((id) =>
       Promise.resolve(mockProperties.find(p => p.id === id)!)
     );
+    // Navigating into the "Room Inventory" section mounts RoomManagement, which
+    // fetches rooms on mount. Stub it so that drill-in renders without hitting the
+    // network (the auto-mock would otherwise resolve undefined).
+    vi.mocked(propertyService.getRoomsByProperty).mockResolvedValue(mockRooms);
     // Note: getRoomsByProperty and getPropertyAnalytics are not currently used by PropertyDashboard
     // as it uses mock data internally. These mocks can be added back when the component
     // is updated to use real service calls.
@@ -178,84 +182,70 @@ describe('Property Management Integration', () => {
   });
 
   describe('PropertyDashboard Component', () => {
-    it('should render property dashboard with stats', async () => {
-      renderWithPropertyProvider(<PropertyDashboard />);
-
-      // The dashboard header renders "Property Management".
-      await waitFor(() => {
-        expect(screen.getByText('Property Management')).toBeInTheDocument();
-      });
-    });
-
-    it('should display property cards', async () => {
+    // The dashboard is single-property now: it lands directly on the current
+    // property's management hub (no overview grid, no view toggle, no Add Property).
+    it('should render the current property', async () => {
       renderWithPropertyProvider(<PropertyDashboard />);
 
       await waitFor(() => {
         expect(screen.getByText(PRIMARY_PROPERTY)).toBeInTheDocument();
-        expect(screen.getByText(SECONDARY_PROPERTY)).toBeInTheDocument();
       });
     });
 
-    it('should switch between overview and individual views', async () => {
+    it("should display today's occupancy stats", async () => {
       renderWithPropertyProvider(<PropertyDashboard />);
 
-      // The view toggle button is labelled "Individual Properties".
-      await waitFor(() => {
-        expect(screen.getByText('Individual Properties')).toBeInTheDocument();
-      });
-      fireEvent.click(screen.getByText('Individual Properties'));
-
-      // Individual view renders the current property's name and the "Total Rooms"
-      // stat card (which is absent from the overview view).
       await waitFor(() => {
         expect(screen.getByText('Total Rooms')).toBeInTheDocument();
       });
-      expect(screen.getByText(PRIMARY_PROPERTY)).toBeInTheDocument();
+      expect(screen.getByText('Occupied Today')).toBeInTheDocument();
+      expect(screen.getByText('Available Today')).toBeInTheDocument();
+    });
+
+    it('should navigate into a management section and back', async () => {
+      renderWithPropertyProvider(<PropertyDashboard />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Room Inventory')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Room Inventory'));
+
+      // Drilling into a section reveals the "Back to Overview" control.
+      await waitFor(() => {
+        expect(screen.getByText('Back to Overview')).toBeInTheDocument();
+      });
     });
   });
 
-  describe('Multi-Property Data Isolation', () => {
-    it('should display property management dashboard', async () => {
+  describe('Single-Property Operations Focus', () => {
+    it('should surface the operations entry points', async () => {
       renderWithPropertyProvider(<PropertyDashboard />);
-      
-      // Wait for component to load
+
       await waitFor(() => {
-        expect(screen.getByText('Property Management')).toBeInTheDocument();
+        expect(screen.getByText('Room Inventory')).toBeInTheDocument();
       });
-      
-      // Verify dashboard elements are present
-      expect(screen.getByText('Overview')).toBeInTheDocument();
-      expect(screen.getByText('Individual Properties')).toBeInTheDocument();
-      expect(screen.getByText('Add Property')).toBeInTheDocument();
+      expect(screen.getByText('Pricing Rules')).toBeInTheDocument();
+      expect(screen.getByText('Guest Services')).toBeInTheDocument();
+      expect(screen.getByText('Expenses')).toBeInTheDocument();
     });
 
-    it('should switch between overview and individual property views', async () => {
+    it('should not render removed multi-property or stub UI', async () => {
       renderWithPropertyProvider(<PropertyDashboard />);
-      
-      // Wait for component to load
+
       await waitFor(() => {
-        expect(screen.getByText('Property Management')).toBeInTheDocument();
+        expect(screen.getByText(PRIMARY_PROPERTY)).toBeInTheDocument();
       });
-      
-      // Click on Individual Properties tab
-      const individualTab = screen.getByText('Individual Properties');
-      fireEvent.click(individualTab);
-      
-      // Verify the view has changed
-      await waitFor(() => {
-        expect(screen.getByText('Total Rooms')).toBeInTheDocument();
-      });
-      
-      // Switch back to Overview
-      const overviewTab = screen.getByText('Overview');
-      fireEvent.click(overviewTab);
-      
-      // Verify we're back to overview
-      await waitFor(() => {
-        expect(screen.getByText('All Properties')).toBeInTheDocument();
-      });
-     });
-   });
+
+      // Multi-property scaffolding is gone…
+      expect(screen.queryByText('Add Property')).not.toBeInTheDocument();
+      expect(screen.queryByText('Individual Properties')).not.toBeInTheDocument();
+      expect(screen.queryByText('All Properties')).not.toBeInTheDocument();
+      // …and so are the "coming soon" stubs and in-property reports.
+      expect(screen.queryByText('Maintenance Schedule')).not.toBeInTheDocument();
+      expect(screen.queryByText('Staff Management')).not.toBeInTheDocument();
+      expect(screen.queryByText('Reports & Analytics')).not.toBeInTheDocument();
+    });
+  });
 
   describe('Property CRUD Operations', () => {
     it('should handle property creation', async () => {
