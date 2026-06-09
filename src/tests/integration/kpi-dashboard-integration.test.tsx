@@ -241,12 +241,12 @@ describe('KPI Dashboard Integration Tests', () => {
       });
 
       await waitFor(() => {
-        // Total Revenue: 5000 + 3000 + 4000 = 12000 -> ₹12.0k
-        expectMetricValue('Total Revenue', '₹12.0k');
+        // booking-2 and booking-3 both check in today.
+        expectMetricValue('Today Check-ins', '2');
       });
 
-      // Active Bookings: 3 non-cancelled bookings
-      expectMetricValue('Active Bookings', '3');
+      // Pending = total - paid - partialPaid = 12000 - 5000 - 1500 = 5500 -> ₹5.5k
+      expectMetricValue('Pending Payments', '₹5.5k');
     });
 
     it('should calculate occupancy rate using actual property room count', async () => {
@@ -314,8 +314,8 @@ describe('KPI Dashboard Integration Tests', () => {
       renderApp(<BookingManagement />);
 
       await waitFor(() => {
-        // With no bookings, Active Bookings should be 0.
-        expectMetricValue('Active Bookings', '0');
+        // With no bookings, there are no check-ins today.
+        expectMetricValue('Today Check-ins', '0');
       });
     });
   });
