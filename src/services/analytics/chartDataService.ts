@@ -39,6 +39,11 @@ export interface PropertyComparisonData {
   repeatGuestRate: number;
 }
 
+export interface RevenueTrendData {
+  month: string;
+  revenue: number;
+}
+
 export const chartDataService = {
   // Get occupancy trends for the last 5 months by property
   async getOccupancyTrends(filters: AnalyticsFilters): Promise<OccupancyTrendData[]> {
@@ -281,6 +286,44 @@ export const chartDataService = {
       return result;
     } catch (error) {
       console.error('Error fetching cancellation trends:', error);
+      return [];
+    }
+  },
+
+  // Real revenue per month ("MMM yyyy") for the last `monthCount` months,
+  // attributed by check-in month. Keys match getExpenseTrends so the two can be
+  // merged into a single revenue-vs-expenses trend chart.
+  async getRevenueTrends(filters: AnalyticsFilters, monthCount = 6): Promise<RevenueTrendData[]> {
+    try {
+      if (!filters?.propertyId) {
+        return [];
+      }
+      const endDate = new Date();
+      const result: RevenueTrendData[] = [];
+      for (let i = monthCount - 1; i >= 0; i--) {
+        const monthDate = addMonths(startOfMonth(endDate), -i);
+        const monthStart = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+        const monthEnd = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+        const monthKey = format(monthDate, 'MMM yyyy');
+        const { data: bookings, error } = await supabase
+          .from('bookings')
+          .select('total_amount')
+          .eq('property_id', filters.propertyId)
+          .eq('cancelled', false)
+          .gte('check_in', monthStart)
+          .lte('check_in', monthEnd);
+        if (error) {
+          console.error('Revenue trends query error:', error);
+        }
+        const revenue = (bookings || []).reduce(
+          (sum, b: any) => sum + parseFloat(b.total_amount || '0'),
+          0
+        );
+        result.push({ month: monthKey, revenue: Math.round(revenue) });
+      }
+      return result;
+    } catch (error) {
+      console.error('Error fetching revenue trends:', error);
       return [];
     }
   },

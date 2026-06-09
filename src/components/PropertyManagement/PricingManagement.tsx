@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useProperty } from '../../contexts/PropertyContext';
 import { MultiPropertyPricingRule, Property, RoomType } from '../../types/property';
 import { propertyService, PricingRule } from '../../services/propertyService';
+import { toast } from 'react-hot-toast';
 import { 
   CurrencyDollarIcon, 
   ChartBarIcon,
@@ -97,6 +98,7 @@ const PricingManagement: React.FC<PricingManagementProps> = ({ className = '' })
       setEditingRule(null);
     } catch (error) {
       console.error('Failed to save pricing rule:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save pricing rule');
     }
   };
 

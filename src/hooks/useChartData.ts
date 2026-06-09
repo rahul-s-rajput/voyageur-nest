@@ -6,6 +6,7 @@ import type {
   GuestDemographicsData,
   CancellationTrendData,
   PropertyComparisonData,
+  RevenueTrendData,
 } from '../services/analytics/chartDataService';
 import { getDetailedExpenseAnalytics } from '../services/analytics/expenseAnalyticsService';
 import type { DetailedExpenseAnalytics } from '../services/analytics/expenseAnalyticsService';
@@ -56,6 +57,16 @@ export function usePropertyComparison(dateRange: { start: string; end: string })
   return useQuery<PropertyComparisonData[]>({
     queryKey: ['propertyComparison', dateRange.start, dateRange.end],
     queryFn: () => chartDataService.getPropertyComparison(dateRange),
+    staleTime: 5 * 60 * 1000,
+    enabled,
+  });
+}
+
+export function useRevenueTrends(filters: AnalyticsFilters, monthCount = 6) {
+  const enabled = Boolean(filters?.propertyId);
+  return useQuery<RevenueTrendData[]>({
+    queryKey: ['revenueTrends', filters?.propertyId, monthCount],
+    queryFn: () => chartDataService.getRevenueTrends(filters, monthCount),
     staleTime: 5 * 60 * 1000,
     enabled,
   });

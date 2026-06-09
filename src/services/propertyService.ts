@@ -689,27 +689,9 @@ export class PropertyService {
           console.warn('RLS Policy Error: Consider applying the fix_pricing_rules_rls.sql migration');
           console.warn('Or add VITE_SUPABASE_SERVICE_ROLE_KEY to your environment variables');
         }
-        
-        // Return mock data for demo purposes
-        const mockRule: PricingRule = {
-          id: `mock-${Date.now()}`,
-          propertyId: ruleData.propertyId,
-          ruleName: ruleData.ruleName || `Mock Rule ${Date.now()}`,
-          roomType: ruleData.roomType,
-          seasonType: ruleData.seasonType,
-          basePrice: ruleData.basePrice,
-          weekendMultiplier: ruleData.weekendMultiplier,
-          minimumStay: ruleData.minimumStay || 1,
-          maximumStay: ruleData.maximumStay || 30,
-          advanceBookingDays: ruleData.advanceBookingDays || 0,
-          validFrom: ruleData.validFrom,
-          validTo: ruleData.validTo,
-          isActive: ruleData.isActive,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        
-        return mockRule;
+
+        // Surface the failure instead of pretending the rule was saved.
+        throw new Error(`Failed to create pricing rule: ${error.message}`);
       }
 
       // Transform database response to match interface
@@ -732,27 +714,7 @@ export class PropertyService {
       };
     } catch (error) {
       console.error('Error creating pricing rule:', error);
-      
-      // Return mock data for demo purposes
-      const mockRule: PricingRule = {
-        id: `mock-${Date.now()}`,
-        propertyId: ruleData.propertyId,
-        ruleName: ruleData.ruleName || `Mock Rule ${Date.now()}`,
-        roomType: ruleData.roomType,
-        seasonType: ruleData.seasonType,
-        basePrice: ruleData.basePrice,
-        weekendMultiplier: ruleData.weekendMultiplier,
-        minimumStay: ruleData.minimumStay || 1,
-        maximumStay: ruleData.maximumStay || 30,
-        advanceBookingDays: ruleData.advanceBookingDays || 0,
-        validFrom: ruleData.validFrom,
-        validTo: ruleData.validTo,
-        isActive: ruleData.isActive,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      return mockRule;
+      throw error instanceof Error ? error : new Error('Failed to create pricing rule');
     }
   }
 
@@ -1509,18 +1471,14 @@ export class PropertyService {
       return pricingMap;
     } catch (error) {
       console.error('Error in getBatchRoomPricing:', error);
-      
-      // Return default pricing for all rooms
-      const defaultPricingMap: Record<string, PricingMap> = {};
+
+      // Don't fabricate a flat ₹1000 for every room/date on failure — return empty
+      // maps so the grid reflects "no price loaded" rather than a wrong number.
+      const emptyPricingMap: Record<string, PricingMap> = {};
       roomNumbers.forEach(roomNumber => {
-        const roomPricingMap: PricingMap = {};
-        dateRange.forEach(date => {
-          const dateString = formatDateLocal(date);
-          roomPricingMap[dateString] = 1000; // Default price
-        });
-        defaultPricingMap[roomNumber] = roomPricingMap;
+        emptyPricingMap[roomNumber] = {};
       });
-      return defaultPricingMap;
+      return emptyPricingMap;
     }
   }
 

@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { useKpiPeriod, useKpiPerProperty } from "../../../hooks/useKPI";
-import { useDetailedExpenseAnalytics } from "../../../hooks/useChartData";
+import { useDetailedExpenseAnalytics, useRevenueTrends } from "../../../hooks/useChartData";
 import { useProperty } from "../../../contexts/PropertyContext";
 import { Skeleton } from "../../ui/Skeleton";
 import { ChartSkeleton } from "../../ui/SkeletonLoader";
@@ -42,6 +42,8 @@ export function FinancialReports() {
 
   const { data: period, isLoading: isPeriodLoading } = useKpiPeriod(filters, { enabled: !!propertyId });
   const { data: expenseData, isLoading: isExpenseLoading } = useDetailedExpenseAnalytics(filters);
+  // Real per-month revenue, aligned to the same "MMM yyyy" buckets as expense trends.
+  const { data: revenueTrends, isLoading: isRevenueLoading } = useRevenueTrends(filters);
 
   // Fetch per-property KPI data for profitability comparison
   const totalRoomsByProperty = Object.fromEntries(
@@ -60,12 +62,13 @@ export function FinancialReports() {
   const netProfit = totalRevenue - totalExpenses;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
-  // Create income trend data from expense trends 
-  const incomeData = expenseData?.trends?.map(trend => ({
+  // Combine real per-month revenue with per-month expenses (matched by month key).
+  const revenueByMonth = new Map((revenueTrends || []).map(r => [r.month, r.revenue]));
+  const incomeData = (expenseData?.trends || []).map(trend => ({
     month: trend.month,
-    revenue: trend.budget || totalRevenue / (expenseData.trends?.length || 1),
+    revenue: revenueByMonth.get(trend.month) ?? 0,
     expenses: trend.totalExpenses
-  })) || [];
+  }));
   
   // Create property comparison data from per-property KPI results (all properties)
   const propertyComparison = properties.map(property => {
@@ -97,7 +100,7 @@ export function FinancialReports() {
               <CardTitle>Revenue vs Expenses Trend</CardTitle>
             </CardHeader>
             <CardContent>
-              {isPeriodLoading || isExpenseLoading ? (
+              {isPeriodLoading || isExpenseLoading || isRevenueLoading ? (
                 <>
                   <ChartSkeleton height="400px" />
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
