@@ -496,8 +496,8 @@ export function BookingAnalytics() {
                       <Users className="h-4 w-4 text-warning" />
                       <span className="text-sm font-medium">No-Show Rate</span>
                     </div>
-                    <div className="text-2xl font-bold">3.2%</div>
-                    <div className="text-xs text-muted-foreground">Unattended arrivals</div>
+                    <div className="text-2xl font-bold">—</div>
+                    <div className="text-xs text-muted-foreground">Not tracked</div>
                   </CardContent>
                 </Card>
                 <Card className="bg-gradient-data">

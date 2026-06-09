@@ -127,16 +127,10 @@ export const chartDataService = {
         result.push(row);
       }
 
-      // If no data, provide fallback mock data for demonstration
+      // No real occupancy data → return empty so the UI shows its empty state
+      // rather than a fabricated curve.
       if (result.every(row => Object.keys(row).length === 1)) {
-        console.log('No occupancy data found, using fallback');
-        return [
-          { month: "Jul", property1: 65 },
-          { month: "Aug", property1: 72 },
-          { month: "Sep", property1: 68 },
-          { month: "Oct", property1: 75 },
-          { month: "Nov", property1: 70 },
-        ];
+        return [];
       }
 
       return result;
@@ -233,15 +227,8 @@ export const chartDataService = {
         .slice(0, 6); // Top 6 regions
     } catch (error) {
       console.error('Error fetching guest demographics:', error);
-      // Fallback mock data if guest profiles aren't available
-      return [
-        { region: "Delhi NCR", percentage: 32, bookings: 0 },
-        { region: "Mumbai", percentage: 18, bookings: 0 },
-        { region: "Bangalore", percentage: 15, bookings: 0 },
-        { region: "Punjab", percentage: 12, bookings: 0 },
-        { region: "International", percentage: 8, bookings: 0 },
-        { region: "Others", percentage: 15, bookings: 0 },
-      ];
+      // Return empty rather than fabricated regions; the UI shows an empty state.
+      return [];
     }
   },
 
@@ -278,8 +265,9 @@ export const chartDataService = {
         if (allBookings) {
           const total = allBookings.length;
           const cancellations = allBookings.filter(b => b.cancelled).length;
-          // Note: We don't have explicit no-show tracking, so using a placeholder
-          const noShows = Math.round(cancellations * 0.2); // Estimate 20% of cancellations are no-shows
+          // No-shows aren't tracked in the data model, so report 0 rather than
+          // estimating a fabricated figure.
+          const noShows = 0;
 
           result.push({
             month: monthData.month,
@@ -354,8 +342,20 @@ export const chartDataService = {
             ? (confirmedBookings.length / (confirmedBookings.length + pendingBookings.length)) * 100 
             : null;
 
-          // Simplified repeat guest calculation (would need guest profile linking)
-          const repeatGuestRate = Math.random() * 30 + 40; // Placeholder between 40-70%
+          // Repeat-guest rate: share of distinct guests with more than one stay in
+          // the period, keyed by profile/phone/email/name (best available identifier).
+          const guestKey = (b: any) =>
+            b.guest_profile_id || b.contact_phone || b.contact_email ||
+            (b.guest_name ? String(b.guest_name).trim().toLowerCase() : '');
+          const guestStayCounts = new Map<string, number>();
+          for (const b of nonCancelledBookings) {
+            const k = guestKey(b);
+            if (!k) continue;
+            guestStayCounts.set(k, (guestStayCounts.get(k) || 0) + 1);
+          }
+          const uniqueGuests = guestStayCounts.size;
+          const repeatGuests = Array.from(guestStayCounts.values()).filter(c => c > 1).length;
+          const repeatGuestRate = uniqueGuests > 0 ? (repeatGuests / uniqueGuests) * 100 : 0;
 
           result.push({
             propertyId: property.id,
