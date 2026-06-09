@@ -226,18 +226,6 @@ export const legacyBookingService = {
         updatedAt: data.updated_at
       }
 
-      // Auto-append manual update checklist items for manual OTAs
-      try {
-        const { ManualUpdateService } = await import('../services/manualUpdateService');
-        await ManualUpdateService.createDeltaChecklistsForBookingChange(
-           created.propertyId || '',
-           'created',
-           { id: created.id, roomNo: created.roomNo, check_in: created.checkIn, check_out: created.checkOut }
-         );
-      } catch (e) {
-        console.warn('ManualUpdateService delta generation failed on createBooking:', e);
-      }
-
       return created
     } catch (error) {
       console.error('Error in createBooking:', error)
@@ -314,18 +302,6 @@ export const legacyBookingService = {
         updatedAt: data.updated_at
       }
 
-      // Auto-append manual update checklist items for manual OTAs
-      try {
-        const { ManualUpdateService } = await import('../services/manualUpdateService');
-        await ManualUpdateService.createDeltaChecklistsForBookingChange(
-           updated.propertyId || '',
-           'updated',
-           { id: updated.id, roomNo: updated.roomNo, check_in: updated.checkIn, check_out: updated.checkOut }
-         );
-      } catch (e) {
-        console.warn('ManualUpdateService delta generation failed on updateBooking:', e);
-      }
-
       return updated
     } catch (error) {
       console.error('Error in updateBooking:', error)
@@ -346,18 +322,6 @@ export const legacyBookingService = {
       if (error) {
         console.error('Error cancelling booking:', error)
         return false
-      }
-
-      // Auto-append manual update checklist items for manual OTAs
-      try {
-        const { ManualUpdateService } = await import('../services/manualUpdateService');
-        await ManualUpdateService.createDeltaChecklistsForBookingChange(
-           data.property_id || '',
-           'cancelled',
-           { id: data.id, room_no: data.room_no, check_in: data.check_in, check_out: data.check_out }
-         );
-      } catch (e) {
-        console.warn('ManualUpdateService delta generation failed on cancelBooking:', e);
       }
 
       return true

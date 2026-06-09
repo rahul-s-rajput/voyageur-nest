@@ -3,7 +3,7 @@ import { Menu, X } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { useProperty } from '../contexts/PropertyContext';
 
-type AdminTab = 'bookings' | 'properties' | 'guests' | 'tokens' | 'ota-calendar' | 'manual-updates' | 'menu' | 'notifications-settings' | 'analytics';
+type AdminTab = 'bookings' | 'properties' | 'analytics' | 'guests' | 'menu' | 'settings';
 
 interface MobileNavigationProps {
   activeTab: AdminTab;
@@ -11,66 +11,45 @@ interface MobileNavigationProps {
   propertySelector?: React.ReactNode;
 }
 
-type NavId = Exclude<AdminTab, 'notifications-settings'>;
-
 const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabChange, propertySelector }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const navigationItems: { id: NavId | 'notifications-settings'; label: string; icon: string; description: string }[] = [
+  const navigationItems: { id: AdminTab; label: string; icon: string; description: string }[] = [
     {
-      id: 'bookings' as const,
-      label: 'Booking Management',
+      id: 'bookings',
+      label: 'Bookings',
       icon: '📋',
       description: 'Manage reservations and bookings'
     },
     {
-      id: 'properties' as const,
-      label: 'Property Management',
+      id: 'properties',
+      label: 'Property',
       icon: '🏢',
-      description: 'Manage properties and rooms'
+      description: 'Rooms, pricing & property settings'
     },
     {
-      id: 'analytics' as const,
+      id: 'analytics',
       label: 'Analytics',
       icon: '📊',
       description: 'View reports and analytics'
     },
     {
-      id: 'guests' as const,
-      label: 'Guest Management',
+      id: 'guests',
+      label: 'Guests',
       icon: '👥',
-      description: 'Manage guest profiles and information'
+      description: 'Manage guest profiles and history'
     },
     {
-      id: 'tokens' as const,
-      label: 'Device Tokens',
-      icon: '🔐',
-      description: 'Manage device access tokens'
-    },
-    {
-      id: 'ota-calendar' as const,
-      label: 'OTA Calendar',
-      icon: '📅',
-      description: 'Manage OTA calendar synchronization'
-    },
-    {
-      id: 'manual-updates' as const,
-      label: 'Manual Updates',
-      icon: '🛠️',
-      description: 'Generate and track manual OTA updates'
-    }
-    ,
-    {
-      id: 'notifications-settings' as any,
-      label: 'Notifications',
-      icon: '🔔',
-      description: 'Configure in‑app, email and SMS notifications'
-    },
-    {
-      id: 'menu' as const,
+      id: 'menu',
       label: 'Menu',
       icon: '🍽️',
       description: 'Manage F&B menu (categories & items)'
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: '⚙️',
+      description: 'Notifications & device access tokens'
     }
   ];
 

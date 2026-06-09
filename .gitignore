@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Supabase CLI local cache (not project config)
+supabase/.temp/
+
+# Scratch / test artifacts
+sample-receipt.jpg

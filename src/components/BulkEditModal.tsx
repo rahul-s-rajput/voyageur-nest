@@ -91,18 +91,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     try {
       const result = await BulkEditService.applyBulkEdit(currentProperty.id, options);
 
-      // After successful local updates, generate manual update checklists for OTAs
-      try {
-        const { ManualUpdateService } = await import('../services/manualUpdateService');
-        await ManualUpdateService.createBulkEditChecklistsForProperty(
-          currentProperty.id,
-          options,
-          ['booking.com', 'gommt']
-        );
-      } catch (e) {
-        console.error('Failed to generate manual update checklists for OTAs:', e);
-      }
-
       onSuccess(result);
       onClose();
     } catch (error) {

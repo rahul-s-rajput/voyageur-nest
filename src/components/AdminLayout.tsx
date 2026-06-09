@@ -40,9 +40,6 @@ function generateBreadcrumbs(pathname: string): BreadcrumbItem[] {
       case 'admin':
         name = 'Dashboard'
         break
-      case 'manual-updates':
-        name = 'Manual Updates'
-        break
       case 'menu':
         name = 'Menu Management'
         break

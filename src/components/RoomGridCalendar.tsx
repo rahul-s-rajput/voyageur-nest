@@ -115,50 +115,6 @@ export const RoomGridCalendar: React.FC<RoomGridCalendarProps> = ({
       const { toast } = await import('react-hot-toast');
       toast.success(`Updated pricing for Room ${room.roomNumber} on ${format(date, 'yyyy-MM-dd')}`);
 
-      // Auto-append manual update checklist items for OTAs
-      try {
-        const { supabase } = await import('../lib/supabase');
-        const { ManualUpdateService } = await import('../services/manualUpdateService');
-        // Resolve manual platforms (property-specific first, then global)
-        const { data: propPlatforms } = await supabase
-          .from('ota_platforms')
-          .select('id, name, display_name, is_active, manual_update_required, property_id')
-          .eq('is_active', true)
-          .eq('manual_update_required', true)
-          .eq('property_id', room.propertyId);
-        const { data: globalPlatforms } = await supabase
-          .from('ota_platforms')
-          .select('id, name, display_name, is_active, manual_update_required, property_id')
-          .eq('is_active', true)
-          .eq('manual_update_required', true)
-          .is('property_id', null);
-        const allPlatforms = [...(propPlatforms || []), ...(globalPlatforms || [])];
-
-        const item = {
-          id: `delta-pricing-${room.roomNumber}-${dateKey}`,
-          title: 'Update rates',
-          description: `Set price for room ${room.roomNumber} on ${format(date, 'yyyy-MM-dd')} to ₹${Math.round(finalPrice)}`,
-          category: 'pricing',
-          required: true,
-          estimated_minutes: 3,
-          verification_criteria: 'OTA calendar shows intended rate',
-          status: 'pending' as const
-        };
-
-        for (const platform of allPlatforms) {
-          const name = ((platform.display_name || platform.name) || '').toLowerCase();
-          if (!(name.includes('booking') || name.includes('gommt') || name.includes('makemytrip'))) continue;
-          await ManualUpdateService.appendChecklistItems(
-            platform.id as unknown as string,
-            room.propertyId,
-            [item as any],
-            { dateRange: { start: date, end: date } }
-          );
-        }
-      } catch (e) {
-        console.warn('Failed to append OTA manual checklist items for pricing update:', e);
-      }
-
       // Refresh the grid data to show updated pricing
       await refreshData();
     } catch (error) {
