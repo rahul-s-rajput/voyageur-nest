@@ -832,10 +832,11 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                 <input
                   type="number"
                   name="totalAmount"
-                  value={formData.totalAmount}
+                  value={formData.totalAmount || ''}
                   onChange={handleInputChange}
                   min="0"
                   step="0.01"
+                  inputMode="decimal"
                   placeholder="Enter total amount"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={isLoading}
@@ -868,10 +869,11 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                   <input
                     type="number"
                     name="paymentAmount"
-                    value={formData.paymentStatus === 'paid' ? (parseFloat(formData.totalAmount) || 0) : formData.paymentAmount}
+                    value={(formData.paymentStatus === 'paid' ? (parseFloat(formData.totalAmount) || 0) : formData.paymentAmount) || ''}
                     onChange={handleInputChange}
                     min="0"
                     step="0.01"
+                    inputMode="decimal"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={isLoading || formData.paymentStatus === 'paid'}
                     placeholder={formData.paymentStatus === 'paid' ? 'Full amount' : 'Enter partial amount'}

@@ -1219,8 +1219,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                         type="number"
                         min={0}
                         step="0.01"
-                        value={foodForm.unitAmount}
+                        inputMode="decimal"
+                        value={foodForm.unitAmount === 0 ? '' : foodForm.unitAmount}
                         onChange={(e) => setFoodForm({ ...foodForm, unitAmount: Math.max(0, Number(e.target.value) || 0) })}
+                        placeholder="0.00"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>
@@ -1294,8 +1296,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                         type="number"
                         min={0}
                         step="0.01"
-                        value={miscForm.unitAmount}
+                        inputMode="decimal"
+                        value={miscForm.unitAmount === 0 ? '' : miscForm.unitAmount}
                         onChange={(e) => setMiscForm({ ...miscForm, unitAmount: Math.max(0, Number(e.target.value) || 0) })}
+                        placeholder="0.00"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>
@@ -1348,8 +1352,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                           type="number"
                           min={0}
                           step="0.01"
-                          value={editForm.unitAmount ?? editCharge.unitAmount}
+                          inputMode="decimal"
+                          value={(editForm.unitAmount ?? editCharge.unitAmount) === 0 ? '' : (editForm.unitAmount ?? editCharge.unitAmount)}
                           onChange={(e) => setEditForm({ ...editForm, unitAmount: Math.max(0, Number(e.target.value) || 0) })}
+                          placeholder="0.00"
                           className="w-full px-3 py-2 border rounded"
                         />
                       </div>
@@ -1411,8 +1417,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                         type="number"
                         min={0.01}
                         step="0.01"
-                        value={paymentForm.amount}
+                        inputMode="decimal"
+                        value={paymentForm.amount === 0 ? '' : paymentForm.amount}
                         onChange={(e) => setPaymentForm({ ...paymentForm, amount: Math.max(0, Number(e.target.value) || 0) })}
+                        placeholder="0.00"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>

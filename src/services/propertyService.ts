@@ -339,16 +339,18 @@ export class PropertyService {
 
   // Property settings operations
   async getPropertySettings(propertyId: string): Promise<PropertySpecificSettings[]> {
+    // Settings are stored as a single JSON object under the 'general_settings' key.
     const { data, error } = await supabase
       .from('property_settings')
       .select('*')
-      .eq('property_id', propertyId);
+      .eq('property_id', propertyId)
+      .eq('setting_key', 'general_settings');
 
     if (error) {
       throw new Error(`Failed to fetch property settings: ${error.message}`);
     }
 
-    return data.map(this.transformSettingsFromDB);
+    return (data || []).map((row: any) => this.transformSettingsFromDB(row));
   }
 
   async updatePropertySetting(
@@ -374,17 +376,17 @@ export class PropertyService {
   }
 
   async updatePropertySettings(propertyId: string, settings: Record<string, any>): Promise<PropertySpecificSettings[]> {
-    // Update multiple settings at once
-    const updates = Object.entries(settings).map(([key, value]) => ({
-      property_id: propertyId,
-      setting_key: key,
-      setting_value: value,
-      updated_at: new Date().toISOString()
-    }));
-
+    // Persist the entire settings object as ONE row (key 'general_settings'), so it
+    // round-trips through transformSettingsFromDB. The previous version exploded it
+    // into per-field key-value rows that the loader couldn't read back.
     const { error } = await supabase
       .from('property_settings')
-      .upsert(updates, {
+      .upsert({
+        property_id: propertyId,
+        setting_key: 'general_settings',
+        setting_value: settings,
+        updated_at: new Date().toISOString(),
+      }, {
         onConflict: 'property_id,setting_key'
       });
 
@@ -536,52 +538,58 @@ export class PropertyService {
   }
 
   private transformSettingsFromDB(dbSettings: any): PropertySpecificSettings {
+    // Settings live as a JSON object in setting_value (camelCase keys). Read from
+    // there first, then fall back to any legacy wide column, then to the default.
+    const v = (dbSettings.setting_value && typeof dbSettings.setting_value === 'object')
+      ? dbSettings.setting_value
+      : {};
+    const pick = <T,>(camel: any, snake: any, def: T): T => (camel ?? snake ?? def) as T;
     return {
       id: dbSettings.id,
       propertyId: dbSettings.property_id,
       settingKey: dbSettings.setting_key,
       settingValue: dbSettings.setting_value,
-      
-      // General Settings with defaults
-      checkInTime: dbSettings.check_in_time || '15:00',
-      checkOutTime: dbSettings.check_out_time || '11:00',
-      currency: dbSettings.currency || 'INR',
-      timezone: dbSettings.timezone || 'Asia/Kolkata',
-      language: dbSettings.language || 'en',
-      emergencyContact: dbSettings.emergency_contact || '',
-      wifiPassword: dbSettings.wifi_password || '',
-      
-      // Financial Settings with defaults
-      taxRate: dbSettings.tax_rate || 0,
-      localTaxRate: dbSettings.local_tax_rate || 0,
-      serviceChargeRate: dbSettings.service_charge_rate || 0,
-      
-      // Booking Settings with defaults
-      minAdvanceBookingDays: dbSettings.min_advance_booking_days || 0,
-      maxAdvanceBookingDays: dbSettings.max_advance_booking_days || 365,
-      allowOnlineBooking: dbSettings.allow_online_booking ?? true,
-      autoConfirmBookings: dbSettings.auto_confirm_bookings ?? true,
-      requireAdvancePayment: dbSettings.require_advance_payment ?? false,
-      advancePaymentPercentage: dbSettings.advance_payment_percentage || 0,
-      
-      // Cancellation & Policies with defaults
-      cancellationPolicy: dbSettings.cancellation_policy || 'flexible',
-      allowCancellation: dbSettings.allow_cancellation ?? true,
-      cancellationDeadlineHours: dbSettings.cancellation_deadline_hours || 24,
-      noShowPolicy: dbSettings.no_show_policy || 'charge_first_night',
-      
-      // Notification Settings with defaults
-      sendConfirmationEmail: dbSettings.send_confirmation_email ?? true,
-      sendReminderEmail: dbSettings.send_reminder_email ?? true,
-      reminderEmailDays: dbSettings.reminder_email_days || 1,
-      
-      // Property Policies with defaults
-      petPolicy: dbSettings.pet_policy || 'not_allowed',
-      smokingPolicy: dbSettings.smoking_policy || 'not_allowed',
-      childPolicy: dbSettings.child_policy || 'welcome',
-      extraBedPolicy: dbSettings.extra_bed_policy || 'not_available',
-      extraBedCharge: dbSettings.extra_bed_charge || 0,
-      
+
+      // General
+      checkInTime: pick(v.checkInTime, dbSettings.check_in_time, '15:00'),
+      checkOutTime: pick(v.checkOutTime, dbSettings.check_out_time, '11:00'),
+      currency: pick(v.currency, dbSettings.currency, 'INR'),
+      timezone: pick(v.timezone, dbSettings.timezone, 'Asia/Kolkata'),
+      language: pick(v.language, dbSettings.language, 'en'),
+      emergencyContact: pick(v.emergencyContact, dbSettings.emergency_contact, ''),
+      wifiPassword: pick(v.wifiPassword, dbSettings.wifi_password, ''),
+
+      // Financial
+      taxRate: pick(v.taxRate, dbSettings.tax_rate, 0),
+      localTaxRate: pick(v.localTaxRate, dbSettings.local_tax_rate, 0),
+      serviceChargeRate: pick(v.serviceChargeRate, dbSettings.service_charge_rate, 0),
+
+      // Booking
+      minAdvanceBookingDays: pick(v.minAdvanceBookingDays, dbSettings.min_advance_booking_days, 0),
+      maxAdvanceBookingDays: pick(v.maxAdvanceBookingDays, dbSettings.max_advance_booking_days, 365),
+      allowOnlineBooking: pick(v.allowOnlineBooking, dbSettings.allow_online_booking, true),
+      autoConfirmBookings: pick(v.autoConfirmBookings, dbSettings.auto_confirm_bookings, true),
+      requireAdvancePayment: pick(v.requireAdvancePayment, dbSettings.require_advance_payment, false),
+      advancePaymentPercentage: pick(v.advancePaymentPercentage, dbSettings.advance_payment_percentage, 0),
+
+      // Cancellation & Policies
+      cancellationPolicy: pick(v.cancellationPolicy, dbSettings.cancellation_policy, 'flexible'),
+      allowCancellation: pick(v.allowCancellation, dbSettings.allow_cancellation, true),
+      cancellationDeadlineHours: pick(v.cancellationDeadlineHours, dbSettings.cancellation_deadline_hours, 24),
+      noShowPolicy: pick(v.noShowPolicy, dbSettings.no_show_policy, 'charge_first_night'),
+
+      // Notifications
+      sendConfirmationEmail: pick(v.sendConfirmationEmail, dbSettings.send_confirmation_email, true),
+      sendReminderEmail: pick(v.sendReminderEmail, dbSettings.send_reminder_email, true),
+      reminderEmailDays: pick(v.reminderEmailDays, dbSettings.reminder_email_days, 1),
+
+      // Property Policies
+      petPolicy: pick(v.petPolicy, dbSettings.pet_policy, 'not_allowed'),
+      smokingPolicy: pick(v.smokingPolicy, dbSettings.smoking_policy, 'not_allowed'),
+      childPolicy: pick(v.childPolicy, dbSettings.child_policy, 'welcome'),
+      extraBedPolicy: pick(v.extraBedPolicy, dbSettings.extra_bed_policy, 'not_available'),
+      extraBedCharge: pick(v.extraBedCharge, dbSettings.extra_bed_charge, 0),
+
       // Timestamps
       createdAt: dbSettings.created_at,
       updatedAt: dbSettings.updated_at,
