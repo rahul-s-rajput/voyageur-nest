@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2, Printer } from 'lucide-react';
+import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2, Download } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
@@ -68,6 +68,20 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const invoiceCompany = getInvoiceCompany(
     properties.find(p => p.id === booking?.propertyId) || currentProperty
   );
+
+  // Download the on-screen (GST) invoice as a single-page A4 PDF via html2pdf —
+  // a real file download, no browser print dialog.
+  const handleDownloadInvoicePdf = async () => {
+    if (!booking) return;
+    try {
+      const { exportInvoiceById } = await import('../lib/pdf/exportInvoice');
+      const num = String(booking.folioNumber || `520/${invoiceNumber}`).replace(/[\\/:*?"<>|]/g, '-');
+      await exportInvoiceById('invoice-preview', `Invoice_${num}.pdf`, { scale: 2 });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      showError('Download failed', `Could not download the invoice: ${detail}`);
+    }
+  };
   // Charges + payments are cached via React Query (instant on re-open). setCharges/
   // setPayments keep the useState-setter signature, so the mutation handlers below
   // work unchanged — they now write to the query cache. Totals are derived locally.
@@ -2253,11 +2267,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               <h2 className="text-xl font-semibold text-gray-900">Invoice</h2>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={handleDownloadInvoicePdf}
                   className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                 >
-                  <Printer className="w-4 h-4 mr-2" />
-                  Print / Save PDF
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
                 </button>
                 <button
                   onClick={() => setShowInvoice(false)}

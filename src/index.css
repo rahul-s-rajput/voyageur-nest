@@ -35,22 +35,7 @@
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
     box-shadow: none !important;
-  }
-  /* The on-screen invoice is max-w-4xl (896px) — wider than A4. Let it shrink to
-     the page width so it doesn't spill onto a second page. */
-  .printable-invoice .invoice-preview,
-  .printable-invoice > div {
-    max-width: 100% !important;
-    width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-  /* Collapse the big blank "fill page" box so totals/footer fit on page one. */
-  .invoice-fill-space {
-    height: 32px !important;
   }
 }
 

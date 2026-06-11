@@ -675,15 +675,18 @@ export const downloadInvoicePDF = async (props: InvoicePDFProps) => {
     // illegal in filenames.
     const safeName = `Invoice_${String(props.invoiceNumber).replace(/[\\/:*?"<>|]/g, '-')}.pdf`;
 
-    // iOS Safari ignores the <a download> attribute for blobs, so the desktop
-    // approach silently does nothing on iPhone. Use the native share/save sheet
-    // (Web Share API) when it can share files — that's the reliable mobile path.
+    // iOS Safari ignores the <a download> attribute for blobs, so on MOBILE use
+    // the native share/save sheet (Web Share API). On desktop, always download —
+    // desktop browsers also support Web Share, but a real file download is wanted.
     const file = new File([blob], safeName, { type: 'application/pdf' });
     const nav = navigator as Navigator & {
       canShare?: (data?: any) => boolean;
       share?: (data?: any) => Promise<void>;
     };
-    if (nav.canShare && nav.share && nav.canShare({ files: [file] })) {
+    const isMobile =
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS
+    if (isMobile && nav.canShare && nav.share && nav.canShare({ files: [file] })) {
       try {
         await nav.share({ files: [file], title: safeName });
         return;
