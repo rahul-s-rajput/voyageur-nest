@@ -497,6 +497,25 @@ function MainApp() {
 }
 
 function App() {
+  // Open native date/time pickers on a click anywhere in the field (not just the
+  // tiny calendar icon). showPicker() must run inside a user gesture — this click
+  // handler qualifies; unsupported browsers fall back to the default behaviour.
+  useEffect(() => {
+    const openPicker = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      if (
+        el instanceof HTMLInputElement &&
+        ['date', 'time', 'datetime-local', 'month', 'week'].includes(el.type) &&
+        !el.disabled &&
+        !el.readOnly
+      ) {
+        try { (el as HTMLInputElement & { showPicker?: () => void }).showPicker?.(); } catch { /* ignore */ }
+      }
+    };
+    document.addEventListener('click', openPicker);
+    return () => document.removeEventListener('click', openPicker);
+  }, []);
+
   return (
     <AuthErrorBoundary>
       <AuthProvider>

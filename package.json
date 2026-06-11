@@ -17,7 +17,8 @@
     "migrate:menu": "tsx scripts/apply-menu-migration.ts",
     "seed:menu": "tsx scripts/seed-menu.ts",
     "migrate:device-tokens": "tsx scripts/apply-device-tokens-migration.ts",
-    "cleanup:device-tokens": "tsx scripts/cleanup-device-tokens.ts"
+    "cleanup:device-tokens": "tsx scripts/cleanup-device-tokens.ts",
+    "perf:probe": "tsx scripts/perf-probe.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
