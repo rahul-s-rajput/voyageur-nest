@@ -324,8 +324,8 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
           </table>
         </div>
 
-        {/* Empty space for additional items */}
-        <div className="border-b-2 border-black" style={{ height: '280px' }}>
+        {/* Empty space for additional items (shrinks when printing so it fits one page) */}
+        <div className="border-b-2 border-black invoice-fill-space" style={{ height: '280px' }}>
           {/* Empty space to fill letter page size */}
         </div>
 

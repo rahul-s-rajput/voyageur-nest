@@ -18,6 +18,11 @@
    element marked .printable-invoice (and its children), and pin it to the top.
    Without this, window.print() would print the whole dimmed admin dashboard. */
 @media print {
+  /* A4 with tight margins so the invoice has room to fit on one page. */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
   body * {
     visibility: hidden !important;
   }
@@ -33,6 +38,19 @@
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
+  }
+  /* The on-screen invoice is max-w-4xl (896px) — wider than A4. Let it shrink to
+     the page width so it doesn't spill onto a second page. */
+  .printable-invoice .invoice-preview,
+  .printable-invoice > div {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  /* Collapse the big blank "fill page" box so totals/footer fit on page one. */
+  .invoice-fill-space {
+    height: 32px !important;
   }
 }
 

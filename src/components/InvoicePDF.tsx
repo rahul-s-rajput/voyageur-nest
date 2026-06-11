@@ -671,10 +671,29 @@ export const InvoicePDFExport: React.FC<InvoicePDFProps & { children?: React.Rea
 export const downloadInvoicePDF = async (props: InvoicePDFProps) => {
   try {
     const blob = await pdf(<InvoicePDFDocument {...props} />).toBlob();
-    const url = URL.createObjectURL(blob);
     // Sanitize the filename — invoice numbers look like "520/391" and the "/" is
     // illegal in filenames.
     const safeName = `Invoice_${String(props.invoiceNumber).replace(/[\\/:*?"<>|]/g, '-')}.pdf`;
+
+    // iOS Safari ignores the <a download> attribute for blobs, so the desktop
+    // approach silently does nothing on iPhone. Use the native share/save sheet
+    // (Web Share API) when it can share files — that's the reliable mobile path.
+    const file = new File([blob], safeName, { type: 'application/pdf' });
+    const nav = navigator as Navigator & {
+      canShare?: (data?: any) => boolean;
+      share?: (data?: any) => Promise<void>;
+    };
+    if (nav.canShare && nav.share && nav.canShare({ files: [file] })) {
+      try {
+        await nav.share({ files: [file], title: safeName });
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return; // user dismissed the sheet
+        // otherwise fall through to the anchor download
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = safeName;
