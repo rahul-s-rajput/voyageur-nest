@@ -1,6 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { AnalyticsFilters } from '../../types/analytics';
-import { addMonths, format, startOfMonth, endOfMonth } from 'date-fns';
+import { addMonths, format, startOfMonth } from 'date-fns';
 
 export interface OccupancyTrendData {
   month: string;
@@ -60,7 +60,11 @@ export const chartDataService = {
         months.push({
           month: format(month, 'MMM'),
           start: startOfMonth(month).toISOString(),
-          end: endOfMonth(month).toISOString()
+          // Exclusive upper bound = first moment of the next month. Correct
+          // whether check_in is a date or timestamptz column: an endOfMonth
+          // (23:59:59.999) bound is truncated to the day and silently drops
+          // last-day-of-month check-ins from the count.
+          end: startOfMonth(addMonths(month, 1)).toISOString()
         });
       }
 
@@ -282,7 +286,11 @@ export const chartDataService = {
         months.push({
           month: format(month, 'MMM'),
           start: startOfMonth(month).toISOString(),
-          end: endOfMonth(month).toISOString()
+          // Exclusive upper bound = first moment of the next month. Correct
+          // whether check_in is a date or timestamptz column: an endOfMonth
+          // (23:59:59.999) bound is truncated to the day and silently drops
+          // last-day-of-month check-ins from the count.
+          end: startOfMonth(addMonths(month, 1)).toISOString()
         });
       }
 
@@ -333,7 +341,10 @@ export const chartDataService = {
       for (let i = monthCount - 1; i >= 0; i--) {
         const monthDate = addMonths(startOfMonth(endDate), -i);
         const monthStart = format(startOfMonth(monthDate), 'yyyy-MM-dd');
-        const monthEnd = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+        // Exclusive upper bound (first day of next month) so a date-only
+        // `.lte('check_in', lastDay)` can't drop afternoon check-ins on the
+        // last day when check_in is stored as timestamptz.
+        const nextMonthStart = format(startOfMonth(addMonths(monthDate, 1)), 'yyyy-MM-dd');
         const monthKey = format(monthDate, 'MMM yyyy');
         const { data: bookings, error } = await supabase
           .from('bookings')
@@ -341,7 +352,7 @@ export const chartDataService = {
           .eq('property_id', filters.propertyId)
           .eq('cancelled', false)
           .gte('check_in', monthStart)
-          .lte('check_in', monthEnd);
+          .lt('check_in', nextMonthStart);
         if (error) {
           console.error('Revenue trends query error:', error);
         }

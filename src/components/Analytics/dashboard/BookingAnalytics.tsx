@@ -516,7 +516,7 @@ export function BookingAnalytics() {
                       <MapPin className="h-4 w-4 text-primary" />
                       <span className="text-sm font-medium">Lost Revenue</span>
                     </div>
-                    <div className="text-2xl font-bold">₹{booking?.cancelledBookingCount && booking?.adr ? Math.round(booking.cancelledBookingCount * booking.adr * Math.max(1, booking.avgLengthOfStay || 1)).toLocaleString() : '—'}</div>
+                    <div className="text-2xl font-bold">₹{booking?.cancelledBookingCount && booking?.adr ? Math.round(booking.cancelledBookingCount * booking.adr * (booking.avgLengthOfStay || 1)).toLocaleString() : '—'}</div>
                     <div className="text-xs text-muted-foreground">Potential earnings</div>
                   </CardContent>
                 </Card>

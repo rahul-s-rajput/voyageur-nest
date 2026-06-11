@@ -7,7 +7,8 @@ import { getExpenseAnalytics } from './expenseAnalyticsService';
 export interface KPIPeriodResult {
   booking: BookingKPIs;
   expenses: ExpenseAnalytics;
-  // Percentage 0-100
+  // Profit margin %. Positive = profitable, negative = loss-making, 0 = break-even
+  // or no revenue. Max 100; can be negative when expenses exceed revenue.
   profitMarginPct: number;
   // Metadata helpful for dashboards/reporting
   meta: {
