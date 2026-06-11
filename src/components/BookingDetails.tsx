@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2, Printer } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
@@ -15,6 +16,7 @@ import { InvoicePDFExport } from './InvoicePDF';
 import { bookingChargesService, type BookingCharge } from '../services/bookingChargesService';
 import { bookingPaymentsService, type BookingPayment } from '../services/bookingPaymentsService';
 import { computeFinancials, type BookingFinancials } from '../services/bookingFinancialsService';
+import { useBookingLedger, ledgerQueryKey, type BookingLedger } from '../hooks/useBookingLedger';
 import { useCurrentPropertyId, useProperty } from '../contexts/PropertyContext';
 import { getInvoiceCompany } from '../utils/invoiceCompany';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from './ui/Dialog';
@@ -66,11 +68,32 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const invoiceCompany = getInvoiceCompany(
     properties.find(p => p.id === booking?.propertyId) || currentProperty
   );
-  const [charges, setCharges] = useState<BookingCharge[]>([]);
-  const [payments, setPayments] = useState<BookingPayment[]>([]);
-  const [financials, setFinancials] = useState<BookingFinancials | null>(null);
-  const [loadingFinance, setLoadingFinance] = useState(false);
-  const [financeError, setFinanceError] = useState<string | null>(null);
+  // Charges + payments are cached via React Query (instant on re-open). setCharges/
+  // setPayments keep the useState-setter signature, so the mutation handlers below
+  // work unchanged — they now write to the query cache. Totals are derived locally.
+  const queryClient = useQueryClient();
+  const ledgerQuery = useBookingLedger(propertyId, booking?.id);
+  const charges = ledgerQuery.data?.charges ?? [];
+  const payments = ledgerQuery.data?.payments ?? [];
+  const loadingFinance = ledgerQuery.isLoading;
+  const financeError = ledgerQuery.error ? ((ledgerQuery.error as Error).message || 'Failed to load charges/payments') : null;
+  const setCharges = (updater: BookingCharge[] | ((prev: BookingCharge[]) => BookingCharge[])) => {
+    queryClient.setQueryData<BookingLedger>(ledgerQueryKey(propertyId, booking?.id), (old) => ({
+      charges: typeof updater === 'function' ? (updater as (p: BookingCharge[]) => BookingCharge[])(old?.charges ?? []) : updater,
+      payments: old?.payments ?? [],
+    }));
+  };
+  const setPayments = (updater: BookingPayment[] | ((prev: BookingPayment[]) => BookingPayment[])) => {
+    queryClient.setQueryData<BookingLedger>(ledgerQueryKey(propertyId, booking?.id), (old) => ({
+      charges: old?.charges ?? [],
+      payments: typeof updater === 'function' ? (updater as (p: BookingPayment[]) => BookingPayment[])(old?.payments ?? []) : updater,
+    }));
+  };
+  const financials = useMemo<BookingFinancials | null>(
+    () => (booking && propertyId ? computeFinancials(charges, payments, propertyId, booking.id) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ledgerQuery.data, propertyId, booking?.id]
+  );
 
   // Translation (for localized Food items)
   const { currentLanguage } = useTranslation();
@@ -271,41 +294,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
 
 
-  // Load booking charges, payments, and financial aggregates
-  useEffect(() => {
-    if (!booking || !propertyId) return;
-    let cancelled = false;
-    setFinanceError(null);
-    setLoadingFinance(true);
-    (async () => {
-      try {
-        const [chargesRes, paymentsRes] = await Promise.all([
-          bookingChargesService.listByBooking(propertyId, booking.id),
-          bookingPaymentsService.listByBooking(propertyId, booking.id),
-        ]);
-        if (cancelled) return;
-        setCharges(chargesRes);
-        setPayments(paymentsRes);
-        // Totals are derived from the charges/payments we just loaded — no extra
-        // aggregate query needed.
-        const fin = computeFinancials(chargesRes, paymentsRes, propertyId, booking.id);
-        setFinancials(fin);
-        // Reconcile the legacy payment columns the list/KPI read with the canonical
-        // financials, so simply opening a booking corrects a stale "unpaid".
-        void syncLegacyPaymentStatus(fin);
-      } catch (e: any) {
-        if (cancelled) return;
-        console.error('Failed to load booking finance data', e);
-        setFinanceError(e?.message || 'Failed to load booking finance data');
-        showError('Load failed', 'Could not load charges, payments, or totals.');
-      } finally {
-        if (!cancelled) setLoadingFinance(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [booking?.id, propertyId]);
+  // (Charges/payments loading is handled by useBookingLedger above.)
 
   // Food typeahead search (debounced)
   useEffect(() => {
@@ -337,25 +326,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     };
   }, [addFoodOpen, foodSearch, propertyId, currentLanguage]);
 
-  // Helpers
+  // Helpers — revalidate the cached ledger from the server (totals recompute via the
+  // useMemo above; the legacy-column sync runs from the effect below).
   const reloadFinancials = async () => {
     if (!propertyId || !booking) return;
-    try {
-      // Re-fetch the ledger and recompute totals (also re-syncs the charges/payments
-      // lists so local state can't drift from the server).
-      const [c, p] = await Promise.all([
-        bookingChargesService.listByBooking(propertyId, booking.id),
-        bookingPaymentsService.listByBooking(propertyId, booking.id),
-      ]);
-      setCharges(c);
-      setPayments(p);
-      const fin = computeFinancials(c, p, propertyId, booking.id);
-      setFinancials(fin);
-      void syncLegacyPaymentStatus(fin);
-    } catch (e) {
-      console.error('Failed to refresh financials', e);
-      showError('Totals not refreshed', 'The balance shown may be out of date — reopen the booking to refresh.');
-    }
+    await queryClient.invalidateQueries({ queryKey: ledgerQueryKey(propertyId, booking.id) });
   };
 
   // The booking list, KPI cards and grid read the legacy bookings.payment_status /
@@ -384,6 +359,13 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       console.warn('Failed to sync legacy payment status from financials', e);
     }
   };
+
+  // Reconcile the legacy payment columns whenever the computed status/balance
+  // changes (opening a booking, or after adding a charge/payment).
+  useEffect(() => {
+    if (financials) void syncLegacyPaymentStatus(financials);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [financials?.statusDerived, financials?.balanceDue, booking?.id]);
 
   // Submit handlers
   const submitFoodCharge = async () => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import BookingManagement from '../../components/BookingManagement';
 import { NotificationProvider } from '../../components/NotificationContainer';
 import { useProperty } from '../../contexts/PropertyContext';
@@ -211,18 +212,27 @@ describe('KPI Dashboard Integration Tests', () => {
     },
   ];
 
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockedUseProperty.mockReturnValue({ currentProperty: mockProperty } as ReturnType<typeof useProperty>);
     getBookingsMock.mockResolvedValue(mockBookings);
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  const renderApp = (component: React.ReactElement) =>
-    render(<NotificationProvider>{component}</NotificationProvider>);
+  // BookingManagement now reads its booking list via React Query, so a provider is required.
+  const withProviders = (component: React.ReactElement) => (
+    <QueryClientProvider client={queryClient}>
+      <NotificationProvider>{component}</NotificationProvider>
+    </QueryClientProvider>
+  );
+
+  const renderApp = (component: React.ReactElement) => render(withProviders(component));
 
   // Each KPI metric renders a `label` div followed by a sibling `value` div.
   // Scope value assertions to a metric by label to avoid cross-card collisions.
@@ -288,7 +298,7 @@ describe('KPI Dashboard Integration Tests', () => {
       const newProperty: Property = { ...mockProperty, id: 'prop-2', totalRooms: 25 };
       mockedUseProperty.mockReturnValue({ currentProperty: newProperty } as ReturnType<typeof useProperty>);
 
-      rerender(<NotificationProvider><BookingManagement /></NotificationProvider>);
+      rerender(withProviders(<BookingManagement />));
 
       await waitFor(() => {
         expect(getBookingsMock).toHaveBeenCalledWith({ propertyId: 'prop-2' });

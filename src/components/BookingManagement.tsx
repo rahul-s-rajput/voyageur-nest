@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, Clock, CheckCircle, RefreshCw } from 'lucide-react';
+import { useBookings, bookingsQueryKey } from '../hooks/useBookings';
 import { HomePage } from '../components/HomePage';
 import { InvoiceForm } from '../components/InvoiceForm';
 import { InvoicePreview } from '../components/InvoicePreview';
@@ -16,8 +18,19 @@ import { bookingComplianceService, type BookingEnforcementViolation } from '../s
 
 const BookingManagement: React.FC = () => {
   const { currentProperty } = useProperty();
+  const queryClient = useQueryClient();
   const [currentView, setCurrentView] = useState<'home' | 'invoice-form' | 'invoice-preview' | 'actions'>('home');
-  const [bookings, setBookings] = useState<Booking[]>([]);
+
+  // Booking list is cached via React Query so re-mounts are instant. `setBookings`
+  // keeps the exact useState-setter signature, so every existing optimistic update
+  // below works unchanged — it now writes straight to the query cache.
+  const { data: bookingsData } = useBookings(currentProperty?.id);
+  const bookings = bookingsData ?? [];
+  const setBookings = (updater: Booking[] | ((prev: Booking[]) => Booking[])) => {
+    queryClient.setQueryData<Booking[]>(bookingsQueryKey(currentProperty?.id), (old) =>
+      typeof updater === 'function' ? (updater as (p: Booking[]) => Booking[])(old ?? []) : updater
+    );
+  };
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showBookingDetails, setShowBookingDetails] = useState(false);
   const [showNewBookingModal, setShowNewBookingModal] = useState(false);
@@ -103,18 +116,11 @@ const BookingManagement: React.FC = () => {
     return `${istDate} ${istTime}`;
   }
 
-  // Load bookings and invoice counter
+  // Load the invoice counter (the booking list itself is handled by useBookings).
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        // Load bookings filtered by current property
-        const bookingsData = await bookingService.getBookings({
-          propertyId: currentProperty?.id
-        });
-        setBookings(bookingsData);
-
-        // Load counter
         const counter = await invoiceCounterService.getCounter();
         setInvoiceNumber(counter);
         setIsCounterLoaded(true);
