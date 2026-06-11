@@ -282,6 +282,12 @@ const BookingManagement: React.FC = () => {
     }
   };
 
+  // Show a newly created booking immediately (no refresh). Dedupe by id in case a
+  // realtime event or another path already added it.
+  const handleBookingCreated = (booking: Booking) => {
+    setBookings(prev => (prev.some(b => b.id === booking.id) ? prev : [...prev, booking]));
+  };
+
   
 
   const handleBackToHome = () => {
@@ -460,9 +466,10 @@ const BookingManagement: React.FC = () => {
             onCancelBooking={handleCancelBooking}
             onCreateCancellationInvoice={handleCreateCancellationInvoice}
             onOpenActions={handleOpenActions}
+            onBookingCreated={handleBookingCreated}
           />
         </div>
-        
+
         {/* Booking Details Modal (home view) */}
         <BookingDetails
           booking={selectedBooking}
@@ -485,7 +492,7 @@ const BookingManagement: React.FC = () => {
           isOpen={showNewBookingModal}
           onClose={() => setShowNewBookingModal(false)}
           onBookingCreated={(booking) => {
-            setBookings(prev => [...prev, booking]);
+            handleBookingCreated(booking);
             setShowNewBookingModal(false);
           }}
         />
@@ -847,6 +854,7 @@ const BookingManagement: React.FC = () => {
           onCancelBooking={handleCancelBooking}
           onCreateCancellationInvoice={handleCreateCancellationInvoice}
           onOpenActions={handleOpenActions}
+          onBookingCreated={handleBookingCreated}
         />
       </div>
 

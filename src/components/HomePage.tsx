@@ -22,6 +22,8 @@ interface HomePageProps {
   onCancelBooking: (bookingId: string) => void;
   onCreateCancellationInvoice: (booking: Booking) => void;
   onOpenActions?: () => void;
+  /** Notify the parent of a newly created booking so it can show it without a refresh. */
+  onBookingCreated?: (booking: Booking) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -35,6 +37,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onCancelBooking,
   onCreateCancellationInvoice,
   onOpenActions,
+  onBookingCreated,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<BookingFilters>({
@@ -443,8 +446,10 @@ export const HomePage: React.FC<HomePageProps> = ({
         <NewBookingModal
           isOpen={showNewBookingModal}
           onClose={() => setShowNewBookingModal(false)}
-          onBookingCreated={() => {
-            // Close the modal - the parent will handle adding the booking
+          onBookingCreated={(booking) => {
+            // Bubble the new booking up so the parent appends it to the list
+            // immediately (no refresh needed), then close the modal.
+            onBookingCreated?.(booking);
             setShowNewBookingModal(false);
           }}
         />

@@ -1,5 +1,5 @@
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
-import { bookingService } from "../../lib/supabase";
+import { bookingService, supabase } from "../../lib/supabase";
 import type { Booking } from "../../types/booking";
 import type { AnalyticsFilters, BookingKPIs } from "../../types/analytics";
 
@@ -71,8 +71,30 @@ export async function getBookingKPIs(filters: AnalyticsFilters): Promise<Booking
   const periodEnd = new Date(endStr);
   const daysInPeriod = clamp(differenceInCalendarDays(periodEnd, periodStart) + 1, 1);
 
-  const totalRevenue = activeBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+  // Room revenue (the room charge / legacy total) drives ADR & RevPAR by hotel
+  // convention — those metrics are room-only and exclude F&B/misc.
+  const roomRevenue = activeBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
   const bookingCount = activeBookings.length;
+
+  // Total revenue should reflect the full folio (room + F&B + misc), so aggregate
+  // gross_total from the booking_financials view. Fall back to room revenue if the
+  // view is unavailable.
+  let totalRevenue = roomRevenue;
+  try {
+    const ids = activeBookings.map(b => b.id).filter(Boolean);
+    if (ids.length > 0) {
+      const { data, error } = await supabase
+        .from('booking_financials')
+        .select('gross_total')
+        .eq('property_id', filters.propertyId)
+        .in('booking_id', ids);
+      if (!error && data && data.length > 0) {
+        totalRevenue = data.reduce((sum, r: any) => sum + parseFloat(r.gross_total ?? 0), 0);
+      }
+    }
+  } catch (e) {
+    console.warn('booking_financials revenue unavailable; using room totals', e);
+  }
 
   const roomNightsSold = activeBookings.reduce((sum, b) => {
     const rooms = b.numberOfRooms || 1;
@@ -87,8 +109,8 @@ export async function getBookingKPIs(filters: AnalyticsFilters): Promise<Booking
     ? (roomNightsSold / roomNightsAvailable) * 100
     : 0;
 
-  const adr = roomNightsSold > 0 ? totalRevenue / roomNightsSold : 0;
-  const revpar = roomNightsAvailable > 0 ? totalRevenue / roomNightsAvailable : 0;
+  const adr = roomNightsSold > 0 ? roomRevenue / roomNightsSold : 0;
+  const revpar = roomNightsAvailable > 0 ? roomRevenue / roomNightsAvailable : 0;
 
   // Booking source distribution
   const sourceCounts = activeBookings.reduce<Record<string, number>>((acc, b) => {
