@@ -15,7 +15,8 @@ import { InvoicePDFExport } from './InvoicePDF';
 import { bookingChargesService, type BookingCharge } from '../services/bookingChargesService';
 import { bookingPaymentsService, type BookingPayment } from '../services/bookingPaymentsService';
 import { bookingFinancialsService, type BookingFinancials } from '../services/bookingFinancialsService';
-import { useCurrentPropertyId } from '../contexts/PropertyContext';
+import { useCurrentPropertyId, useProperty } from '../contexts/PropertyContext';
+import { getInvoiceCompany } from '../utils/invoiceCompany';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from './ui/Dialog';
 import { menuService } from '../services/menuService';
 import { useTranslation } from '../hooks/useTranslation';
@@ -60,6 +61,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
   // Charges / Payments / Financials state
   const propertyId = useCurrentPropertyId();
+  const { currentProperty, properties } = useProperty();
+  // Invoice header is driven by the booking's own property, not a hardcoded address.
+  const invoiceCompany = getInvoiceCompany(
+    properties.find(p => p.id === booking?.propertyId) || currentProperty
+  );
   const [charges, setCharges] = useState<BookingCharge[]>([]);
   const [payments, setPayments] = useState<BookingPayment[]>([]);
   const [financials, setFinancials] = useState<BookingFinancials | null>(null);
@@ -886,10 +892,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         ? Math.max(0, (financials.paymentsTotal || 0) - (financials.refundsTotal || 0))
         : 0;
       const cancellationData: CancellationInvoiceData = {
-        companyName: 'Voyageur Nest',
-        companyAddress: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
-        companyPhone: '+919876161215',
-        companyEmail: 'voyageur.nest@gmail.com',
+        companyName: invoiceCompany.name,
+        companyAddress: invoiceCompany.address,
+        companyPhone: invoiceCompany.phone,
+        companyEmail: invoiceCompany.email,
         invoiceNumber: booking.folioNumber || `520/${invoiceNumber}`,
         guestName: booking.guestName,
         billTo: booking.guestName,
@@ -929,10 +935,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     );
 
     return {
-      companyName: 'Voyageur Nest',
-      companyAddress: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
-      companyPhone: '+919876161215',
-      companyEmail: 'voyageur.nest@gmail.com',
+      companyName: invoiceCompany.name,
+      companyAddress: invoiceCompany.address,
+      companyPhone: invoiceCompany.phone,
+      companyEmail: invoiceCompany.email,
       invoiceNumber: booking.folioNumber || `520/${invoiceNumber}`,
       guestName: booking.guestName,
       billTo: booking.guestName,
@@ -2284,12 +2290,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                   charges={charges}
                   payments={payments}
                   financials={financials}
-                  company={{
-                    name: 'Voyageur Nest',
-                    address: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
-                    phone: '+919876161215',
-                    email: 'voyageur.nest@gmail.com',
-                  }}
+                  company={invoiceCompany}
                   className="px-4 py-2 text-sm text-white bg-gray-900 rounded-md hover:bg-gray-800 transition-colors"
                 >
                   Export
@@ -2308,12 +2309,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               charges={charges}
               payments={payments}
               financials={financials}
-              company={{
-                name: 'Voyageur Nest',
-                address: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
-                phone: '+919876161215',
-                email: 'voyageur.nest@gmail.com',
-              }}
+              company={invoiceCompany}
             />
           </div>
         </div>

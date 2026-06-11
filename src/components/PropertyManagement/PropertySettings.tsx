@@ -20,7 +20,7 @@ interface PropertySettingsProps {
 }
 
 const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) => {
-  const { currentProperty } = useProperty();
+  const { currentProperty, loadProperties } = useProperty();
   const [settings, setSettings] = useState<PropertySpecificSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,11 +28,41 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
   const [hasChanges, setHasChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
+  // Core property identity fields (name/address/contact) — these appear on invoices.
+  const [propertyForm, setPropertyForm] = useState({ name: '', address: '', contactPhone: '', contactEmail: '' });
+  const [savingProperty, setSavingProperty] = useState(false);
+
   useEffect(() => {
     if (currentProperty) {
       loadPropertySettings();
+      setPropertyForm({
+        name: currentProperty.name || '',
+        address: currentProperty.address || currentProperty.location || '',
+        contactPhone: currentProperty.contactPhone || currentProperty.phone || '',
+        contactEmail: currentProperty.contactEmail || currentProperty.email || '',
+      });
     }
   }, [currentProperty]);
+
+  const savePropertyDetails = async () => {
+    if (!currentProperty) return;
+    try {
+      setSavingProperty(true);
+      await propertyService.updateProperty(currentProperty.id, {
+        name: propertyForm.name,
+        address: propertyForm.address,
+        contactPhone: propertyForm.contactPhone,
+        contactEmail: propertyForm.contactEmail,
+      } as any);
+      if (loadProperties) await loadProperties();
+      alert('Property details saved.');
+    } catch (e) {
+      console.error('Failed to save property details', e);
+      alert('Failed to save property details. Please try again.');
+    } finally {
+      setSavingProperty(false);
+    }
+  };
 
   const loadPropertySettings = async () => {
     if (!currentProperty) return;
@@ -173,7 +203,7 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
     }
   };
 
-  if (loading || !settings) {
+  if (loading) {
     return (
       <div className={`bg-white rounded-lg shadow p-6 ${className}`}>
         <div className="animate-pulse">
@@ -263,45 +293,89 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
       </div>
 
       {/* Content */}
-      <div className="p-6">
+      <div className="p-6 space-y-6">
+        {/* Property identity — these fields appear on guest invoices. Always editable,
+            independent of the per-property settings row. */}
         {activeTab === 'general' && (
-          <GeneralSettings 
-            settings={settings} 
-            onChange={handleSettingChange}
-            errors={validationErrors}
-          />
+          <div className="border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Property Details</h3>
+            <p className="text-xs text-gray-500 mb-4">Name, address and contact. These appear on guest invoices.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Property Name</label>
+                <input
+                  type="text"
+                  value={propertyForm.name}
+                  onChange={(e) => setPropertyForm(p => ({ ...p, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Voyageur Nest Baror"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                <input
+                  type="text"
+                  value={propertyForm.address}
+                  onChange={(e) => setPropertyForm(p => ({ ...p, address: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Street, City, State, PIN"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Contact Phone</label>
+                <input
+                  type="tel"
+                  value={propertyForm.contactPhone}
+                  onChange={(e) => setPropertyForm(p => ({ ...p, contactPhone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="+91-XXXXXXXXXX"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Contact Email</label>
+                <input
+                  type="email"
+                  value={propertyForm.contactEmail}
+                  onChange={(e) => setPropertyForm(p => ({ ...p, contactEmail: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="you@example.com"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={savePropertyDetails}
+                disabled={savingProperty}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingProperty ? 'Saving…' : 'Save Property Details'}
+              </button>
+            </div>
+          </div>
         )}
-        
-        {activeTab === 'booking' && (
-          <BookingSettings 
-            settings={settings} 
-            onChange={handleSettingChange}
-            errors={validationErrors}
-          />
-        )}
-        
-        {activeTab === 'notifications' && (
-          <NotificationSettings 
-            settings={settings} 
-            onChange={handleSettingChange}
-            errors={validationErrors}
-          />
-        )}
-        
-        {activeTab === 'policies' && (
-          <PolicySettings 
-            settings={settings} 
-            onChange={handleSettingChange}
-            errors={validationErrors}
-          />
-        )}
-        
-        {activeTab === 'integrations' && (
-          <IntegrationSettings 
-            settings={settings} 
-            onChange={handleSettingChange}
-            errors={validationErrors}
-          />
+
+        {!settings ? (
+          activeTab !== 'general' && (
+            <p className="text-sm text-gray-500">Additional settings aren’t configured for this property yet.</p>
+          )
+        ) : (
+          <>
+            {activeTab === 'general' && (
+              <GeneralSettings settings={settings} onChange={handleSettingChange} errors={validationErrors} />
+            )}
+            {activeTab === 'booking' && (
+              <BookingSettings settings={settings} onChange={handleSettingChange} errors={validationErrors} />
+            )}
+            {activeTab === 'notifications' && (
+              <NotificationSettings settings={settings} onChange={handleSettingChange} errors={validationErrors} />
+            )}
+            {activeTab === 'policies' && (
+              <PolicySettings settings={settings} onChange={handleSettingChange} errors={validationErrors} />
+            )}
+            {activeTab === 'integrations' && (
+              <IntegrationSettings settings={settings} onChange={handleSettingChange} errors={validationErrors} />
+            )}
+          </>
         )}
       </div>
     </div>

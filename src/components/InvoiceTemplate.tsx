@@ -3,6 +3,8 @@ import { X, Printer, Download } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { format } from 'date-fns';
 import { downloadInvoicePDF } from './InvoicePDF';
+import { useProperty } from '../contexts/PropertyContext';
+import { getInvoiceCompany } from '../utils/invoiceCompany';
 
 // New imports for data fetching
 import { useEffect, useMemo, useState } from 'react';
@@ -21,6 +23,10 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
   invoiceNumber,
   onClose
 }) => {
+  const { currentProperty, properties } = useProperty();
+  // Invoice header reflects the booking's own property, not a hardcoded address.
+  const company = getInvoiceCompany(properties.find(p => p.id === booking.propertyId) || currentProperty);
+
   const handlePrint = () => {
     window.print();
   };
@@ -34,12 +40,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
         charges,
         payments,
         financials,
-        company: {
-          name: 'Voyageur Nest',
-          address: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
-          phone: '+919876161215',
-          email: 'voyageur.nest@gmail.com',
-        },
+        company,
       });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
@@ -161,10 +162,10 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
           <div className="mb-8">
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Voyageur Nest</h1>
-                <p className="text-gray-600">Old Manali, Manali, Himachal Pradesh, 175131, India</p>
-                <p className="text-gray-600">Phone: +919876161215</p>
-                <p className="text-gray-600">Email: voyageur.nest@gmail.com</p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{company.name}</h1>
+                {company.address && <p className="text-gray-600">{company.address}</p>}
+                {company.phone && <p className="text-gray-600">Phone: {company.phone}</p>}
+                {company.email && <p className="text-gray-600">Email: {company.email}</p>}
               </div>
               <div className="text-right">
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -378,8 +379,10 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
           {/* Footer */}
           <div className="mt-12 pt-8 border-t border-gray-200">
             <div className="text-center text-sm text-gray-600">
-              <p>Thank you for choosing Voyageur Nest!</p>
-              <p className="mt-2">For any queries, please contact us at voyageur.nest@gmail.com or +919876161215</p>
+              <p>Thank you for choosing {company.name}!</p>
+              {(company.email || company.phone) && (
+                <p className="mt-2">For any queries, please contact us at {[company.email, company.phone].filter(Boolean).join(' or ')}</p>
+              )}
             </div>
           </div>
         </div>
