@@ -3,7 +3,7 @@ import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, P
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
-import { updateBookingWithValidation, invoiceCounterService, checkInService } from '../lib/supabase';
+import { updateBookingWithValidation, invoiceCounterService, checkInService, bookingService } from '../lib/supabase';
 import { StorageService } from '../lib/storage';
 import { InvoicePreview } from './InvoicePreview';
 import { InvoicePerLine } from './InvoicePerLine';
@@ -282,6 +282,9 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         setCharges(chargesRes);
         setPayments(paymentsRes);
         setFinancials(fin);
+        // Reconcile the legacy payment columns the list/KPI read with the canonical
+        // financials, so simply opening a booking corrects a stale "unpaid".
+        void syncLegacyPaymentStatus(fin);
       } catch (e: any) {
         if (cancelled) return;
         console.error('Failed to load booking finance data', e);
@@ -332,9 +335,37 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     try {
       const fin = await bookingFinancialsService.getByBooking(propertyId, booking.id);
       setFinancials(fin);
+      void syncLegacyPaymentStatus(fin);
     } catch (e) {
       console.error('Failed to refresh financials', e);
       showError('Totals not refreshed', 'The balance shown may be out of date — reopen the booking to refresh.');
+    }
+  };
+
+  // The booking list, KPI cards and grid read the legacy bookings.payment_status /
+  // payment_amount columns, but charges/payments live in their own tables. Keep the
+  // legacy columns in sync with the canonical booking_financials view so a partial
+  // payment shows as "Partial" everywhere — not just in this modal's summary.
+  const syncLegacyPaymentStatus = async (fin: BookingFinancials | null) => {
+    if (!fin || !booking) return;
+    const netPaid = Math.max(0, (fin.paymentsTotal || 0) - (fin.refundsTotal || 0));
+    const derived: 'paid' | 'partial' | 'unpaid' =
+      fin.statusDerived === 'paid'
+        ? 'paid'
+        : (fin.statusDerived === 'partial' || netPaid > 0)
+        ? 'partial'
+        : 'unpaid';
+    const currentStatus = (booking.paymentStatus as string) || 'unpaid';
+    const currentAmount = Number(booking.paymentAmount || 0);
+    if (currentStatus === derived && Math.abs(currentAmount - netPaid) < 0.01) return; // already in sync
+    try {
+      const updated = await bookingService.updateBooking(booking.id, {
+        paymentStatus: derived,
+        paymentAmount: netPaid,
+      } as Partial<Booking>);
+      if (updated) onUpdate(updated);
+    } catch (e) {
+      console.warn('Failed to sync legacy payment status from financials', e);
     }
   };
 

@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, Printer } from 'lucide-react';
+import { X, Printer, Download } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { format } from 'date-fns';
+import { downloadInvoicePDF } from './InvoicePDF';
 
 // New imports for data fetching
 import { useEffect, useMemo, useState } from 'react';
@@ -22,6 +23,30 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
 }) => {
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      setDownloading(true);
+      await downloadInvoicePDF({
+        booking,
+        invoiceNumber: booking.folioNumber || `520/${invoiceNumber}`,
+        charges,
+        payments,
+        financials,
+        company: {
+          name: 'Voyageur Nest',
+          address: 'Old Manali, Manali, Himachal Pradesh, 175131, India',
+          phone: '+919876161215',
+          email: 'voyageur.nest@gmail.com',
+        },
+      });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      alert(`Failed to download PDF: ${detail}`);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -60,6 +85,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
   const [financials, setFinancials] = useState<BookingFinancials | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   // Load invoice data
   useEffect(() => {
@@ -106,6 +132,14 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
             {isCancellationInvoice ? 'Cancellation Invoice' : 'Invoice'}
           </h2>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={handleDownloadPDF}
+              disabled={downloading || loading}
+              className="flex items-center px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:opacity-60"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {downloading ? 'Generating…' : 'Download PDF'}
+            </button>
             <button
               onClick={handlePrint}
               className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"

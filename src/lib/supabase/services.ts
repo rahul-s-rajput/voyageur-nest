@@ -104,6 +104,9 @@ export const bookingService = {
         status: booking.status,
         cancelled: booking.cancelled,
         total_amount: booking.totalAmount.toString(),
+        payment_status: booking.paymentStatus || 'unpaid',
+        payment_amount: booking.paymentAmount != null ? booking.paymentAmount.toString() : null,
+        payment_mode: booking.paymentMode || null,
         contact_phone: booking.contactPhone,
         contact_email: booking.contactEmail,
         special_requests: booking.specialRequests,
@@ -191,6 +194,9 @@ export const bookingService = {
     if (updates.specialRequests !== undefined) updateData.special_requests = updates.specialRequests
     if (updates.bookingDate !== undefined) updateData.booking_date = updates.bookingDate || null
     if (updates.folioNumber !== undefined) updateData.folio_number = updates.folioNumber
+    if (updates.paymentStatus !== undefined) updateData.payment_status = updates.paymentStatus
+    if (updates.paymentAmount !== undefined) updateData.payment_amount = updates.paymentAmount != null ? updates.paymentAmount.toString() : null
+    if (updates.paymentMode !== undefined) updateData.payment_mode = updates.paymentMode
 
     const { data, error } = await supabase
       .from('bookings')
