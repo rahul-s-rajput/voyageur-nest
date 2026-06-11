@@ -237,26 +237,39 @@ export class GuestProfileService {
         return null;
       }
 
-      let query = supabase
-        .from('guest_profiles')
-        .select('*');
+      // Match on email first (the stronger identifier), then fall back to
+      // phone. An OR match could return a row that only matches the phone of a
+      // *different* guest who happens to share a number, linking the wrong
+      // profile — so we resolve the two identifiers in priority order instead.
+      if (email) {
+        const { data: byEmail, error: emailErr } = await supabase
+          .from('guest_profiles')
+          .select('*')
+          .eq('email', email)
+          .limit(1);
 
-      if (email && phone) {
-        query = query.or(`email.eq.${email},phone.eq.${phone}`);
-      } else if (email) {
-        query = query.eq('email', email);
-      } else if (phone) {
-        query = query.eq('phone', phone);
+        if (emailErr) {
+          console.error('Error finding guest by email:', emailErr);
+          throw new Error(`Failed to find guest by contact: ${emailErr.message}`);
+        }
+        if (byEmail && byEmail.length > 0) return byEmail[0];
       }
 
-      const { data: profiles, error } = await query.limit(1);
+      if (phone) {
+        const { data: byPhone, error: phoneErr } = await supabase
+          .from('guest_profiles')
+          .select('*')
+          .eq('phone', phone)
+          .limit(1);
 
-      if (error) {
-        console.error('Error finding guest by contact:', error);
-        throw new Error(`Failed to find guest by contact: ${error.message}`);
+        if (phoneErr) {
+          console.error('Error finding guest by phone:', phoneErr);
+          throw new Error(`Failed to find guest by contact: ${phoneErr.message}`);
+        }
+        if (byPhone && byPhone.length > 0) return byPhone[0];
       }
 
-      return profiles && profiles.length > 0 ? profiles[0] : null;
+      return null;
     } catch (error) {
       console.error('Error in findGuestByContact:', error);
       throw error;

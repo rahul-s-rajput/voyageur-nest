@@ -11,7 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { Room } from '../../types/property';
 import { Booking } from '../../types/booking';
-import { bookingService } from '../../lib/supabase';
+import { bookingService, updateBookingWithValidation } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 
 interface TouchActionMenuProps {
@@ -64,6 +64,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
       label: 'Cancel Booking',
       action: async () => {
         if (onCancelBooking) return onCancelBooking(booking);
+        if (!window.confirm(`Cancel booking for ${booking.guestName || 'this guest'}? This can't be undone from here.`)) return;
         const ok = await bookingService.cancelBooking(booking.id);
         if (ok) toast.success('Booking cancelled');
       },
@@ -75,13 +76,17 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
       label: 'Check-in',
       action: async () => {
         if (onCheckIn) return onCheckIn(booking);
-        const updated = await bookingService.updateBooking(booking.id, { status: 'checked-in' as any });
-        if (updated) {
+        // Route through validation so status-transition rules (e.g. check-in
+        // form completion) are enforced, matching the rest of the app.
+        const result = await updateBookingWithValidation(booking.id, { status: 'checked-in' as Booking['status'] });
+        if (result.success && result.booking) {
           toast.success('Guest checked-in');
           try {
             sessionStorage.setItem('open_qr_for_booking_id', booking.id);
           } catch {}
-          onBookingClick?.(updated);
+          onBookingClick?.(result.booking);
+        } else {
+          toast.error(result.errors?.join('; ') || 'Check-in failed');
         }
       },
       color: 'green',
@@ -92,18 +97,12 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
       label: 'Check-out',
       action: async () => {
         if (onCheckOut) return onCheckOut(booking);
-        // Verify latest status before checking out
-        const latest = await bookingService.getBookingById(booking.id);
-        if (!latest) {
-          toast.error('Unable to fetch booking');
-          return;
+        const result = await updateBookingWithValidation(booking.id, { status: 'checked-out' as Booking['status'] });
+        if (result.success && result.booking) {
+          toast.success('Guest checked-out');
+        } else {
+          toast.error(result.errors?.join('; ') || 'Check-out allowed only after check-in');
         }
-        if (latest.status !== 'checked-in') {
-          toast.error('Check-out allowed only after check-in');
-          return;
-        }
-        const updated = await bookingService.updateBooking(booking.id, { status: 'checked-out' as any });
-        if (updated) toast.success('Guest checked-out');
       },
       color: 'blue',
     });
@@ -117,6 +116,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
           toast.error('Delete allowed only for cancelled bookings');
           return;
         }
+        if (!window.confirm('Permanently delete this cancelled booking? This cannot be undone.')) return;
         const ok = await bookingService.deleteBooking(booking.id);
         if (ok) toast.success('Booking deleted');
       },

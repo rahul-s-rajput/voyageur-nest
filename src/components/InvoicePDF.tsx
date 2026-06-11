@@ -427,7 +427,7 @@ const InvoicePDFDocument: React.FC<InvoicePDFProps> = ({
             <Text style={styles.companyInfo}>{company.address}</Text>
             <Text style={styles.companyInfo}>Phone: {company.phone} | Email: {company.email}</Text>
             {company.pan && <Text style={styles.companyInfo}>PAN: {company.pan}</Text>}
-            <Text style={styles.invoiceTitle}>TAX INVOICE</Text>
+            <Text style={styles.invoiceTitle}>INVOICE</Text>
           </View>
 
           {/* Content */}

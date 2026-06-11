@@ -1,8 +1,12 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HomePage } from '../../../components/HomePage';
 import { PropertyProvider } from '../../../contexts/PropertyContext';
+
+const createTestQueryClient = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 // Mock the CalendarViewManager component
 vi.mock('../../../components/CalendarViewManager', () => {
@@ -160,10 +164,13 @@ const defaultProps = {
 
 const renderWithPropertyContext = (props = {}) => {
   const mergedProps = { ...defaultProps, ...props };
+  const queryClient = createTestQueryClient();
   return render(
-    <PropertyProvider>
-      <HomePage {...mergedProps} />
-    </PropertyProvider>
+    <QueryClientProvider client={queryClient}>
+      <PropertyProvider>
+        <HomePage {...mergedProps} />
+      </PropertyProvider>
+    </QueryClientProvider>
   );
 };
 
@@ -331,12 +338,15 @@ describe('HomePage', () => {
   });
 
   it('maintains view mode state across re-renders', async () => {
+    const queryClient = createTestQueryClient();
     const { rerender } = render(
-      <PropertyProvider>
-        <HomePage {...defaultProps} viewMode="list" />
-      </PropertyProvider>
+      <QueryClientProvider client={queryClient}>
+        <PropertyProvider>
+          <HomePage {...defaultProps} viewMode="list" />
+        </PropertyProvider>
+      </QueryClientProvider>
     );
-    
+
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Search bookings...')).toBeInTheDocument();
     });
@@ -346,9 +356,11 @@ describe('HomePage', () => {
 
     // Re-render component with calendar view
     rerender(
-      <PropertyProvider>
-        <HomePage {...defaultProps} viewMode="calendar" />
-      </PropertyProvider>
+      <QueryClientProvider client={queryClient}>
+        <PropertyProvider>
+          <HomePage {...defaultProps} viewMode="calendar" />
+        </PropertyProvider>
+      </QueryClientProvider>
     );
     
     // Should now show calendar view

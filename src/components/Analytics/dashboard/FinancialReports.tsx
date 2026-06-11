@@ -13,6 +13,7 @@ import {
   Bar
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { parse } from "date-fns";
 import { useKpiPeriod, useKpiPerProperty } from "../../../hooks/useKPI";
 import { useDetailedExpenseAnalytics, useRevenueTrends } from "../../../hooks/useChartData";
 import { useProperty } from "../../../contexts/PropertyContext";
@@ -62,13 +63,23 @@ export function FinancialReports() {
   const netProfit = totalRevenue - totalExpenses;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
-  // Combine real per-month revenue with per-month expenses (matched by month key).
+  // Combine real per-month revenue with per-month expenses. Use the UNION of
+  // months present in either series (a month with revenue but no expenses — or
+  // vice versa — must still appear), ordered chronologically by parsing the
+  // shared "MMM yyyy" key.
   const revenueByMonth = new Map((revenueTrends || []).map(r => [r.month, r.revenue]));
-  const incomeData = (expenseData?.trends || []).map(trend => ({
-    month: trend.month,
-    revenue: revenueByMonth.get(trend.month) ?? 0,
-    expenses: trend.totalExpenses
-  }));
+  const expenseByMonth = new Map((expenseData?.trends || []).map(t => [t.month, t.totalExpenses]));
+  const allMonths = Array.from(new Set([
+    ...(revenueTrends || []).map(r => r.month),
+    ...(expenseData?.trends || []).map(t => t.month),
+  ]));
+  const incomeData = allMonths
+    .sort((a, b) => parse(a, 'MMM yyyy', new Date(0)).getTime() - parse(b, 'MMM yyyy', new Date(0)).getTime())
+    .map(month => ({
+      month,
+      revenue: revenueByMonth.get(month) ?? 0,
+      expenses: expenseByMonth.get(month) ?? 0,
+    }));
   
   // Create property comparison data from per-property KPI results (all properties)
   const propertyComparison = properties.map(property => {

@@ -6,14 +6,9 @@ interface InvoicePreviewProps {
 }
 
 export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
-  // Calculate tariff and GST from grand total
-  // Grand Total = Room Charges + CGST + SGST
-  // Grand Total = Room Charges + (Room Charges * 0.06) + (Room Charges * 0.06)
-  // Grand Total = Room Charges * (1 + 0.06 + 0.06) = Room Charges * 1.12
-  const roomCharges = data.grandTotal / 1.12;
-  const cgstAmount = roomCharges * 0.06;
-  const sgstAmount = roomCharges * 0.06;
-  const tariff = roomCharges / data.noOfDays;
+  // No GST is charged — amounts are shown at full value, no tax breakdown.
+  const roomCharges = data.grandTotal;
+  const tariff = data.noOfDays > 0 ? roomCharges / data.noOfDays : roomCharges;
   const balance = data.grandTotal - data.paymentAmount;
 
   const formatDate = (dateString: string) => {
@@ -292,15 +287,9 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
                 <td className="border-r border-black p-1 text-center">1</td>
                 <td className="border-r border-black p-1">
                   <div className='font-semibold'>Room Charges</div>
-                  <div className="pl-2">Room Charges</div>
-                  <div className="pl-2">CGST @ slab 6.00 %</div>
-                  <div className="pl-2">SGST @ slab 6.00 %</div>
                 </td>
                 <td className="p-1 text-right">
-                  <div className="mb-2">&nbsp;</div>
                   <div style={{paddingRight: '10px'}}>{formatAmount(roomCharges)}</div>
-                  <div style={{paddingRight: '10px'}}>{formatAmount(cgstAmount)}</div>
-                  <div style={{paddingRight: '10px'}}>{formatAmount(sgstAmount)}</div>
                   <div className="border-t border-black pt-0.5 font-semibold" style={{paddingRight: '10px'}}>
                     Total: {formatAmount(data.grandTotal)}
                   </div>

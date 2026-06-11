@@ -130,6 +130,10 @@ export const GuestProfileList: React.FC<GuestProfileListProps> = ({
 
   const handleExportData = async () => {
     try {
+      if (guests.length === 0) {
+        setError('There are no guest profiles to export.');
+        return;
+      }
       // This would typically generate a CSV or Excel file
       const csvData = guests.map(guest => ({
         Name: guest.name,

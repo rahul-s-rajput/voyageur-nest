@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, Clock, CheckCircle, RefreshCw } from 'lucide-react';
 import { useBookings, bookingsQueryKey } from '../hooks/useBookings';
@@ -250,7 +250,23 @@ const BookingManagement: React.FC = () => {
     setShowBookingDetails(true);
   };
 
+  // Nudge the grid (which fetches independently) to refetch after a mutation.
+  const notifyBookingsChanged = () => {
+    try { window.dispatchEvent(new CustomEvent('voyageur:bookings-changed')); } catch { /* no-op */ }
+  };
+
+  // Guards for the check-in polling loop: abort on unmount, and never run two
+  // loops for the same booking concurrently.
+  const pollAbortRef = useRef(false);
+  const pollingBookings = useRef<Set<string>>(new Set());
+  useEffect(() => () => { pollAbortRef.current = true; }, []);
+
   const handleDeleteBooking = async (bookingId: string) => {
+    const target = bookings.find(b => b.id === bookingId);
+    if (target && !target.cancelled) {
+      pushToast('error', 'Delete not allowed', 'Only cancelled bookings can be deleted — cancel it first.');
+      return;
+    }
     try {
       const success = await bookingService.deleteBooking(bookingId);
       if (success) {
@@ -277,6 +293,8 @@ const BookingManagement: React.FC = () => {
         if (selectedBooking?.id === bookingId) {
           setSelectedBooking(prev => prev ? { ...prev, cancelled: true } : null);
         }
+        pushToast('success', 'Booking cancelled', 'The booking has been cancelled.');
+        notifyBookingsChanged();
         // Refresh violations in case we are on actions view
         if (currentView === 'actions') await loadViolations();
       } else {
@@ -345,33 +363,46 @@ const BookingManagement: React.FC = () => {
         await openBookingById(bookingId);
         pushToast('info', 'Check-in form required', 'QR code opened. Complete the form to continue.');
 
-        // Poll for form completion and auto-complete check-in
+        // Poll for form completion and auto-complete check-in. Abort if the
+        // component unmounts, and never start a second loop for the same booking.
         const POLL_MS = 5000;
         const MAX_MS = 600000; // 10 minutes
-        let elapsed = 0;
-        while (elapsed < MAX_MS) {
-          await new Promise(r => setTimeout(r, POLL_MS));
-          try {
-            const data = await checkInService.getCheckInDataByBookingId(bookingId);
-            if (data?.form_completed_at) {
-              const finalize = await updateBookingWithValidation(bookingId, { status: 'checked-in' as Booking['status'] });
-              if (finalize.success && finalize.booking) {
-                setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-in' } : b));
-                // Update currently open booking details view as well (functional updater avoids stale capture)
-                setSelectedBooking(prev => (prev && prev.id === bookingId ? { ...prev, status: 'checked-in' } : prev));
-                pushToast('success', 'Checked in', 'Check-in completed after form submission.');
-                await loadViolations();
-              } else if (finalize.errors) {
-                pushToast('error', 'Check-in failed', finalize.errors.join('; '));
+        if (pollingBookings.current.has(bookingId)) return;
+        pollingBookings.current.add(bookingId);
+        try {
+          let elapsed = 0;
+          while (elapsed < MAX_MS) {
+            if (pollAbortRef.current) return;
+            await new Promise(r => setTimeout(r, POLL_MS));
+            if (pollAbortRef.current) return;
+            try {
+              const data = await checkInService.getCheckInDataByBookingId(bookingId);
+              if (pollAbortRef.current) return;
+              if (data?.form_completed_at) {
+                const finalize = await updateBookingWithValidation(bookingId, { status: 'checked-in' as Booking['status'] });
+                if (pollAbortRef.current) return;
+                if (finalize.success && finalize.booking) {
+                  setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-in' } : b));
+                  setSelectedBooking(prev => (prev && prev.id === bookingId ? { ...prev, status: 'checked-in' } : prev));
+                  pushToast('success', 'Checked in', 'Check-in completed after form submission.');
+                  notifyBookingsChanged();
+                  await loadViolations();
+                } else if (finalize.errors) {
+                  pushToast('error', 'Check-in failed', finalize.errors.join('; '));
+                }
+                return;
               }
-              return;
+            } catch (e) {
+              // keep polling; transient errors are acceptable
             }
-          } catch (e) {
-            // keep polling; transient errors are acceptable
+            elapsed += POLL_MS;
           }
-          elapsed += POLL_MS;
+          if (!pollAbortRef.current) {
+            pushToast('warning', 'Waiting for check-in form', 'Timed out waiting for form completion.');
+          }
+        } finally {
+          pollingBookings.current.delete(bookingId);
         }
-        pushToast('warning', 'Waiting for check-in form', 'Timed out waiting for form completion.');
         return;
       }
 
@@ -393,6 +424,7 @@ const BookingManagement: React.FC = () => {
       if (result.success) {
         setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'checked-out' } : b));
         pushToast('success', 'Checked out', 'Guest has been checked out');
+        notifyBookingsChanged();
         await loadViolations();
         return;
       }
@@ -427,6 +459,7 @@ const BookingManagement: React.FC = () => {
       if (result.success) {
         setBookings(prev => prev.map(b => b.id === extendBookingId ? { ...b, checkOut: extendDate } : b));
         pushToast('success', 'Extended', 'Stay extended successfully');
+        notifyBookingsChanged();
         await loadViolations();
       } else {
         pushToast('error', 'Extend failed', (result.errors && result.errors[0]) || 'New date conflicts with another booking');

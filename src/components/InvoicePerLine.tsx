@@ -336,7 +336,7 @@ export const InvoicePerLine: React.FC<InvoicePerLineProps> = ({
           <div className="hotel-address">{company.address}</div>
           <div className="hotel-contact">Phone: {company.phone} | Email: {company.email}</div>
           {company.pan && <div className="hotel-contact">PAN: {company.pan}</div>}
-          <div className="invoice-title">TAX INVOICE</div>
+          <div className="invoice-title">INVOICE</div>
         </div>
 
         <div className="invoice-content">

@@ -90,36 +90,44 @@ export const chartDataService = {
         const row: OccupancyTrendData = { month: monthData.month };
 
         for (const property of properties) {
-          // Get bookings for this property and month
+          // Fetch every booking that OVERLAPS the month (not just those fully
+          // inside it) so cross-month stays are counted: overlap iff
+          // check_in < monthEnd && check_out > monthStart.
           const { data: bookings, error: bookingsError } = await supabase
             .from('bookings')
             .select('check_in, check_out, number_of_rooms')
             .eq('property_id', property.id)
             .eq('cancelled', false)
-            .gte('check_in', monthData.start)
-            .lt('check_out', monthData.end); // Changed from check_in to check_out for better coverage
+            .lt('check_in', monthData.end)
+            .gt('check_out', monthData.start);
 
           if (bookingsError) {
             console.error('Bookings query error:', bookingsError);
             continue;
           }
 
-          // Calculate total room nights sold
+          const monthStart = new Date(monthData.start);
+          const monthEnd = new Date(monthData.end);
+          const DAY_MS = 1000 * 60 * 60 * 24;
+
+          // Room-nights sold within THIS month: clamp each stay to the month
+          // boundaries so a stay that straddles two months only contributes the
+          // nights that actually fall inside the current month.
           const totalRoomNights = (bookings || []).reduce((sum, booking) => {
-            const checkIn = new Date(booking.check_in);
-            const checkOut = new Date(booking.check_out);
-            const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
+            const checkIn = new Date(booking.check_in).getTime();
+            const checkOut = new Date(booking.check_out).getTime();
+            const segStart = Math.max(checkIn, monthStart.getTime());
+            const segEnd = Math.min(checkOut, monthEnd.getTime());
+            const nights = Math.max(0, Math.round((segEnd - segStart) / DAY_MS));
             return sum + (nights * (booking.number_of_rooms || 1));
           }, 0);
 
           // Calculate days in month
-          const monthStart = new Date(monthData.start);
-          const monthEnd = new Date(monthData.end);
-          const daysInMonth = Math.ceil((monthEnd.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24));
+          const daysInMonth = Math.ceil((monthEnd.getTime() - monthStart.getTime()) / DAY_MS);
 
           const totalRoomNightsAvailable = property.total_rooms * daysInMonth;
-          const occupancyRate = totalRoomNightsAvailable > 0 
-            ? Math.round((totalRoomNights / totalRoomNightsAvailable) * 100) 
+          const occupancyRate = totalRoomNightsAvailable > 0
+            ? Math.min(100, Math.round((totalRoomNights / totalRoomNightsAvailable) * 100))
             : 0;
 
           // Use consistent property key format for charts
@@ -154,7 +162,7 @@ export const chartDataService = {
       }
       let query = supabase
         .from('bookings')
-        .select('source, total_amount')
+        .select('id, source, total_amount')
         .eq('property_id', filters.propertyId)
         .eq('cancelled', false)
         .gte('check_in', filters.start)
@@ -163,6 +171,26 @@ export const chartDataService = {
       const { data: bookings } = await query;
 
       if (!bookings) return [];
+
+      // Revenue should reflect the full folio (room + F&B + misc) from the
+      // canonical booking_financials view, with a fall back to the room total
+      // for any booking missing a financials row — matching the KPI dashboard.
+      const grossById = new Map<string, number>();
+      try {
+        const ids = bookings.map(b => b.id).filter(Boolean);
+        if (ids.length > 0) {
+          const { data: fin, error } = await supabase
+            .from('booking_financials')
+            .select('booking_id, gross_total')
+            .eq('property_id', filters.propertyId)
+            .in('booking_id', ids);
+          if (!error && fin) {
+            fin.forEach((r: any) => grossById.set(r.booking_id, parseFloat(r.gross_total ?? 0)));
+          }
+        }
+      } catch (e) {
+        console.warn('booking_financials unavailable for source analysis; using room totals', e);
+      }
 
       // Group by source
       const sourceMap: Record<string, { bookings: number; revenue: number }> = {};
@@ -173,7 +201,9 @@ export const chartDataService = {
           sourceMap[source] = { bookings: 0, revenue: 0 };
         }
         sourceMap[source].bookings++;
-        sourceMap[source].revenue += parseFloat(booking.total_amount || '0');
+        sourceMap[source].revenue += grossById.has(booking.id)
+          ? (grossById.get(booking.id) as number)
+          : parseFloat(booking.total_amount || '0');
       });
 
       return Object.entries(sourceMap)
@@ -307,7 +337,7 @@ export const chartDataService = {
         const monthKey = format(monthDate, 'MMM yyyy');
         const { data: bookings, error } = await supabase
           .from('bookings')
-          .select('total_amount')
+          .select('id, total_amount')
           .eq('property_id', filters.propertyId)
           .eq('cancelled', false)
           .gte('check_in', monthStart)
@@ -315,8 +345,26 @@ export const chartDataService = {
         if (error) {
           console.error('Revenue trends query error:', error);
         }
+
+        // Use canonical folio totals (gross_total) where available so the trend
+        // chart agrees with the KPI revenue figure; fall back to room total.
+        const grossById = new Map<string, number>();
+        try {
+          const ids = (bookings || []).map(b => b.id).filter(Boolean);
+          if (ids.length > 0) {
+            const { data: fin } = await supabase
+              .from('booking_financials')
+              .select('booking_id, gross_total')
+              .eq('property_id', filters.propertyId)
+              .in('booking_id', ids);
+            (fin || []).forEach((r: any) => grossById.set(r.booking_id, parseFloat(r.gross_total ?? 0)));
+          }
+        } catch (e) {
+          console.warn('booking_financials unavailable for revenue trends; using room totals', e);
+        }
+
         const revenue = (bookings || []).reduce(
-          (sum, b: any) => sum + parseFloat(b.total_amount || '0'),
+          (sum, b: any) => sum + (grossById.has(b.id) ? (grossById.get(b.id) as number) : parseFloat(b.total_amount || '0')),
           0
         );
         result.push({ month: monthKey, revenue: Math.round(revenue) });
@@ -377,8 +425,15 @@ export const chartDataService = {
           const occupancyRate = totalRoomNightsAvailable > 0 ? (totalRoomNights / totalRoomNightsAvailable) * 100 : 0;
           const adr = totalRoomNights > 0 ? totalRevenue / totalRoomNights : 0;
           const revpar = totalRoomNightsAvailable > 0 ? totalRevenue / totalRoomNightsAvailable : 0;
-          const avgStay = nonCancelledBookings.length > 0 
-            ? totalRoomNights / nonCancelledBookings.length / (nonCancelledBookings.reduce((sum, b) => sum + (b.number_of_rooms || 1), 0) / nonCancelledBookings.length)
+          // Average length of stay (ALOS): mean nights per booking.
+          const totalStayNights = nonCancelledBookings.reduce((sum, booking) => {
+            const nights = Math.max(1, Math.ceil(
+              (new Date(booking.check_out).getTime() - new Date(booking.check_in).getTime()) / (1000 * 60 * 60 * 24)
+            ));
+            return sum + nights;
+          }, 0);
+          const avgStay = nonCancelledBookings.length > 0
+            ? totalStayNights / nonCancelledBookings.length
             : 0;
           const cancellationRate = totalBookings > 0 ? (cancelledBookings.length / totalBookings) * 100 : 0;
           const conversionRate = (confirmedBookings.length + pendingBookings.length) > 0 

@@ -61,7 +61,9 @@ function trendDirection(changePct: number): 'up' | 'down' | 'flat' {
 function calcProfitMarginPct(totalRevenue: number, totalExpenses: number): number {
   if (totalRevenue <= 0) return 0;
   const margin = ((totalRevenue - totalExpenses) / totalRevenue) * 100;
-  return Math.max(0, Math.min(100, margin));
+  // Do NOT clamp the floor to 0 — a loss-making period must report a negative
+  // margin rather than be masked as break-even. Margin is mathematically ≤ 100.
+  return Math.min(100, margin);
 }
 
 function calcConfidence(booking: BookingKPIs, expenses: ExpenseAnalytics, totalRooms?: number): number {

@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Filter, Plus, Calendar, List, Grid, X, AlertTriangle, Edit3 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { BookingList } from './BookingList';
 import { CalendarViewManager } from './CalendarViewManager';
@@ -9,6 +11,8 @@ import { BulkEditModal } from './BulkEditModal';
 import { getSchedulingConflicts } from '../lib/supabase';
 import EnhancedKPIDashboard from './EnhancedKPIDashboard';
 import { BulkEditResult } from '../types/bulkEdit';
+import { useProperty } from '../contexts/PropertyContext';
+import { bookingsQueryKey } from '../hooks/useBookings';
 
 interface HomePageProps {
   bookings: Booking[];
@@ -39,6 +43,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   onOpenActions,
   onBookingCreated,
 }) => {
+  const queryClient = useQueryClient();
+  const { currentProperty } = useProperty();
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<BookingFilters>({
     showCancelled: true,
@@ -145,13 +151,20 @@ export const HomePage: React.FC<HomePageProps> = ({
       setShowConflicts(true);
     } catch (error) {
       console.error('Error checking conflicts:', error);
+      toast.error('Could not check for scheduling conflicts. Please try again.');
     }
   };
 
   const handleBulkEditSuccess = (result: BulkEditResult) => {
-    // Handle successful bulk edit - you might want to refresh data or show a success message
-    console.log('Bulk edit completed:', result);
-    // You could add a toast notification here or trigger a data refresh
+    const errorCount = result?.errors?.length ?? 0;
+    if (result?.success && errorCount === 0) {
+      toast.success(`Updated ${result.updatedRooms} room(s) across ${result.updatedDates} date(s).`);
+    } else {
+      toast.error(`Bulk edit completed with ${errorCount} error(s).`);
+    }
+    // Refresh the cached bookings so the list/grid reflect the bulk changes.
+    queryClient.invalidateQueries({ queryKey: bookingsQueryKey(currentProperty?.id) });
+    try { window.dispatchEvent(new CustomEvent('voyageur:bookings-changed')); } catch { /* no-op */ }
   };
 
   return (

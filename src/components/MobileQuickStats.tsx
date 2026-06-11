@@ -70,7 +70,10 @@ const MobileQuickStats: React.FC<MobileQuickStatsProps> = ({ bookings, className
     );
     
     // Total revenue
-    const totalRevenue = activeBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+    const totalRevenue = activeBookings.reduce((sum, b) => {
+      const amount = Number(b.totalAmount);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
     
     return {
       checkIns: todayCheckIns.length,

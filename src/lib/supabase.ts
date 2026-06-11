@@ -1120,8 +1120,10 @@ export const checkRoomConflict = async (
     const { data: allBookings, error } = await query;
 
     if (error) {
+      // Never treat a failed lookup as "no conflict" — that would silently
+      // permit a double-booking. Throw so the caller fails safe (blocks).
       console.error('Error checking room conflict:', error);
-      return { hasConflict: false };
+      throw new Error(`Unable to verify room availability: ${error.message}`);
     }
 
     // Check for overlapping bookings manually
@@ -1151,8 +1153,10 @@ export const checkRoomConflict = async (
 
     return { hasConflict: false };
   } catch (error) {
+    // Re-throw so callers (validateBooking) fail safe rather than allowing a
+    // booking we couldn't verify against existing reservations.
     console.error('Error checking room conflict:', error);
-    return { hasConflict: false };
+    throw error instanceof Error ? error : new Error('Unable to verify room availability');
   }
 };
 
