@@ -5,6 +5,49 @@ function normalizeType(rt: string): string {
 }
 
 export class AvailabilityService {
+  // All active rooms for a property that are free for [checkIn, checkOut)
+  // (check-out exclusive). Handles comma-separated room_no on multi-room bookings.
+  static async getAvailableRooms(
+    propertyId: string,
+    checkIn: string,
+    checkOut: string
+  ): Promise<string[]> {
+    const { data: rooms, error: roomsError } = await supabase
+      .from('rooms')
+      .select('room_number')
+      .eq('property_id', propertyId)
+      .eq('is_active', true)
+      .order('room_number');
+
+    if (roomsError) {
+      console.error('Error fetching rooms for availability:', roomsError);
+      return [];
+    }
+    const allRoomNumbers = (rooms || []).map((r: any) => String(r.room_number));
+    if (allRoomNumbers.length === 0) return [];
+
+    const { data: bookings, error: bookingsError } = await supabase
+      .from('bookings')
+      .select('room_no')
+      .eq('property_id', propertyId)
+      .eq('cancelled', false)
+      .lt('check_in', checkOut)
+      .gt('check_out', checkIn);
+
+    if (bookingsError) {
+      console.error('Error fetching bookings for availability:', bookingsError);
+      return allRoomNumbers; // fail open rather than block all rooms
+    }
+
+    const occupied = new Set<string>();
+    (bookings || []).forEach((b: any) =>
+      String(b.room_no || '')
+        .split(',')
+        .forEach((rn: string) => occupied.add(rn.trim()))
+    );
+    return allRoomNumbers.filter((rn) => !occupied.has(rn));
+  }
+
   static async getAvailableRoomsByType(
     propertyId: string,
     roomType: string,

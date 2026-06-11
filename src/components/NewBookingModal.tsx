@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Minus, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Booking } from '../types/booking';
 import { createBookingWithValidation } from '../lib/supabase';
 import { bookingPaymentsService } from '../services/bookingPaymentsService';
 import { GuestProfileService } from '../services/guestProfileService';
+import { AvailabilityService } from '../services/availabilityService';
 import type { GuestProfile } from '../types/guest';
 import { useProperty } from '../contexts/PropertyContext';
 import { formatDateLocal } from '../utils/dateUtils';
@@ -24,6 +25,8 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [roomNumbers, setRoomNumbers] = useState<string[]>(['']);
+  const [availableRooms, setAvailableRooms] = useState<string[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
   
   // Guest profile search states
   const [guestSearchTerm, setGuestSearchTerm] = useState('');
@@ -98,6 +101,23 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       contactEmail: ''
     }));
   };
+
+  // Load rooms available for the chosen dates so Room Number becomes a picklist.
+  useEffect(() => {
+    const { checkIn, checkOut } = formData;
+    if (!currentProperty?.id || !checkIn || !checkOut || checkIn >= checkOut) {
+      setAvailableRooms([]);
+      return;
+    }
+    let cancelled = false;
+    setRoomsLoading(true);
+    AvailabilityService.getAvailableRooms(currentProperty.id, checkIn, checkOut)
+      .then((rooms) => { if (!cancelled) setAvailableRooms(rooms); })
+      .catch(() => { if (!cancelled) setAvailableRooms([]); })
+      .finally(() => { if (!cancelled) setRoomsLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.checkIn, formData.checkOut, currentProperty?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -654,33 +674,59 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Room Number{formData.numberOfRooms > 1 ? 's' : ''} *
                 </label>
-                {formData.numberOfRooms === 1 ? (
-                  <input
-                    type="text"
-                    name="roomNo"
-                    value={formData.roomNo}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                    disabled={isLoading}
-                    placeholder="Enter room number"
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    {roomNumbers.map((roomNo, index) => (
-                      <input
-                        key={index}
-                        type="text"
-                        value={roomNo}
-                        onChange={(e) => handleRoomNumberChange(index, e.target.value)}
-                        placeholder={`Room ${index + 1}`}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                {(() => {
+                  const datesChosen = Boolean(formData.checkIn && formData.checkOut && formData.checkIn < formData.checkOut);
+                  const placeholder = !datesChosen
+                    ? 'Select check-in & check-out first'
+                    : roomsLoading
+                    ? 'Checking availability…'
+                    : availableRooms.length === 0
+                    ? 'No rooms available for these dates'
+                    : 'Select a room';
+                  const selectClass = 'w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100';
+                  if (formData.numberOfRooms === 1) {
+                    return (
+                      <select
+                        name="roomNo"
+                        value={formData.roomNo}
+                        onChange={handleInputChange}
+                        className={selectClass}
                         required
-                        disabled={isLoading}
-                      />
-                    ))}
-                  </div>
-                )}
+                        disabled={isLoading || !datesChosen}
+                      >
+                        <option value="">{placeholder}</option>
+                        {availableRooms.map(rn => <option key={rn} value={rn}>Room {rn}</option>)}
+                        {formData.roomNo && !availableRooms.includes(formData.roomNo) && (
+                          <option value={formData.roomNo}>Room {formData.roomNo}</option>
+                        )}
+                      </select>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {roomNumbers.map((roomNo, index) => {
+                        const chosenElsewhere = roomNumbers.filter((_, i) => i !== index);
+                        const opts = availableRooms.filter(rn => !chosenElsewhere.includes(rn));
+                        return (
+                          <select
+                            key={index}
+                            value={roomNo}
+                            onChange={(e) => handleRoomNumberChange(index, e.target.value)}
+                            className={selectClass}
+                            required
+                            disabled={isLoading || !datesChosen}
+                          >
+                            <option value="">{datesChosen ? `Select room ${index + 1}` : placeholder}</option>
+                            {opts.map(rn => <option key={rn} value={rn}>Room {rn}</option>)}
+                            {roomNo && !availableRooms.includes(roomNo) && (
+                              <option value={roomNo}>Room {roomNo}</option>
+                            )}
+                          </select>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
