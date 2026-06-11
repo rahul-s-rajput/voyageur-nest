@@ -85,11 +85,19 @@ export async function getBookingKPIs(filters: AnalyticsFilters): Promise<Booking
     if (ids.length > 0) {
       const { data, error } = await supabase
         .from('booking_financials')
-        .select('gross_total')
+        .select('booking_id, gross_total')
         .eq('property_id', filters.propertyId)
         .in('booking_id', ids);
-      if (!error && data && data.length > 0) {
-        totalRevenue = data.reduce((sum, r: any) => sum + parseFloat(r.gross_total ?? 0), 0);
+      if (!error && data) {
+        const grossById = new Map<string, number>(
+          data.map((r: any) => [r.booking_id, parseFloat(r.gross_total ?? 0)])
+        );
+        // Use gross_total where present; fall back to the booking's room total for
+        // any booking missing a financials row, so revenue isn't silently undercounted.
+        totalRevenue = activeBookings.reduce(
+          (sum, b) => sum + (grossById.has(b.id) ? (grossById.get(b.id) as number) : (b.totalAmount || 0)),
+          0
+        );
       }
     }
   } catch (e) {

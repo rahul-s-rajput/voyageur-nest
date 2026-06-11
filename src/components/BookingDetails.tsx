@@ -46,6 +46,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showInvoice, setShowInvoice] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
   const [showPerLineInvoice, setShowPerLineInvoice] = useState(false);
   const [showCancellationInvoice, setShowCancellationInvoice] = useState(false);
   const [showQRCode, setShowQRCode] = useState(false);
@@ -72,14 +73,17 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   // Download the on-screen (GST) invoice as a single-page A4 PDF via html2pdf —
   // a real file download, no browser print dialog.
   const handleDownloadInvoicePdf = async () => {
-    if (!booking) return;
+    if (!booking || downloadingInvoice) return; // guard against double-fire (corrupts the spacer)
     try {
+      setDownloadingInvoice(true);
       const { exportInvoiceById } = await import('../lib/pdf/exportInvoice');
       const num = String(booking.folioNumber || `520/${invoiceNumber}`).replace(/[\\/:*?"<>|]/g, '-');
       await exportInvoiceById('invoice-preview', `Invoice_${num}.pdf`, { scale: 2 });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       showError('Download failed', `Could not download the invoice: ${detail}`);
+    } finally {
+      setDownloadingInvoice(false);
     }
   };
   // Charges + payments are cached via React Query (instant on re-open). setCharges/
@@ -375,11 +379,15 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   };
 
   // Reconcile the legacy payment columns whenever the computed status/balance
-  // changes (opening a booking, or after adding a charge/payment).
+  // changes (opening a booking, or after adding a charge/payment). CRITICAL: only
+  // run once the ledger has actually loaded — otherwise charges/payments are still
+  // the empty default, financials reads "no-charges", and we'd wrongly overwrite a
+  // paid booking's legacy columns to unpaid/0 during the loading window.
   useEffect(() => {
+    if (!ledgerQuery.data || ledgerQuery.isLoading || ledgerQuery.isError) return;
     if (financials) void syncLegacyPaymentStatus(financials);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [financials?.statusDerived, financials?.balanceDue, booking?.id]);
+  }, [financials?.statusDerived, financials?.balanceDue, booking?.id, ledgerQuery.data, ledgerQuery.isLoading, ledgerQuery.isError]);
 
   // Submit handlers
   const submitFoodCharge = async () => {
@@ -2268,10 +2276,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleDownloadInvoicePdf}
-                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  disabled={downloadingInvoice}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-60"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Download PDF
+                  {downloadingInvoice ? 'Generating…' : 'Download PDF'}
                 </button>
                 <button
                   onClick={() => setShowInvoice(false)}
@@ -2353,7 +2362,9 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                 </button>
               </div>
             </div>
-            <CancellationInvoicePreview data={cancellationInvoiceData} />
+            <div className="printable-invoice">
+              <CancellationInvoicePreview data={cancellationInvoiceData} />
+            </div>
           </div>
         </div>
       )}

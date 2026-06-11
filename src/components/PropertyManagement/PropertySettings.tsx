@@ -52,7 +52,7 @@ const buildDefaultSettings = (propertyId: string): PropertySpecificSettings => (
   reminderEmailDays: 1,
   petPolicy: 'not_allowed',
   smokingPolicy: 'not_allowed',
-  childPolicy: 'welcome',
+  childPolicy: 'allowed', // must match a <select> option (allowed/not_allowed/age_restriction)
   extraBedPolicy: 'available',
   extraBedCharge: 500,
   createdAt: new Date().toISOString(),
@@ -157,8 +157,9 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
       errors.maxAdvanceBookingDays = 'Maximum advance booking days must be greater than minimum';
     }
     
-    // Validate emergency contact
-    if (!settings.emergencyContact || !/^\+?[\d\s-()]+$/.test(settings.emergencyContact)) {
+    // Emergency contact is optional; only validate the format when one is entered
+    // (requiring it would silently block saving every other setting).
+    if (settings.emergencyContact && !/^\+?[\d\s-()]+$/.test(settings.emergencyContact)) {
       errors.emergencyContact = 'Please enter a valid emergency contact number';
     }
     

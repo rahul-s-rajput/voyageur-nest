@@ -31,6 +31,13 @@ export class AvailabilityService {
       console.error('Error fetching rooms:', roomsRes.error);
       return { rooms: [], bookings: [] };
     }
+    if (bookingsRes.error) {
+      // We can't determine occupancy — fail safe by reporting no rooms (so we never
+      // show an occupied room as available and risk a double-booking) instead of
+      // silently treating all rooms as free.
+      console.error('Error fetching bookings for availability:', bookingsRes.error);
+      return { rooms: [], bookings: [] };
+    }
     return {
       rooms: (roomsRes.data || []).map((r: any) => String(r.room_number)),
       bookings: (bookingsRes.data || []) as RoomsWithBookings['bookings'],

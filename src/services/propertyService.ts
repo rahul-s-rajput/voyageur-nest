@@ -379,12 +379,18 @@ export class PropertyService {
     // Persist the entire settings object as ONE row (key 'general_settings'), so it
     // round-trips through transformSettingsFromDB. The previous version exploded it
     // into per-field key-value rows that the loader couldn't read back.
+    // Strip row-level meta fields so they don't get nested inside setting_value
+    // (which would grow deeper each save and stale the id/timestamps).
+    const META_KEYS = new Set(['id', 'propertyId', 'settingKey', 'settingValue', 'createdAt', 'updatedAt']);
+    const payload = Object.fromEntries(
+      Object.entries(settings).filter(([k]) => !META_KEYS.has(k))
+    );
     const { error } = await supabase
       .from('property_settings')
       .upsert({
         property_id: propertyId,
         setting_key: 'general_settings',
-        setting_value: settings,
+        setting_value: payload,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'property_id,setting_key'

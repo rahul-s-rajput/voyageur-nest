@@ -317,7 +317,10 @@ export const invoiceCounterService = {
   reserveNext: async (): Promise<number> => {
     try {
       const { data, error } = await supabase.rpc('next_invoice_number');
-      if (!error && typeof data === 'number') return data;
+      // Scalar RPCs usually return the number directly, but tolerate a
+      // single-row/array shape too so we don't silently fall back to the racy path.
+      const val: any = Array.isArray(data) ? (data[0]?.next_invoice_number ?? data[0]) : data;
+      if (!error && typeof val === 'number') return val;
       if (error) {
         console.warn('next_invoice_number RPC unavailable, using legacy counter:', error.message);
       }

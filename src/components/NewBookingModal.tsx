@@ -121,6 +121,19 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
     [roomData, formData.checkIn, formData.checkOut]
   );
 
+  // If the dates change and a previously-picked room is no longer available, clear
+  // it so a stale selection can't slip through and double-book.
+  useEffect(() => {
+    if (!formData.checkIn || !formData.checkOut) return;
+    setFormData(prev =>
+      prev.roomNo && !availableRooms.includes(prev.roomNo) ? { ...prev, roomNo: '' } : prev
+    );
+    setRoomNumbers(prev => {
+      const cleaned = prev.map(rn => (rn && !availableRooms.includes(rn) ? '' : rn));
+      return cleaned.some((rn, i) => rn !== prev[i]) ? cleaned : prev;
+    });
+  }, [availableRooms, formData.checkIn, formData.checkOut]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -131,6 +144,16 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       setValidationErrors([`Number of guests (${formData.noOfPax}) must equal Adults (${formData.adults}) + Children (${formData.children}) = ${formData.adults + formData.children}`]);
       setIsLoading(false);
       return;
+    }
+
+    // No duplicate rooms in a multi-room booking.
+    if (formData.numberOfRooms > 1) {
+      const chosen = roomNumbers.filter(r => r.trim());
+      if (new Set(chosen).size !== chosen.length) {
+        setValidationErrors(['Each room can only be selected once — please remove the duplicate.']);
+        setIsLoading(false);
+        return;
+      }
     }
 
     // A property must be selected, otherwise the booking is created unscoped

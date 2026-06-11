@@ -163,8 +163,10 @@ export async function exportInvoiceById(
       }
     }
 
-    // Save PDF
-    await worker.save();
+    // Save the jsPDF we already built (with page numbers). Calling worker.save()
+    // would re-run the whole html2canvas chain from scratch and discard the
+    // page-number mutations (and do the expensive render twice).
+    pdf.save(filename);
   } finally {
     // Clean up
     el.classList.remove('exporting');
