@@ -134,7 +134,7 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
 
   if (error || !guest) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         <div className="bg-white rounded-lg p-8 max-w-md">
           <div className="text-center">
             <X className="h-12 w-12 text-red-500 mx-auto mb-4" />
@@ -153,7 +153,7 @@ export const GuestProfileView: React.FC<GuestProfileViewProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="bg-blue-600 text-white p-6">

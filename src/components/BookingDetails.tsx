@@ -970,7 +970,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between p-6 border-b">
             <h2 className="text-xl font-semibold">
@@ -2247,7 +2247,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
       {/* Invoice Modal */}
       {showInvoice && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowInvoice(false); }}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b print:hidden">
               <h2 className="text-xl font-semibold text-gray-900">Invoice</h2>
@@ -2279,7 +2279,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
       {/* Per-line Invoice Modal */}
       {showPerLineInvoice && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowPerLineInvoice(false); }}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b bg-white print:hidden">
               <h2 className="text-xl font-semibold text-gray-900">Full Invoice (Per-line)</h2>
@@ -2317,7 +2317,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
       {/* Cancellation Invoice Modal */}
       {showCancellationInvoice && cancellationInvoiceData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) { setShowCancellationInvoice(false); setCancellationInvoiceData(null); } }}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b print:hidden">
               <h2 className="text-xl font-semibold text-gray-900">Cancellation Invoice</h2>
@@ -2346,7 +2346,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
       {/* QR Code Modal */}
       {showQRCode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowQRCode(false); }}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-4 border-b">
               <h2 className="text-xl font-semibold text-gray-900">Check-in QR Code</h2>
