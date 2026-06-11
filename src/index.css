@@ -14,6 +14,28 @@
   }
 }
 
+/* When printing an invoice, isolate it: hide everything on the page except the
+   element marked .printable-invoice (and its children), and pin it to the top.
+   Without this, window.print() would print the whole dimmed admin dashboard. */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  .printable-invoice,
+  .printable-invoice * {
+    visibility: visible !important;
+  }
+  .printable-invoice {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
 /* Ethereal Alpine Design System */
 :root {
   --mist-blue: #A8D0E6;

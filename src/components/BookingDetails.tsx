@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2 } from 'lucide-react';
+import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2, Printer } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
@@ -2247,16 +2247,26 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               <h2 className="text-xl font-semibold text-gray-900">Invoice</h2>
               <div className="flex items-center space-x-2">
                 <button
+                  onClick={() => window.print()}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Print / Save PDF
+                </button>
+                <button
                   onClick={() => setShowInvoice(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Close"
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <X className="w-6 h-6" />
                 </button>
               </div>
             </div>
-            <InvoicePreview
-              data={createInvoiceData(booking)}
-            />
+            <div className="printable-invoice">
+              <InvoicePreview
+                data={createInvoiceData(booking)}
+              />
+            </div>
           </div>
         </div>
       )}

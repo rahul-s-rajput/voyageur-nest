@@ -156,7 +156,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
           </div>
         </div>
 
-        <div className="p-8 print:p-0">
+        <div className="p-8 print:p-0 printable-invoice">
           {/* Invoice Header */}
           <div className="mb-8">
             <div className="flex justify-between items-start">
