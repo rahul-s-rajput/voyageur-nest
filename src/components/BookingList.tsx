@@ -200,10 +200,10 @@ export const BookingList: React.FC<BookingListProps> = ({
               </div>
               
               <div className="flex items-center justify-end">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center flex-wrap justify-end gap-1">
                   <button
                     onClick={() => onSelectBooking(booking)}
-                    className="p-2 text-blue-600 hover:text-blue-900 transition-colors"
+                    className="p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-blue-600 hover:text-blue-900 transition-colors"
                     title="View Details"
                   >
                     <Eye className="w-4 h-4" />
@@ -211,8 +211,8 @@ export const BookingList: React.FC<BookingListProps> = ({
                   
                   <button
                     onClick={() => onEditBooking(booking)}
-                    className={`p-2 transition-colors ${
-                      booking.cancelled 
+                    className={`p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center transition-colors ${
+                      booking.cancelled
                         ? 'text-orange-600 hover:text-orange-900' 
                         : 'text-green-600 hover:text-green-900'
                     }`}
@@ -225,7 +225,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                     <>
                       <button
                         onClick={() => onCreateInvoice(booking)}
-                        className="p-2 text-purple-600 hover:text-purple-900 transition-colors"
+                        className="p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-purple-600 hover:text-purple-900 transition-colors"
                         title="Create Invoice"
                       >
                         <FileText className="w-4 h-4" />
@@ -233,7 +233,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                       {onCancelBooking && (
                         <button
                           onClick={() => onCancelBooking(booking.id)}
-                          className="p-2 text-orange-600 hover:text-orange-900 transition-colors"
+                          className="p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-orange-600 hover:text-orange-900 transition-colors"
                           title="Cancel Booking"
                         >
                           <XCircle className="w-4 h-4" />
@@ -245,7 +245,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                   {booking.cancelled && onCreateCancellationInvoice && (
                     <button
                       onClick={() => onCreateCancellationInvoice(booking)}
-                      className="p-2 text-red-600 hover:text-red-900 transition-colors"
+                      className="p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-red-600 hover:text-red-900 transition-colors"
                       title="Print Cancellation Invoice"
                     >
                       <Receipt className="w-4 h-4" />
@@ -254,7 +254,7 @@ export const BookingList: React.FC<BookingListProps> = ({
                   
                   <button
                     onClick={() => onDeleteBooking(booking.id)}
-                    className="p-2 text-red-600 hover:text-red-900 transition-colors"
+                    className="p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-red-600 hover:text-red-900 transition-colors"
                     title="Delete Booking"
                   >
                     <Trash2 className="w-4 h-4" />

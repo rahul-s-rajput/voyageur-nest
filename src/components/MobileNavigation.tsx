@@ -71,7 +71,7 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabCha
           <div className="flex items-center space-x-3 flex-1 min-w-0">
             <button
               onClick={() => setIsOpen(true)}
-              className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors flex-shrink-0"
+              className="p-2.5 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 transition-colors flex-shrink-0"
               aria-label="Open navigation menu"
             >
               <Menu size={24} />
@@ -138,7 +138,7 @@ const MobileNavigation: React.FC<MobileNavigationProps> = ({ activeTab, onTabCha
           />
           
           {/* Side Navigation Panel */}
-          <div className="relative flex flex-col w-80 max-w-xs bg-white shadow-xl">
+          <div className="relative flex flex-col w-72 max-w-[85vw] bg-white shadow-xl">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">Navigation</h2>

@@ -318,7 +318,7 @@ export const RoomGridCalendar: React.FC<RoomGridCalendarProps> = ({
 
   // Grid Layout Component
   const GridLayout = () => {
-    const { isMobile } = useBreakpoint();
+    const { isMobile, isTablet } = useBreakpoint();
 
     if (loading) {
       return (
@@ -360,8 +360,9 @@ export const RoomGridCalendar: React.FC<RoomGridCalendarProps> = ({
       );
     }
 
-    // Enable responsive mobile view
-    if (isMobile) {
+    // Route phones and tablets to the responsive grid (it renders a dedicated
+    // tablet view); only true desktops fall through to the wide legacy grid.
+    if (isMobile || isTablet) {
       const rooms = gridData.map(roomData => roomData.room);
       return (
         <ResponsiveGridCalendar

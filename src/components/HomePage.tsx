@@ -160,7 +160,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           {/* Left side - Search and Filters */}
-          <div className="flex flex-col sm:flex-row gap-3 flex-1">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 flex-1">
             {/* Search */}
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -267,7 +267,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               {/* Date Range Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="date"
                     value={filters.dateRange?.start || ''}
@@ -296,38 +296,62 @@ export const HomePage: React.FC<HomePageProps> = ({
               {/* Status Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  multiple
-                  value={filters.status || []}
-                  onChange={(e) => handleFilterChange({
-                    status: Array.from(e.target.selectedOptions, option => option.value) as ('confirmed' | 'pending' | 'checked-in' | 'checked-out')[]
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { value: 'confirmed', label: 'Confirmed' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'checked-in', label: 'Checked In' },
+                    { value: 'checked-out', label: 'Checked Out' },
+                  ] as const).map(({ value, label }) => {
+                    const selected = (filters.status || []).includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => handleFilterChange({
+                          status: (selected
+                            ? (filters.status || []).filter(v => v !== value)
+                            : [...(filters.status || []), value]) as ('confirmed' | 'pending' | 'checked-in' | 'checked-out')[]
+                        })}
+                        className={`px-3 py-2 min-h-[40px] rounded-md border text-sm transition-colors ${
+                          selected ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
                   })}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                  size={4}
-                >
-                  <option value="confirmed">Confirmed</option>
-                  <option value="pending">Pending</option>
-                  <option value="checked-in">Checked In</option>
-                  <option value="checked-out">Checked Out</option>
-                </select>
+                </div>
               </div>
 
               {/* Payment Status Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
-                <select
-                  multiple
-                  value={(filters.paymentStatus || []).filter((status): status is 'paid' | 'partial' | 'unpaid' => status !== undefined)}
-                  onChange={(e) => handleFilterChange({
-                    paymentStatus: Array.from(e.target.selectedOptions, option => option.value) as ('paid' | 'partial' | 'unpaid')[]
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { value: 'paid', label: 'Paid' },
+                    { value: 'partial', label: 'Partial' },
+                    { value: 'unpaid', label: 'Unpaid' },
+                  ] as const).map(({ value, label }) => {
+                    const selected = (filters.paymentStatus || []).includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => handleFilterChange({
+                          paymentStatus: (selected
+                            ? (filters.paymentStatus || []).filter(v => v !== value)
+                            : [...(filters.paymentStatus || []), value]) as ('paid' | 'partial' | 'unpaid')[]
+                        })}
+                        className={`px-3 py-2 min-h-[40px] rounded-md border text-sm transition-colors ${
+                          selected ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
                   })}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                  size={3}
-                >
-                  <option value="paid">Paid</option>
-                  <option value="partial">Partial</option>
-                  <option value="unpaid">Unpaid</option>
-                </select>
+                </div>
               </div>
 
               {/* Show Cancelled */}

@@ -86,9 +86,7 @@ export const bookingService = {
     // Generate folio number if not provided
     let folioNumber = booking.folioNumber;
     if (!folioNumber) {
-      const counter = await invoiceCounterService.getCounter();
-      folioNumber = `520/${counter}`;
-      await invoiceCounterService.updateCounter(counter + 1);
+      folioNumber = `520/${await invoiceCounterService.reserveNext()}`;
     }
 
     const { data, error } = await supabase
@@ -307,6 +305,24 @@ export const bookingService = {
 
 // Invoice counter service (admin access only)
 export const invoiceCounterService = {
+  // Atomically reserve the next folio number. Prefers the next_invoice_number()
+  // RPC (a single locked statement — safe under concurrent booking creation) and
+  // falls back to the legacy read-then-write if that function isn't deployed yet.
+  reserveNext: async (): Promise<number> => {
+    try {
+      const { data, error } = await supabase.rpc('next_invoice_number');
+      if (!error && typeof data === 'number') return data;
+      if (error) {
+        console.warn('next_invoice_number RPC unavailable, using legacy counter:', error.message);
+      }
+    } catch (e) {
+      console.warn('next_invoice_number RPC threw, using legacy counter:', e);
+    }
+    const counter = await invoiceCounterService.getCounter();
+    await invoiceCounterService.updateCounter(counter + 1);
+    return counter;
+  },
+
   getCounter: withErrorHandling(async (): Promise<number> => {
     const { data, error } = await supabase
       .from('invoice_counter')
