@@ -544,6 +544,92 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
             </div>
           </div>
 
+          {/* Stay Details Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              Stay Details
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Check-in Date *
+                </label>
+                <input
+                  type="date"
+                  name="checkIn"
+                  value={formData.checkIn}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Check-out Date *
+                </label>
+                <input
+                  type="date"
+                  name="checkOut"
+                  value={formData.checkOut}
+                  onChange={handleInputChange}
+                  min={formData.checkIn || undefined}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Booking Date
+                </label>
+                <input
+                  type="date"
+                  name="bookingDate"
+                  value={formData.bookingDate}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isLoading}
+                >
+                  <option value="confirmed">Confirmed</option>
+                  <option value="pending">Pending</option>
+                  <option value="checked-in">Checked In</option>
+                  <option value="checked-out">Checked Out</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Special Requests
+                </label>
+                <textarea
+                  name="specialRequests"
+                  value={formData.specialRequests}
+                  onChange={handleInputChange}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isLoading}
+                  placeholder="Any special requests or notes..."
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Room & Guest Details Section */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
@@ -727,92 +813,6 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                     </div>
                   );
                 })()}
-              </div>
-            </div>
-          </div>
-
-          {/* Stay Details Section */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              Stay Details
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Check-in Date *
-                </label>
-                <input
-                  type="date"
-                  name="checkIn"
-                  value={formData.checkIn}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Check-out Date *
-                </label>
-                <input
-                  type="date"
-                  name="checkOut"
-                  value={formData.checkOut}
-                  onChange={handleInputChange}
-                  min={formData.checkIn || undefined}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking Date
-                </label>
-                <input
-                  type="date"
-                  name="bookingDate"
-                  value={formData.bookingDate}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isLoading}
-                >
-                  <option value="confirmed">Confirmed</option>
-                  <option value="pending">Pending</option>
-                  <option value="checked-in">Checked In</option>
-                  <option value="checked-out">Checked Out</option>
-                </select>
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Special Requests
-                </label>
-                <textarea
-                  name="specialRequests"
-                  value={formData.specialRequests}
-                  onChange={handleInputChange}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isLoading}
-                  placeholder="Any special requests or notes..."
-                />
               </div>
             </div>
           </div>
