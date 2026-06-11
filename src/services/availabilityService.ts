@@ -91,8 +91,11 @@ export class AvailabilityService {
 
     const bookings = bookingsRes.data;
     if (bookingsRes.error) {
+      // Fail SAFE: if we can't determine which rooms are occupied, do not present
+      // every room as free — that invites a double-booking. Return none so the
+      // caller surfaces "no availability" and the user retries.
       console.error('Error fetching bookings for availability:', bookingsRes.error);
-      return allRoomNumbers; // fail open rather than block all rooms
+      return [];
     }
 
     const occupied = new Set<string>();
@@ -151,12 +154,14 @@ export class AvailabilityService {
         .gt('check_out', checkIn);
 
       if (bookingsError) {
+        // Fail SAFE rather than treating all rooms as free (double-booking risk).
         console.error('Error fetching bookings for availability:', bookingsError);
-      } else {
-        overlapping = bookings || [];
+        return [];
       }
+      overlapping = bookings || [];
     } catch (e) {
       console.error('Error computing overlaps:', e);
+      return [];
     }
 
     const occupied = new Set(overlapping.map((b: any) => b.room_no));

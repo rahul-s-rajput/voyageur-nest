@@ -209,6 +209,38 @@ export const bookingService = {
       throw new Error(`Failed to update booking: ${error.message}`)
     }
 
+    // Keep the canonical 'room' charge in sync when the price changes. Creation
+    // auto-inserts a room charge from total_amount; without this, editing the
+    // price leaves booking_financials showing the OLD gross total. Soft-void the
+    // existing room charge(s) and insert the new amount (mirrors createBooking).
+    if (updates.totalAmount !== undefined) {
+      try {
+        const newAmount = data.total_amount ? parseFloat(data.total_amount) : 0;
+        await supabase
+          .from('booking_charges')
+          .update({ is_voided: true })
+          .eq('booking_id', data.id)
+          .eq('charge_type', 'room')
+          .eq('is_voided', false);
+        if (newAmount > 0) {
+          await supabase
+            .from('booking_charges')
+            .insert({
+              property_id: data.property_id,
+              booking_id: data.id,
+              charge_type: 'room',
+              description: 'Room charge',
+              quantity: 1,
+              unit_amount: newAmount,
+              amount: newAmount,
+            });
+        }
+      } catch (e) {
+        // Don't block the update if charge sync fails; log for diagnostics.
+        console.error('Failed to sync room charge after booking update:', e);
+      }
+    }
+
     // Transform database fields to match interface
     return {
       id: data.id,
@@ -347,7 +379,7 @@ export const invoiceCounterService = {
       throw new Error(`Failed to fetch counter: ${error.message}`)
     }
 
-    return data?.value || 391
+    return data?.value ?? 391
   }),
 
   updateCounter: withErrorHandling(async (newValue: number): Promise<boolean> => {

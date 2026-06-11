@@ -47,7 +47,9 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
     try { window.dispatchEvent(new CustomEvent('voyageur:bookings-changed')); } catch { /* no-op */ }
   };
 
-  const actions: Array<{ icon: any; label: string; action: () => void; color?: 'blue' | 'green' | 'red' | 'gray' }> = [];
+  // An action may return `false` to signal "keep the menu open" (e.g. the user
+  // dismissed a confirm dialog); anything else closes the menu.
+  const actions: Array<{ icon: any; label: string; action: () => void | boolean | Promise<void | boolean>; color?: 'blue' | 'green' | 'red' | 'gray' }> = [];
 
   if (booking) {
     // Actions for occupied cells
@@ -69,7 +71,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
       label: 'Cancel Booking',
       action: async () => {
         if (onCancelBooking) return onCancelBooking(booking);
-        if (!window.confirm(`Cancel booking for ${booking.guestName || 'this guest'}? This can't be undone from here.`)) return;
+        if (!window.confirm(`Cancel booking for ${booking.guestName || 'this guest'}? This can't be undone from here.`)) return false;
         const ok = await bookingService.cancelBooking(booking.id);
         if (ok) { toast.success('Booking cancelled'); notifyGrid(); }
       },
@@ -129,7 +131,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
           toast.error('Delete allowed only for cancelled bookings');
           return;
         }
-        if (!window.confirm('Permanently delete this cancelled booking? This cannot be undone.')) return;
+        if (!window.confirm('Permanently delete this cancelled booking? This cannot be undone.')) return false;
         const ok = await bookingService.deleteBooking(booking.id);
         if (ok) { toast.success('Booking deleted'); notifyGrid(); }
       },
@@ -164,7 +166,10 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
           {actions.map(({ icon: Icon, label, action, color }, idx) => (
             <button
               key={idx}
-              onClick={async () => { try { await action(); } finally { onClose(); } }}
+              onClick={async () => {
+                let keepOpen: void | boolean = undefined;
+                try { keepOpen = await action(); } finally { if (keepOpen !== false) onClose(); }
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-colors
                 ${color === 'blue' ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-800'
                 : color === 'green' ? 'bg-green-50 hover:bg-green-100 border-green-200 text-green-800'

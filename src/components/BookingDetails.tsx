@@ -357,6 +357,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   // payment shows as "Partial" everywhere — not just in this modal's summary.
   const syncLegacyPaymentStatus = async (fin: BookingFinancials | null) => {
     if (!fin || !booking) return;
+    // Never derive (and overwrite) a legacy status from "no-charges": that state
+    // also occurs when a booking's room charge failed to create, so writing
+    // unpaid/0 here would clobber a booking that was actually paid.
+    if (fin.statusDerived === 'no-charges') return;
     const netPaid = Math.max(0, (fin.paymentsTotal || 0) - (fin.refundsTotal || 0));
     const derived: 'paid' | 'partial' | 'unpaid' =
       fin.statusDerived === 'paid'

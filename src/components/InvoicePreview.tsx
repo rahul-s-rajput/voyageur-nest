@@ -111,7 +111,9 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
     const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
     const n = Math.floor(Math.abs(num));
-    if (n === 0) return 'Zero';
+    // Guard NaN/Infinity (e.g. a failed parse) — without this the recursion
+    // never terminates because every `NaN < threshold` is false.
+    if (!Number.isFinite(n) || n === 0) return 'Zero';
 
     const toWords = (num2: number): string => {
       if (num2 < 20) return a[num2];
