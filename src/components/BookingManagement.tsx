@@ -265,7 +265,7 @@ const BookingManagement: React.FC = () => {
     try {
       const success = await bookingService.cancelBooking(bookingId);
       if (success) {
-        setBookings(prev => prev.map(b => 
+        setBookings(prev => prev.map(b =>
           b.id === bookingId ? { ...b, cancelled: true } : b
         ));
         if (selectedBooking?.id === bookingId) {
@@ -273,9 +273,12 @@ const BookingManagement: React.FC = () => {
         }
         // Refresh violations in case we are on actions view
         if (currentView === 'actions') await loadViolations();
+      } else {
+        pushToast('error', 'Cancel failed', 'Could not cancel the booking. Please try again.');
       }
     } catch (error) {
       console.error('Error cancelling booking:', error);
+      pushToast('error', 'Cancel failed', 'An unexpected error occurred while cancelling.');
     }
   };
 
@@ -403,11 +406,15 @@ const BookingManagement: React.FC = () => {
       return;
     }
     try {
-      const updated = await bookingService.updateBooking(extendBookingId, { checkOut: extendDate });
-      if (updated) {
+      // Validate the new check-out (must stay after check-in and not overlap the
+      // next booking for this room) instead of writing the date blindly.
+      const result = await updateBookingWithValidation(extendBookingId, { checkOut: extendDate });
+      if (result.success) {
         setBookings(prev => prev.map(b => b.id === extendBookingId ? { ...b, checkOut: extendDate } : b));
         pushToast('success', 'Extended', 'Stay extended successfully');
         await loadViolations();
+      } else {
+        pushToast('error', 'Extend failed', (result.errors && result.errors[0]) || 'New date conflicts with another booking');
       }
     } catch (e) {
       console.error('Extend failed', e);

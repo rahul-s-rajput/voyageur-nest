@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Minus, Search } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { Booking } from '../types/booking';
 import { createBookingWithValidation } from '../lib/supabase';
 import { bookingPaymentsService } from '../services/bookingPaymentsService';
@@ -110,6 +111,14 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       return;
     }
 
+    // A property must be selected, otherwise the booking is created unscoped
+    // (property_id = NULL) and effectively orphaned.
+    if (!currentProperty?.id) {
+      setValidationErrors(['No property selected. Please choose a property before creating a booking.']);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       // Handle guest profile creation/linking
       let guestProfileId = selectedGuest?.id;
@@ -165,7 +174,9 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
           }
         } catch (e) {
           console.error('Failed to create initial payment for booking:', e);
-          // Do not block booking creation; payments can be added from Booking Details
+          // Do not block booking creation, but tell the user the payment didn't
+          // record so they don't assume it was captured.
+          toast('Booking created, but the initial payment could not be recorded. Add it from Booking Details.', { icon: '⚠️', duration: 6000 });
         }
 
         onBookingCreated(result.booking);
@@ -363,7 +374,8 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            aria-label="Close"
+            className="p-2 -mr-2 text-gray-400 hover:text-gray-600 active:text-gray-700"
             disabled={isLoading}
           >
             <X className="w-6 h-6" />
@@ -703,6 +715,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                   name="checkOut"
                   value={formData.checkOut}
                   onChange={handleInputChange}
+                  min={formData.checkIn || undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                   disabled={isLoading}

@@ -334,6 +334,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       setFinancials(fin);
     } catch (e) {
       console.error('Failed to refresh financials', e);
+      showError('Totals not refreshed', 'The balance shown may be out of date — reopen the booking to refresh.');
     }
   };
 
@@ -342,7 +343,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     if (!propertyId || !booking) return;
     try {
       if (!(foodForm.quantity > 0)) throw new Error('Quantity must be > 0');
-      if (!(foodForm.unitAmount >= 0)) throw new Error('Unit amount must be >= 0');
+      if (!(foodForm.unitAmount > 0)) throw new Error('Unit amount must be greater than 0');
       setIsLoading(true);
       const created = await bookingChargesService.createFoodCharge(propertyId, booking.id, {
         description: foodForm.description || undefined,
@@ -369,7 +370,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     if (!propertyId || !booking) return;
     try {
       if (!(miscForm.quantity > 0)) throw new Error('Quantity must be > 0');
-      if (!(miscForm.unitAmount >= 0)) throw new Error('Unit amount must be >= 0');
+      if (!(miscForm.unitAmount > 0)) throw new Error('Unit amount must be greater than 0');
       setIsLoading(true);
       const created = await bookingChargesService.createMiscCharge(propertyId, booking.id, {
         description: miscForm.description || undefined,
@@ -433,6 +434,13 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     if (!paymentOpen || !propertyId || !booking) return;
     try {
       if (!(paymentForm.amount > 0)) throw new Error('Amount must be > 0');
+      // A refund can't exceed what has actually been collected so far.
+      if (paymentOpen === 'refund') {
+        const netPaid = (financials?.paymentsTotal || 0) - (financials?.refundsTotal || 0);
+        if (paymentForm.amount > netPaid) {
+          throw new Error(`Refund cannot exceed payments received (₹${netPaid.toFixed(2)})`);
+        }
+      }
       setIsLoading(true);
       const created =
         paymentOpen === 'payment'
@@ -911,7 +919,9 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       timeOfArrival: '14:00',
       timeOfDeparture: '11:00',
       noOfDays: noOfDays,
-      grandTotal: booking.totalAmount,
+      // Use the aggregated gross total (room + F&B + misc) so the invoice matches
+      // the folio; fall back to the legacy column only if financials haven't loaded.
+      grandTotal: financials?.grossTotal ?? booking.totalAmount,
       paymentAmount: Math.max(0, (financials?.paymentsTotal || 0) - (financials?.refundsTotal || 0)),
       paymentMethod: (payments && payments.length > 0 && payments[payments.length - 1]?.method) ? (payments[payments.length - 1].method as string) : 'Cash',
     };
@@ -931,7 +941,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              aria-label="Close"
+              className="p-2 -mr-2 text-gray-400 hover:text-gray-600 active:text-gray-700"
               disabled={isLoading}
             >
               <X className="w-6 h-6" />
@@ -1000,14 +1011,16 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                     <button
                       type="button"
                       onClick={() => setAddFoodOpen(true)}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                      disabled={isLoading}
+                      className="inline-flex items-center gap-1 px-3 py-2 min-h-[36px] text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
                     >
                       <Plus className="w-3 h-3" /> Food
                     </button>
                     <button
                       type="button"
                       onClick={() => setAddMiscOpen(true)}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                      disabled={isLoading}
+                      className="inline-flex items-center gap-1 px-3 py-2 min-h-[36px] text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
                     >
                       <Plus className="w-3 h-3" /> Misc
                     </button>
@@ -1035,14 +1048,14 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                             setEditCharge(c);
                             setEditForm({ description: c.description, quantity: c.quantity, unitAmount: c.unitAmount });
                           }}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                          className="inline-flex items-center gap-1 px-3 py-2 min-h-[36px] text-xs border rounded hover:bg-gray-50"
                         >
                           <Edit className="w-3 h-3" /> Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => setVoidChargeId(c.id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded text-red-600 border-red-200 hover:bg-red-50"
+                          className="inline-flex items-center gap-1 px-3 py-2 min-h-[36px] text-xs border rounded text-red-600 border-red-200 hover:bg-red-50"
                         >
                           <Trash2 className="w-3 h-3" /> Void
                         </button>
@@ -1060,14 +1073,14 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                     <button
                       type="button"
                       onClick={() => setPaymentOpen('payment')}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                      className="inline-flex items-center gap-1 px-3 py-2 min-h-[36px] text-xs border rounded hover:bg-gray-50"
                     >
                       <Plus className="w-3 h-3" /> Payment
                     </button>
                     <button
                       type="button"
                       onClick={() => setPaymentOpen('refund')}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                      className="inline-flex items-center gap-1 px-3 py-2 min-h-[36px] text-xs border rounded hover:bg-gray-50"
                     >
                       <Minus className="w-3 h-3" /> Refund
                     </button>
@@ -1090,7 +1103,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                         <button
                           type="button"
                           onClick={() => setVoidPaymentId(p.id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded text-red-600 border-red-200 hover:bg-red-50"
+                          className="inline-flex items-center gap-1 px-3 py-2 min-h-[36px] text-xs border rounded text-red-600 border-red-200 hover:bg-red-50"
                         >
                           <Trash2 className="w-3 h-3" /> Void
                         </button>
