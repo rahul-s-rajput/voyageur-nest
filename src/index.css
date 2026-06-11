@@ -3,6 +3,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prevent iOS Safari from auto-zooming the viewport when a form field is focused.
+   Mobile browsers zoom in whenever an input's font-size is below 16px, which makes
+   the whole admin feel jumpy. Force 16px for form controls on small screens only. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Ethereal Alpine Design System */
 :root {
   --mist-blue: #A8D0E6;

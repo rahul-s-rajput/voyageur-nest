@@ -144,7 +144,7 @@ export const MobileGridView: React.FC<MobileGridViewProps> = ({
       </div>
 
       {/* Mobile Grid Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {visibleRooms.length > 0 ? (
           <motion.div
             key={currentWeekIndex}
@@ -153,6 +153,9 @@ export const MobileGridView: React.FC<MobileGridViewProps> = ({
             exit={{ x: -300, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="h-full"
+            // pan-y lets the browser own vertical scrolling so Framer only
+            // intercepts horizontal swipes — fixes the scroll-vs-swipe fight.
+            style={{ touchAction: 'pan-y' }}
             drag="x"
             dragConstraints={{ left: 0, right: 0 }}
             onDragEnd={handleDragEnd}

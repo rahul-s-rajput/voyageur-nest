@@ -52,6 +52,9 @@ export const useLongPress = (
     onTouchStart: start,
     onMouseUp: () => clear(false),
     onMouseLeave: () => clear(true),
+    // Moving the finger means the user is scrolling/swiping, not long-pressing —
+    // cancel the pending timer so the action menu doesn't pop up mid-scroll.
+    onTouchMove: () => clear(false),
     onTouchEnd: () => clear(false),
     onTouchCancel: () => clear(true),
     isLongPressing,

@@ -88,7 +88,7 @@ export const TouchBookingCell: React.FC<TouchBookingCellProps> = ({
         data-testid="touch-booking-cell"
         className={`
           relative min-h-[80px] p-3 rounded-lg border-2 cursor-pointer
-          transition-all duration-200 select-none
+          transition-all duration-200 select-none touch-manipulation
           ${isOccupied && !isCheckoutDay
             ? 'bg-blue-50 border-blue-200 hover:bg-blue-100' 
             : !isCheckoutDay

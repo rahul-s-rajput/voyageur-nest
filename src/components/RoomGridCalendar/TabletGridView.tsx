@@ -106,7 +106,7 @@ export const TabletGridView: React.FC<TabletGridViewProps> = ({
           className="min-w-full"
         >
           {/* Date Headers */}
-          <div className="sticky top-0 z-5 bg-gray-50 border-b border-gray-200">
+          <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
             <div className="grid grid-cols-8 gap-px">
               {/* Room Header Column */}
               <div className="p-4 bg-white">

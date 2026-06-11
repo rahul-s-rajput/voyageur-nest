@@ -644,7 +644,10 @@ export const InvoicePDFExport: React.FC<InvoicePDFProps & { children?: React.Rea
       await downloadInvoicePDF(pdfProps as InvoicePDFProps);
     } catch (error) {
       console.error('PDF Export Error:', error);
-      alert('Failed to export PDF. Please try again.');
+      // Surface the real reason (e.g. "Buffer is not defined", a font/network
+      // failure) instead of a generic message, so failures are diagnosable.
+      const detail = error instanceof Error ? error.message : String(error);
+      alert(`Failed to export PDF: ${detail}`);
     } finally {
       setLoading(false);
     }
@@ -668,11 +671,22 @@ export const downloadInvoicePDF = async (props: InvoicePDFProps) => {
   try {
     const blob = await pdf(<InvoicePDFDocument {...props} />).toBlob();
     const url = URL.createObjectURL(blob);
+    // Sanitize the filename — invoice numbers look like "520/391" and the "/" is
+    // illegal in filenames.
+    const safeName = `Invoice_${String(props.invoiceNumber).replace(/[\\/:*?"<>|]/g, '-')}.pdf`;
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Invoice_${props.invoiceNumber}.pdf`;
+    link.download = safeName;
+    link.rel = 'noopener';
+    // The anchor must be in the document for the click to trigger a download in
+    // Firefox and some Chromium builds.
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+    // Revoke only AFTER the browser has had a chance to start the download.
+    // Revoking synchronously (the previous behaviour) cancelled the download
+    // silently with no error — the #1 reason "save as PDF" did nothing.
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   } catch (error) {
     console.error('Error generating PDF:', error);
     throw error;
