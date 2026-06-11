@@ -106,46 +106,23 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({ data }) => {
   };
 
   const numberToWords = (num: number): string => {
-    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
-    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    const thousands = ['', 'Thousand', 'Lakh', 'Crore'];
+    // Indian numbering system: thousand (10^3), lakh (10^5), crore (10^7).
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
-    if (num === 0) return 'Zero';
+    const n = Math.floor(Math.abs(num));
+    if (n === 0) return 'Zero';
 
-    let result = '';
-    let thousandCounter = 0;
+    const toWords = (num2: number): string => {
+      if (num2 < 20) return a[num2];
+      if (num2 < 100) return b[Math.floor(num2 / 10)] + (num2 % 10 ? ' ' + a[num2 % 10] : '');
+      if (num2 < 1000) return a[Math.floor(num2 / 100)] + ' Hundred' + (num2 % 100 ? ' ' + toWords(num2 % 100) : '');
+      if (num2 < 100000) return toWords(Math.floor(num2 / 1000)) + ' Thousand' + (num2 % 1000 ? ' ' + toWords(num2 % 1000) : '');
+      if (num2 < 10000000) return toWords(Math.floor(num2 / 100000)) + ' Lakh' + (num2 % 100000 ? ' ' + toWords(num2 % 100000) : '');
+      return toWords(Math.floor(num2 / 10000000)) + ' Crore' + (num2 % 10000000 ? ' ' + toWords(num2 % 10000000) : '');
+    };
 
-    while (num > 0) {
-      let chunk = num % 1000;
-      if (chunk !== 0) {
-        let chunkStr = '';
-        
-        if (chunk >= 100) {
-          chunkStr += ones[Math.floor(chunk / 100)] + ' Hundred ';
-          chunk %= 100;
-        }
-        
-        if (chunk >= 20) {
-          chunkStr += tens[Math.floor(chunk / 10)] + ' ';
-          chunk %= 10;
-        } else if (chunk >= 10) {
-          chunkStr += teens[chunk - 10] + ' ';
-          chunk = 0;
-        }
-        
-        if (chunk > 0) {
-          chunkStr += ones[chunk] + ' ';
-        }
-        
-        result = chunkStr + thousands[thousandCounter] + ' ' + result;
-      }
-      
-      num = Math.floor(num / 1000);
-      thousandCounter++;
-    }
-
-    return result.trim();
+    return toWords(n).trim();
   };
 
   return (

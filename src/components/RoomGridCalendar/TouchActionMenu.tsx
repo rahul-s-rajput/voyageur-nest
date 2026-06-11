@@ -42,6 +42,11 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
   onCheckOut,
   onDeleteBooking,
 }) => {
+  // Tell the grid (which fetches its own data) to refetch after a built-in mutation.
+  const notifyGrid = () => {
+    try { window.dispatchEvent(new CustomEvent('voyageur:bookings-changed')); } catch { /* no-op */ }
+  };
+
   const actions: Array<{ icon: any; label: string; action: () => void; color?: 'blue' | 'green' | 'red' | 'gray' }> = [];
 
   if (booking) {
@@ -66,7 +71,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
         if (onCancelBooking) return onCancelBooking(booking);
         if (!window.confirm(`Cancel booking for ${booking.guestName || 'this guest'}? This can't be undone from here.`)) return;
         const ok = await bookingService.cancelBooking(booking.id);
-        if (ok) toast.success('Booking cancelled');
+        if (ok) { toast.success('Booking cancelled'); notifyGrid(); }
       },
       color: 'red',
     });
@@ -81,12 +86,19 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
         const result = await updateBookingWithValidation(booking.id, { status: 'checked-in' as Booking['status'] });
         if (result.success && result.booking) {
           toast.success('Guest checked-in');
-          try {
-            sessionStorage.setItem('open_qr_for_booking_id', booking.id);
-          } catch {}
+          notifyGrid();
           onBookingClick?.(result.booking);
+          return;
+        }
+        const errors = result.errors || [];
+        // Mirror the BookingManagement flow: if the check-in form isn't done,
+        // open the QR in BookingDetails so the guest can complete it.
+        if (errors.some(e => e.toLowerCase().includes('check-in form must be completed'))) {
+          try { sessionStorage.setItem('open_qr_for_booking_id', booking.id); } catch {}
+          onBookingClick?.(booking);
+          toast('Check-in form required — opening QR code.', { icon: 'ℹ️' });
         } else {
-          toast.error(result.errors?.join('; ') || 'Check-in failed');
+          toast.error(errors.join('; ') || 'Check-in failed');
         }
       },
       color: 'green',
@@ -100,6 +112,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
         const result = await updateBookingWithValidation(booking.id, { status: 'checked-out' as Booking['status'] });
         if (result.success && result.booking) {
           toast.success('Guest checked-out');
+          notifyGrid();
         } else {
           toast.error(result.errors?.join('; ') || 'Check-out allowed only after check-in');
         }
@@ -118,7 +131,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
         }
         if (!window.confirm('Permanently delete this cancelled booking? This cannot be undone.')) return;
         const ok = await bookingService.deleteBooking(booking.id);
-        if (ok) toast.success('Booking deleted');
+        if (ok) { toast.success('Booking deleted'); notifyGrid(); }
       },
       color: 'gray',
     });
@@ -151,7 +164,7 @@ export const TouchActionMenu: React.FC<TouchActionMenuProps> = ({
           {actions.map(({ icon: Icon, label, action, color }, idx) => (
             <button
               key={idx}
-              onClick={action}
+              onClick={async () => { try { await action(); } finally { onClose(); } }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-colors
                 ${color === 'blue' ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-800'
                 : color === 'green' ? 'bg-green-50 hover:bg-green-100 border-green-200 text-green-800'
