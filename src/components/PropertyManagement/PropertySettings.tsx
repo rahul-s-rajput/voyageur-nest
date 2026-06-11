@@ -140,12 +140,11 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
     if (!settings) return false;
     
     const errors: Record<string, string> = {};
-    
-    // Validate check-in/check-out times
-    if (settings.checkInTime >= settings.checkOutTime) {
-      errors.checkInTime = 'Check-in time must be before check-out time';
-    }
-    
+
+    // NOTE: check-in vs check-out time are NOT comparable as "before/after" — for a
+    // hotel, check-in (afternoon) is intentionally later in the day than check-out
+    // (morning of the following day). So there is no ordering validation here.
+
     // Validate tax rates
     if (settings.taxRate < 0 || settings.taxRate > 100) {
       errors.taxRate = 'Tax rate must be between 0 and 100';
