@@ -14,7 +14,7 @@ import { InvoicePDFExport } from './InvoicePDF';
 // Removed exportInvoiceById usage in favor of consolidated high-quality export within InvoicePerLine
 import { bookingChargesService, type BookingCharge } from '../services/bookingChargesService';
 import { bookingPaymentsService, type BookingPayment } from '../services/bookingPaymentsService';
-import { bookingFinancialsService, type BookingFinancials } from '../services/bookingFinancialsService';
+import { computeFinancials, type BookingFinancials } from '../services/bookingFinancialsService';
 import { useCurrentPropertyId, useProperty } from '../contexts/PropertyContext';
 import { getInvoiceCompany } from '../utils/invoiceCompany';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from './ui/Dialog';
@@ -279,14 +279,16 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     setLoadingFinance(true);
     (async () => {
       try {
-        const [chargesRes, paymentsRes, fin] = await Promise.all([
+        const [chargesRes, paymentsRes] = await Promise.all([
           bookingChargesService.listByBooking(propertyId, booking.id),
           bookingPaymentsService.listByBooking(propertyId, booking.id),
-          bookingFinancialsService.getByBooking(propertyId, booking.id),
         ]);
         if (cancelled) return;
         setCharges(chargesRes);
         setPayments(paymentsRes);
+        // Totals are derived from the charges/payments we just loaded — no extra
+        // aggregate query needed.
+        const fin = computeFinancials(chargesRes, paymentsRes, propertyId, booking.id);
         setFinancials(fin);
         // Reconcile the legacy payment columns the list/KPI read with the canonical
         // financials, so simply opening a booking corrects a stale "unpaid".
@@ -339,7 +341,15 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const reloadFinancials = async () => {
     if (!propertyId || !booking) return;
     try {
-      const fin = await bookingFinancialsService.getByBooking(propertyId, booking.id);
+      // Re-fetch the ledger and recompute totals (also re-syncs the charges/payments
+      // lists so local state can't drift from the server).
+      const [c, p] = await Promise.all([
+        bookingChargesService.listByBooking(propertyId, booking.id),
+        bookingPaymentsService.listByBooking(propertyId, booking.id),
+      ]);
+      setCharges(c);
+      setPayments(p);
+      const fin = computeFinancials(c, p, propertyId, booking.id);
       setFinancials(fin);
       void syncLegacyPaymentStatus(fin);
     } catch (e) {

@@ -12,30 +12,34 @@ export class AvailabilityService {
     checkIn: string,
     checkOut: string
   ): Promise<string[]> {
-    const { data: rooms, error: roomsError } = await supabase
-      .from('rooms')
-      .select('room_number')
-      .eq('property_id', propertyId)
-      .eq('is_active', true)
-      .order('room_number');
+    // Rooms and overlapping bookings are independent — fetch them in parallel
+    // (one round-trip instead of two) so the dropdown populates quickly.
+    const [roomsRes, bookingsRes] = await Promise.all([
+      supabase
+        .from('rooms')
+        .select('room_number')
+        .eq('property_id', propertyId)
+        .eq('is_active', true)
+        .order('room_number'),
+      supabase
+        .from('bookings')
+        .select('room_no')
+        .eq('property_id', propertyId)
+        .eq('cancelled', false)
+        .lt('check_in', checkOut)
+        .gt('check_out', checkIn),
+    ]);
 
-    if (roomsError) {
-      console.error('Error fetching rooms for availability:', roomsError);
+    if (roomsRes.error) {
+      console.error('Error fetching rooms for availability:', roomsRes.error);
       return [];
     }
-    const allRoomNumbers = (rooms || []).map((r: any) => String(r.room_number));
+    const allRoomNumbers = (roomsRes.data || []).map((r: any) => String(r.room_number));
     if (allRoomNumbers.length === 0) return [];
 
-    const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('room_no')
-      .eq('property_id', propertyId)
-      .eq('cancelled', false)
-      .lt('check_in', checkOut)
-      .gt('check_out', checkIn);
-
-    if (bookingsError) {
-      console.error('Error fetching bookings for availability:', bookingsError);
+    const bookings = bookingsRes.data;
+    if (bookingsRes.error) {
+      console.error('Error fetching bookings for availability:', bookingsRes.error);
       return allRoomNumbers; // fail open rather than block all rooms
     }
 
