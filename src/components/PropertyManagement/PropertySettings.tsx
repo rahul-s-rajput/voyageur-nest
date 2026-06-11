@@ -20,6 +20,45 @@ interface PropertySettingsProps {
   className?: string;
 }
 
+// Default settings shown when a property has none saved yet, so the forms always
+// render (editable + saveable) rather than hiding.
+const buildDefaultSettings = (propertyId: string): PropertySpecificSettings => ({
+  id: '',
+  propertyId,
+  settingKey: 'general_settings',
+  settingValue: 'default_configuration',
+  checkInTime: '14:00',
+  checkOutTime: '11:00',
+  currency: 'INR',
+  timezone: 'Asia/Kolkata',
+  language: 'en',
+  emergencyContact: '',
+  wifiPassword: '',
+  taxRate: 12,
+  localTaxRate: 0,
+  serviceChargeRate: 10,
+  minAdvanceBookingDays: 1,
+  maxAdvanceBookingDays: 365,
+  allowOnlineBooking: true,
+  autoConfirmBookings: false,
+  requireAdvancePayment: true,
+  advancePaymentPercentage: 30,
+  cancellationPolicy: 'flexible',
+  allowCancellation: true,
+  cancellationDeadlineHours: 24,
+  noShowPolicy: 'charge_full',
+  sendConfirmationEmail: true,
+  sendReminderEmail: true,
+  reminderEmailDays: 1,
+  petPolicy: 'not_allowed',
+  smokingPolicy: 'not_allowed',
+  childPolicy: 'welcome',
+  extraBedPolicy: 'available',
+  extraBedCharge: 500,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+});
+
 const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) => {
   const { currentProperty, loadProperties } = useProperty();
   const [settings, setSettings] = useState<PropertySpecificSettings | null>(null);
@@ -63,50 +102,12 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
     try {
       setLoading(true);
       const propertySettings = await propertyService.getPropertySettings(currentProperty.id);
-      // getPropertySettings returns an array, take the first element or null
-      setSettings(propertySettings.length > 0 ? propertySettings[0] : null);
+      // Fall back to editable defaults when the property has no saved settings yet,
+      // so the forms render (and can be saved into a real row).
+      setSettings(propertySettings.length > 0 ? propertySettings[0] : buildDefaultSettings(currentProperty.id));
     } catch (error) {
       console.error('Failed to load property settings:', error);
-      // If no settings exist, create default settings
-      if (error instanceof Error && error.message.includes('No settings found')) {
-        const defaultSettings: PropertySpecificSettings = {
-          id: '',
-          propertyId: currentProperty.id,
-          settingKey: 'general_settings',
-          settingValue: 'default_configuration',
-          checkInTime: '14:00',
-          checkOutTime: '11:00',
-          currency: 'INR',
-          timezone: 'Asia/Kolkata',
-          language: 'en',
-          emergencyContact: '+91-9876543210',
-          wifiPassword: 'guest123',
-          taxRate: 12,
-          localTaxRate: 0,
-          serviceChargeRate: 10,
-          minAdvanceBookingDays: 1,
-          maxAdvanceBookingDays: 365,
-          allowOnlineBooking: true,
-          autoConfirmBookings: false,
-          requireAdvancePayment: true,
-          advancePaymentPercentage: 30,
-          cancellationPolicy: 'flexible',
-          allowCancellation: true,
-          cancellationDeadlineHours: 24,
-          noShowPolicy: 'charge_full',
-          sendConfirmationEmail: true,
-          sendReminderEmail: true,
-          reminderEmailDays: 1,
-          petPolicy: 'not_allowed',
-          smokingPolicy: 'not_allowed',
-          childPolicy: 'welcome',
-          extraBedPolicy: 'available',
-          extraBedCharge: 500,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        setSettings(defaultSettings);
-      }
+      setSettings(buildDefaultSettings(currentProperty.id));
     } finally {
       setLoading(false);
     }
