@@ -68,6 +68,15 @@ export const RoomGridCalendar: React.FC<RoomGridCalendarProps> = ({
     refreshData();
   }, [refreshData]);
 
+  // Belt-and-suspenders: the grid fetches its own data, so if a booking is
+  // created elsewhere and the realtime subscription is delayed/disconnected, this
+  // app-level event forces an immediate refetch so all three views stay in sync.
+  useEffect(() => {
+    const onBookingsChanged = () => { refreshData(); };
+    window.addEventListener('voyageur:bookings-changed', onBookingsChanged);
+    return () => window.removeEventListener('voyageur:bookings-changed', onBookingsChanged);
+  }, [refreshData]);
+
   // Handle pricing updates for rooms
   const handlePricingUpdate = useCallback(async (room: Room, date: Date, pricing: RoomPricing) => {
     try {

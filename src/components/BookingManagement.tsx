@@ -286,6 +286,9 @@ const BookingManagement: React.FC = () => {
   // realtime event or another path already added it.
   const handleBookingCreated = (booking: Booking) => {
     setBookings(prev => (prev.some(b => b.id === booking.id) ? prev : [...prev, booking]));
+    // The room grid fetches independently — nudge it to refetch in case its
+    // realtime subscription hasn't delivered this booking yet.
+    try { window.dispatchEvent(new CustomEvent('voyageur:bookings-changed')); } catch { /* no-op */ }
   };
 
   
