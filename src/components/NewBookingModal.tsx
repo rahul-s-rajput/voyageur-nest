@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Plus, Minus, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Booking } from '../types/booking';
 import { createBookingWithValidation } from '../lib/supabase';
 import { bookingPaymentsService } from '../services/bookingPaymentsService';
 import { GuestProfileService } from '../services/guestProfileService';
-import { AvailabilityService } from '../services/availabilityService';
+import { AvailabilityService, type RoomsWithBookings } from '../services/availabilityService';
 import type { GuestProfile } from '../types/guest';
 import { useProperty } from '../contexts/PropertyContext';
 import { formatDateLocal } from '../utils/dateUtils';
@@ -25,7 +25,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [roomNumbers, setRoomNumbers] = useState<string[]>(['']);
-  const [availableRooms, setAvailableRooms] = useState<string[]>([]);
+  const [roomData, setRoomData] = useState<RoomsWithBookings>({ rooms: [], bookings: [] });
   const [roomsLoading, setRoomsLoading] = useState(false);
   
   // Guest profile search states
@@ -102,22 +102,24 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
     }));
   };
 
-  // Load rooms available for the chosen dates so Room Number becomes a picklist.
+  // Fetch the property's rooms + bookings ONCE when the modal opens; availability
+  // for the chosen dates is then computed instantly client-side (no query per
+  // date change).
   useEffect(() => {
-    const { checkIn, checkOut } = formData;
-    if (!currentProperty?.id || !checkIn || !checkOut || checkIn >= checkOut) {
-      setAvailableRooms([]);
-      return;
-    }
+    if (!currentProperty?.id || !isOpen) return;
     let cancelled = false;
     setRoomsLoading(true);
-    AvailabilityService.getAvailableRooms(currentProperty.id, checkIn, checkOut)
-      .then((rooms) => { if (!cancelled) setAvailableRooms(rooms); })
-      .catch(() => { if (!cancelled) setAvailableRooms([]); })
+    AvailabilityService.getRoomsWithBookings(currentProperty.id)
+      .then((d) => { if (!cancelled) setRoomData(d); })
+      .catch(() => { if (!cancelled) setRoomData({ rooms: [], bookings: [] }); })
       .finally(() => { if (!cancelled) setRoomsLoading(false); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.checkIn, formData.checkOut, currentProperty?.id]);
+  }, [currentProperty?.id, isOpen]);
+
+  const availableRooms = useMemo(
+    () => AvailabilityService.computeAvailableRooms(roomData, formData.checkIn, formData.checkOut),
+    [roomData, formData.checkIn, formData.checkOut]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

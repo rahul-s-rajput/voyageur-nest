@@ -4,7 +4,52 @@ function normalizeType(rt: string): string {
   return rt.toLowerCase().replace(/\broom\b/gi, '').replace(/\s+/g, ' ').trim();
 }
 
+export interface RoomsWithBookings {
+  rooms: string[];
+  bookings: Array<{ room_no: string; check_in: string; check_out: string }>;
+}
+
 export class AvailabilityService {
+  // Fetch a property's active rooms and its non-cancelled bookings ONCE, so the
+  // caller can compute availability for any date range client-side (no query per
+  // date change). For a small property this is a tiny payload.
+  static async getRoomsWithBookings(propertyId: string): Promise<RoomsWithBookings> {
+    const [roomsRes, bookingsRes] = await Promise.all([
+      supabase
+        .from('rooms')
+        .select('room_number')
+        .eq('property_id', propertyId)
+        .eq('is_active', true)
+        .order('room_number'),
+      supabase
+        .from('bookings')
+        .select('room_no, check_in, check_out')
+        .eq('property_id', propertyId)
+        .eq('cancelled', false),
+    ]);
+    if (roomsRes.error) {
+      console.error('Error fetching rooms:', roomsRes.error);
+      return { rooms: [], bookings: [] };
+    }
+    return {
+      rooms: (roomsRes.data || []).map((r: any) => String(r.room_number)),
+      bookings: (bookingsRes.data || []) as RoomsWithBookings['bookings'],
+    };
+  }
+
+  // Pure client-side availability for a date range, given pre-fetched data.
+  // Overlap = check_in < end && check_out > start (check-out exclusive).
+  static computeAvailableRooms(data: RoomsWithBookings, checkIn: string, checkOut: string): string[] {
+    if (!checkIn || !checkOut || checkIn >= checkOut) return data.rooms;
+    const occupied = new Set<string>();
+    for (const b of data.bookings) {
+      if (b.check_in < checkOut && b.check_out > checkIn) {
+        String(b.room_no || '').split(',').forEach((rn) => occupied.add(rn.trim()));
+      }
+    }
+    return data.rooms.filter((rn) => !occupied.has(rn));
+  }
+
   // All active rooms for a property that are free for [checkIn, checkOut)
   // (check-out exclusive). Handles comma-separated room_no on multi-room bookings.
   static async getAvailableRooms(
