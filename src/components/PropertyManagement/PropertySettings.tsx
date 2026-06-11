@@ -31,38 +31,30 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
 
   // Core property identity fields (name/address/contact) — these appear on invoices.
   const [propertyForm, setPropertyForm] = useState({ name: '', address: '', contactPhone: '', contactEmail: '' });
-  const [savingProperty, setSavingProperty] = useState(false);
+
+  const loadPropertyForm = () => {
+    if (!currentProperty) return;
+    setPropertyForm({
+      name: currentProperty.name || '',
+      address: currentProperty.address || currentProperty.location || '',
+      contactPhone: currentProperty.contactPhone || currentProperty.phone || '',
+      contactEmail: currentProperty.contactEmail || currentProperty.email || '',
+    });
+  };
 
   useEffect(() => {
     if (currentProperty) {
       loadPropertySettings();
-      setPropertyForm({
-        name: currentProperty.name || '',
-        address: currentProperty.address || currentProperty.location || '',
-        contactPhone: currentProperty.contactPhone || currentProperty.phone || '',
-        contactEmail: currentProperty.contactEmail || currentProperty.email || '',
-      });
+      loadPropertyForm();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProperty]);
 
-  const savePropertyDetails = async () => {
-    if (!currentProperty) return;
-    try {
-      setSavingProperty(true);
-      await propertyService.updateProperty(currentProperty.id, {
-        name: propertyForm.name,
-        address: propertyForm.address,
-        contactPhone: propertyForm.contactPhone,
-        contactEmail: propertyForm.contactEmail,
-      } as any);
-      if (loadProperties) await loadProperties();
-      toast.success('Property details saved');
-    } catch (e) {
-      console.error('Failed to save property details', e);
-      toast.error('Failed to save property details. Please try again.');
-    } finally {
-      setSavingProperty(false);
-    }
+  // Property-detail edits flow through the same "unsaved changes" indicator and the
+  // single "Save Changes" button in the header.
+  const handlePropertyChange = (key: keyof typeof propertyForm, value: string) => {
+    setPropertyForm(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
   };
 
   const loadPropertySettings = async () => {
@@ -173,21 +165,29 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
     return Object.keys(errors).length === 0;
   };
 
+  // One save for the whole page: property identity AND (if present) the per-property
+  // settings, behind the single header "Save Changes" button.
   const handleSave = async () => {
-    if (!settings || !currentProperty) return;
-    
-    if (!validateSettings()) {
-      return;
-    }
-    
+    if (!currentProperty) return;
+    if (settings && !validateSettings()) return;
+
     try {
       setSaving(true);
-      await propertyService.updatePropertySettings(currentProperty.id, settings);
+      await propertyService.updateProperty(currentProperty.id, {
+        name: propertyForm.name,
+        address: propertyForm.address,
+        contactPhone: propertyForm.contactPhone,
+        contactEmail: propertyForm.contactEmail,
+      } as any);
+      if (settings) {
+        await propertyService.updatePropertySettings(currentProperty.id, settings);
+      }
+      if (loadProperties) await loadProperties();
       setHasChanges(false);
-      toast.success('Settings saved');
+      toast.success('Changes saved');
     } catch (error) {
-      console.error('Failed to save settings:', error);
-      toast.error('Failed to save settings. Please try again.');
+      console.error('Failed to save:', error);
+      toast.error('Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -196,6 +196,7 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset all changes?')) {
       loadPropertySettings();
+      loadPropertyForm();
       setHasChanges(false);
       setValidationErrors({});
     }
@@ -304,7 +305,7 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
                 <input
                   type="text"
                   value={propertyForm.name}
-                  onChange={(e) => setPropertyForm(p => ({ ...p, name: e.target.value }))}
+                  onChange={(e) => handlePropertyChange('name', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g. Voyageur Nest Baror"
                 />
@@ -314,7 +315,7 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
                 <input
                   type="text"
                   value={propertyForm.address}
-                  onChange={(e) => setPropertyForm(p => ({ ...p, address: e.target.value }))}
+                  onChange={(e) => handlePropertyChange('address', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Street, City, State, PIN"
                 />
@@ -324,7 +325,7 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
                 <input
                   type="tel"
                   value={propertyForm.contactPhone}
-                  onChange={(e) => setPropertyForm(p => ({ ...p, contactPhone: e.target.value }))}
+                  onChange={(e) => handlePropertyChange('contactPhone', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="+91-XXXXXXXXXX"
                 />
@@ -334,20 +335,11 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
                 <input
                   type="email"
                   value={propertyForm.contactEmail}
-                  onChange={(e) => setPropertyForm(p => ({ ...p, contactEmail: e.target.value }))}
+                  onChange={(e) => handlePropertyChange('contactEmail', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="you@example.com"
                 />
               </div>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={savePropertyDetails}
-                disabled={savingProperty}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {savingProperty ? 'Saving…' : 'Save Property Details'}
-              </button>
             </div>
           </div>
         )}
