@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { downloadInvoicePDF } from './InvoicePDF';
 import { useProperty } from '../contexts/PropertyContext';
 import { getInvoiceCompany } from '../utils/invoiceCompany';
+import { toast } from 'react-hot-toast';
 
 // New imports for data fetching
 import { useEffect, useMemo, useState } from 'react';
@@ -44,7 +45,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
       });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      alert(`Failed to download PDF: ${detail}`);
+      toast.error(`Failed to download PDF: ${detail}`);
     } finally {
       setDownloading(false);
     }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet, pdf, Font } from '@react-pdf/renderer';
+import { toast } from 'react-hot-toast';
 import type { Booking } from '../types/booking';
 import type { BookingCharge } from '../services/bookingChargesService';
 import type { BookingPayment } from '../services/bookingPaymentsService';
@@ -647,7 +648,7 @@ export const InvoicePDFExport: React.FC<InvoicePDFProps & { children?: React.Rea
       // Surface the real reason (e.g. "Buffer is not defined", a font/network
       // failure) instead of a generic message, so failures are diagnosable.
       const detail = error instanceof Error ? error.message : String(error);
-      alert(`Failed to export PDF: ${detail}`);
+      toast.error(`Failed to export PDF: ${detail}`);
     } finally {
       setLoading(false);
     }

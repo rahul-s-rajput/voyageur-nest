@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { HomePage } from './components/HomePage';
 import { InvoiceForm } from './components/InvoiceForm';
 import { InvoicePreview } from './components/InvoicePreview';
@@ -501,6 +502,9 @@ function App() {
       <AuthProvider>
         <PropertyProvider>
           <NotificationProvider>
+            {/* App-wide toast host — without this, react-hot-toast toast() calls
+                throughout the app render nothing. */}
+            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
             <Router>
               <Routes>
                 {/* Guest routes - Check-in only */}

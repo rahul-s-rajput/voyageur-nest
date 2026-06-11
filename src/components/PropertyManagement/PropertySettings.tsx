@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PropertySpecificSettings } from '../../types/property';
 import { useProperty } from '../../contexts/PropertyContext';
 import { propertyService } from '../../services/propertyService';
+import { toast } from 'react-hot-toast';
 import { 
   CogIcon, 
   ClockIcon, 
@@ -55,10 +56,10 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
         contactEmail: propertyForm.contactEmail,
       } as any);
       if (loadProperties) await loadProperties();
-      alert('Property details saved.');
+      toast.success('Property details saved');
     } catch (e) {
       console.error('Failed to save property details', e);
-      alert('Failed to save property details. Please try again.');
+      toast.error('Failed to save property details. Please try again.');
     } finally {
       setSavingProperty(false);
     }
@@ -184,12 +185,10 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
       setSaving(true);
       await propertyService.updatePropertySettings(currentProperty.id, settings);
       setHasChanges(false);
-      
-      // Show success message
-      alert('Settings saved successfully!');
+      toast.success('Settings saved');
     } catch (error) {
       console.error('Failed to save settings:', error);
-      alert('Failed to save settings. Please try again.');
+      toast.error('Failed to save settings. Please try again.');
     } finally {
       setSaving(false);
     }
