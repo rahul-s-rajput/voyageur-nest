@@ -25,8 +25,9 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
   onClose
 }) => {
   const { currentProperty, properties } = useProperty();
-  // Invoice header reflects the booking's own property, not a hardcoded address.
-  const company = getInvoiceCompany(properties.find(p => p.id === booking.propertyId) || currentProperty);
+  // Invoice header (and check-in/out times) reflect the booking's own property.
+  const invoiceProperty = properties.find(p => p.id === booking.propertyId) || currentProperty;
+  const company = getInvoiceCompany(invoiceProperty);
 
   const handlePrint = () => {
     window.print();
@@ -42,6 +43,8 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
         payments,
         financials,
         company,
+        checkInTime: invoiceProperty?.checkInTime,
+        checkOutTime: invoiceProperty?.checkOutTime,
       });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);

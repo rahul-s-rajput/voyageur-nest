@@ -22,6 +22,9 @@ interface InvoicePDFProps {
   payments: BookingPayment[];
   financials: BookingFinancials | null;
   company: CompanyInfo;
+  /** Property's configured check-in/out time as "HH:mm" (from property settings). */
+  checkInTime?: string;
+  checkOutTime?: string;
 }
 
 // SOLUTION: Use a simpler approach - DON'T use custom fonts, use default fonts that support Rupee
@@ -371,6 +374,15 @@ const fmtTime = (d: string | Date | undefined | null) => {
   return `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 };
 
+// Format a property-policy time stored as "HH:mm" (e.g. "14:00") into "02:00 PM".
+const fmtPolicyTime = (hhmm?: string, fallback = '') => {
+  if (!hhmm || !/^\d{1,2}:\d{2}/.test(hhmm)) return fallback;
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayHours = h % 12 || 12;
+  return `${String(displayHours).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+};
+
 const nowIST = () => {
   const date = new Date();
   const istDate = new Intl.DateTimeFormat('en-GB', {
@@ -409,7 +421,11 @@ const InvoicePDFDocument: React.FC<InvoicePDFProps> = ({
   payments,
   financials,
   company,
+  checkInTime,
+  checkOutTime,
 }) => {
+  const checkInTimeDisplay = fmtPolicyTime(checkInTime, fmtTime(booking.checkIn));
+  const checkOutTimeDisplay = fmtPolicyTime(checkOutTime, fmtTime(booking.checkOut));
   const noOfDays = booking.checkIn && booking.checkOut
     ? Math.ceil((new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / (1000 * 60 * 60 * 24)) || 1
     : 1;
@@ -482,9 +498,9 @@ const InvoicePDFDocument: React.FC<InvoicePDFProps> = ({
               </View>
               <View style={[styles.stayDetailsRow, { borderBottom: 0 }]}>
                 <Text style={styles.stayDetailsCell}>{fmtDate(booking.checkIn)}</Text>
-                <Text style={styles.stayDetailsCell}>{fmtTime(booking.checkIn)}</Text>
+                <Text style={styles.stayDetailsCell}>{checkInTimeDisplay}</Text>
                 <Text style={styles.stayDetailsCell}>{fmtDate(booking.checkOut)}</Text>
-                <Text style={styles.stayDetailsCell}>{fmtTime(booking.checkOut)}</Text>
+                <Text style={styles.stayDetailsCell}>{checkOutTimeDisplay}</Text>
                 <Text style={styles.stayDetailsCell}>{noOfDays}</Text>
                 <Text style={styles.stayDetailsCell}>{booking.numberOfRooms || 1}</Text>
                 <Text style={styles.stayDetailsCellLast}>
@@ -604,7 +620,7 @@ const InvoicePDFDocument: React.FC<InvoicePDFProps> = ({
             <View style={styles.termsSection}>
               <Text style={styles.termsTitle}>Terms & Conditions:</Text>
               <View style={styles.termsList}>
-                <Text style={styles.termsItem}>1. Check-in time is 2:00 PM and check-out time is 12:00 PM</Text>
+                <Text style={styles.termsItem}>1. Check-in time is {checkInTimeDisplay || '2:00 PM'} and check-out time is {checkOutTimeDisplay || '12:00 PM'}</Text>
                 <Text style={styles.termsItem}>2. Valid ID proof is mandatory at the time of check-in</Text>
                 <Text style={styles.termsItem}>3. All disputes are subject to Manali jurisdiction</Text>
               </View>

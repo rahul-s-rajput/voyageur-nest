@@ -180,6 +180,10 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
         address: propertyForm.address,
         contactPhone: propertyForm.contactPhone,
         contactEmail: propertyForm.contactEmail,
+        // Also persist check-in/out to the properties table columns so
+        // `Property.checkInTime/checkOutTime` (and thus invoices) reflect the
+        // saved values — not just the property_settings JSON row.
+        ...(settings ? { checkInTime: settings.checkInTime, checkOutTime: settings.checkOutTime } : {}),
       } as any);
       if (settings) {
         await propertyService.updatePropertySettings(currentProperty.id, settings);
@@ -229,20 +233,20 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
   return (
     <div className={`bg-white rounded-lg shadow ${className}`}>
       {/* Header */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-              <CogIcon className="h-6 w-6 mr-2 text-blue-600" />
+      <div className="p-4 sm:p-6 border-b border-gray-200">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center">
+              <CogIcon className="h-6 w-6 mr-2 text-blue-600 flex-shrink-0" />
               Property Settings
             </h2>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-600 mt-1 text-sm sm:text-base truncate">
               Configure settings for {currentProperty?.name}
             </p>
           </div>
-          
+
           {hasChanges && (
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <div className="flex items-center text-orange-600 text-sm">
                 <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
                 Unsaved changes
@@ -274,19 +278,19 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex space-x-1 mt-4 bg-gray-100 p-1 rounded-lg">
+        {/* Tabs — scroll horizontally on narrow screens instead of overflowing. */}
+        <div className="flex space-x-1 mt-4 bg-gray-100 p-1 rounded-lg overflow-x-auto">
           {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key as any)}
-              className={`flex-1 flex items-center justify-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`flex-1 min-w-[7rem] flex items-center justify-center px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                 activeTab === key
                   ? 'bg-white text-blue-600 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <Icon className="h-4 w-4 mr-2" />
+              <Icon className="h-4 w-4 mr-2 flex-shrink-0" />
               {label}
             </button>
           ))}
@@ -294,7 +298,7 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
       </div>
 
       {/* Content */}
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         {/* Property identity — these fields appear on guest invoices. Always editable,
             independent of the per-property settings row. */}
         {activeTab === 'general' && (

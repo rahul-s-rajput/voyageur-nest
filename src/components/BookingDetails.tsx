@@ -65,10 +65,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   // Charges / Payments / Financials state
   const propertyId = useCurrentPropertyId();
   const { currentProperty, properties } = useProperty();
-  // Invoice header is driven by the booking's own property, not a hardcoded address.
-  const invoiceCompany = getInvoiceCompany(
-    properties.find(p => p.id === booking?.propertyId) || currentProperty
-  );
+  // Invoice header (and check-in/out times) are driven by the booking's own
+  // property, not a hardcoded value.
+  const invoiceProperty = properties.find(p => p.id === booking?.propertyId) || currentProperty;
+  const invoiceCompany = getInvoiceCompany(invoiceProperty);
 
   // Download the on-screen (GST) invoice as a single-page A4 PDF via html2pdf —
   // a real file download, no browser print dialog.
@@ -2318,6 +2318,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                   payments={payments}
                   financials={financials}
                   company={invoiceCompany}
+                  checkInTime={invoiceProperty?.checkInTime}
+                  checkOutTime={invoiceProperty?.checkOutTime}
                   className="px-4 py-2 text-sm text-white bg-gray-900 rounded-md hover:bg-gray-800 transition-colors"
                 >
                   Export
@@ -2337,6 +2339,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               payments={payments}
               financials={financials}
               company={invoiceCompany}
+              checkInTime={invoiceProperty?.checkInTime}
+              checkOutTime={invoiceProperty?.checkOutTime}
             />
           </div>
         </div>

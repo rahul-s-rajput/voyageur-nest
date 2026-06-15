@@ -20,6 +20,9 @@ interface InvoicePerLineProps {
   payments: BookingPayment[];
   financials: BookingFinancials | null;
   company: CompanyInfo;
+  /** Property's configured check-in/out time as "HH:mm" (from property settings). */
+  checkInTime?: string;
+  checkOutTime?: string;
 }
 
 const inr = (n: number) =>
@@ -44,6 +47,15 @@ const fmtTime = (d: string | Date | undefined | null) => {
   return `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 };
 
+// Format a property-policy time stored as "HH:mm" (e.g. "14:00") into "02:00 PM".
+const fmtPolicyTime = (hhmm?: string, fallback = '') => {
+  if (!hhmm || !/^\d{1,2}:\d{2}/.test(hhmm)) return fallback;
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayHours = h % 12 || 12;
+  return `${String(displayHours).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+};
+
 const nowIST = () => {
   const date = new Date();
   const istDate = new Intl.DateTimeFormat('en-GB', {
@@ -62,7 +74,11 @@ export const InvoicePerLine: React.FC<InvoicePerLineProps> = ({
   payments,
   financials,
   company,
+  checkInTime,
+  checkOutTime,
 }) => {
+  const checkInTimeDisplay = fmtPolicyTime(checkInTime, fmtTime(booking.checkIn));
+  const checkOutTimeDisplay = fmtPolicyTime(checkOutTime, fmtTime(booking.checkOut));
   const noOfDays = useMemo(() => {
     if (!booking.checkIn || !booking.checkOut) return 1;
     const days = Math.ceil(
@@ -384,9 +400,9 @@ export const InvoicePerLine: React.FC<InvoicePerLineProps> = ({
               <tbody>
                 <tr>
                   <td>{fmtDate(booking.checkIn)}</td>
-                  <td>{fmtTime(booking.checkIn)}</td>
+                  <td>{checkInTimeDisplay}</td>
                   <td>{fmtDate(booking.checkOut)}</td>
-                  <td>{fmtTime(booking.checkOut)}</td>
+                  <td>{checkOutTimeDisplay}</td>
                   <td>{noOfDays}</td>
                   <td>{booking.numberOfRooms || 1}</td>
                   <td>{booking.noOfPax} {booking.adultChild && `(${booking.adultChild})`}</td>
@@ -516,7 +532,7 @@ export const InvoicePerLine: React.FC<InvoicePerLineProps> = ({
             <div className="terms-section">
               <strong>Terms & Conditions:</strong>
               <ol>
-                <li>Check-in time is 2:00 PM and check-out time is 12:00 PM</li>
+                <li>Check-in time is {checkInTimeDisplay || '2:00 PM'} and check-out time is {checkOutTimeDisplay || '12:00 PM'}</li>
                 <li>Valid ID proof is mandatory at the time of check-in</li>
                 <li>All disputes are subject to Manali jurisdiction</li>
               </ol>
