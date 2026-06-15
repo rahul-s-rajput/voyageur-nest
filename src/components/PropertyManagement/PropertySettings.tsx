@@ -104,7 +104,17 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
       const propertySettings = await propertyService.getPropertySettings(currentProperty.id);
       // Fall back to editable defaults when the property has no saved settings yet,
       // so the forms render (and can be saved into a real row).
-      setSettings(propertySettings.length > 0 ? propertySettings[0] : buildDefaultSettings(currentProperty.id));
+      let next = propertySettings.length > 0 ? propertySettings[0] : buildDefaultSettings(currentProperty.id);
+      // With no saved settings JSON, seed the check-in/out times from the
+      // properties table columns (stored "HH:mm:ss") so the form shows the
+      // property's REAL configured time rather than the generic 14:00 default.
+      if (propertySettings.length === 0) {
+        const toHHmm = (t?: string) => (t && /^\d{1,2}:\d{2}/.test(t) ? t.slice(0, 5) : undefined);
+        const cin = toHHmm(currentProperty.checkInTime);
+        const cout = toHHmm(currentProperty.checkOutTime);
+        next = { ...next, ...(cin ? { checkInTime: cin } : {}), ...(cout ? { checkOutTime: cout } : {}) };
+      }
+      setSettings(next);
     } catch (error) {
       console.error('Failed to load property settings:', error);
       setSettings(buildDefaultSettings(currentProperty.id));
@@ -180,9 +190,9 @@ const PropertySettings: React.FC<PropertySettingsProps> = ({ className = '' }) =
         address: propertyForm.address,
         contactPhone: propertyForm.contactPhone,
         contactEmail: propertyForm.contactEmail,
-        // Also persist check-in/out to the properties table columns so
-        // `Property.checkInTime/checkOutTime` (and thus invoices) reflect the
-        // saved values — not just the property_settings JSON row.
+        // Persist check-in/out to the properties table columns (which DO exist)
+        // so Property.checkInTime/checkOutTime — the source invoices read — stays
+        // in sync with the times configured here.
         ...(settings ? { checkInTime: settings.checkInTime, checkOutTime: settings.checkOutTime } : {}),
       } as any);
       if (settings) {
