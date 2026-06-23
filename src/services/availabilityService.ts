@@ -144,12 +144,13 @@ export class AvailabilityService {
     // Fetch overlapping bookings with chained conditions (AND)
     let overlapping: any[] = [];
     try {
+      // No .in('room_no', ...) filter: multi-room bookings store room_no as a
+      // comma list ("101, 104") that an .in() would never match. We split below.
       const { data: bookings, error: bookingsError } = await supabase
         .from('bookings')
         .select('room_no')
         .eq('property_id', propertyId)
         .eq('cancelled', false)
-        .in('room_no', allRoomNumbers)
         .lt('check_in', checkOut)
         .gt('check_out', checkIn);
 
@@ -164,7 +165,11 @@ export class AvailabilityService {
       return [];
     }
 
-    const occupied = new Set(overlapping.map((b: any) => b.room_no));
+    // Split comma-joined room_no so a multi-room booking occupies each of its rooms.
+    const occupied = new Set<string>();
+    overlapping.forEach((b: any) =>
+      String(b.room_no || '').split(',').forEach((rn: string) => occupied.add(rn.trim()))
+    );
     const available = allRoomNumbers.filter((rn: string) => !occupied.has(rn));
     return available;
   }

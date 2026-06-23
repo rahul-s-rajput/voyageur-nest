@@ -450,11 +450,13 @@ export class RoomBookingService {
       // Get all pricing data in one batch
       const pricingMap = await this.getBatchRoomPricing(roomNumbers);
 
-      // Get all bookings for all rooms in one query - use correct field names
+      // Get all bookings overlapping the date range. We intentionally do NOT
+      // filter by room_no here: a multi-room booking stores room_no as a
+      // comma-joined list (e.g. "101, 104"), which an .in('room_no', rooms)
+      // filter would never match. We split room_no below and assign per room.
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('*')
-        .in('room_no', roomNumbers)  // bookings table uses room_no
         .eq('cancelled', false)
         .lte('check_in', formatDateLocal(endDate))  // check_in <= endDate
         .gte('check_out', formatDateLocal(startDate)); // check_out >= startDate
@@ -493,10 +495,16 @@ export class RoomBookingService {
             updatedAt: bookingRow.updated_at
           };
 
-          if (!bookingsByRoom.has(booking.roomNo)) {
-            bookingsByRoom.set(booking.roomNo, []);
-          }
-          bookingsByRoom.get(booking.roomNo)!.push(booking);
+          // A booking can occupy multiple rooms (room_no = "101, 104"); assign it
+          // to each room it spans so multi-room bookings appear in every row.
+          booking.roomNo
+            .split(',')
+            .map(r => r.trim())
+            .filter(Boolean)
+            .forEach(r => {
+              if (!bookingsByRoom.has(r)) bookingsByRoom.set(r, []);
+              bookingsByRoom.get(r)!.push(booking);
+            });
         });
       }
 

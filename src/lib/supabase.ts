@@ -1357,13 +1357,19 @@ export const getSchedulingConflicts = async (
       return { conflicts: [] };
     }
 
-    // Group bookings by room and find overlaps
+    // Group bookings by room and find overlaps. Split comma-joined room_no so a
+    // multi-room booking ("101, 104") is checked against every room it occupies
+    // (otherwise it would never be compared with a single-room "101" booking).
     const roomBookings: { [room: string]: any[] } = {};
     bookings?.forEach(booking => {
-      if (!roomBookings[booking.room_no]) {
-        roomBookings[booking.room_no] = [];
-      }
-      roomBookings[booking.room_no].push(booking);
+      String(booking.room_no || '')
+        .split(',')
+        .map(r => r.trim())
+        .filter(Boolean)
+        .forEach(room => {
+          if (!roomBookings[room]) roomBookings[room] = [];
+          roomBookings[room].push(booking);
+        });
     });
 
     const conflicts: any[] = [];
