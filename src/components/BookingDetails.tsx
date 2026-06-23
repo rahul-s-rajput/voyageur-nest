@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2, Download, LogIn, LogOut } from 'lucide-react';
 import { Booking } from '../types/booking';
-import { CheckInData } from '../types/checkin';
+import { CheckInData, CheckInFormData } from '../types/checkin';
+import CheckInDetailsEditor from './CheckInDetailsEditor';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
 import { updateBookingWithValidation, invoiceCounterService, checkInService, bookingService } from '../lib/supabase';
 import { StorageService } from '../lib/storage';
@@ -55,6 +56,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [editData, setEditData] = useState<Partial<Booking>>({});
   const [checkInData, setCheckInData] = useState<CheckInData | null>(null);
   const [loadingCheckIn, setLoadingCheckIn] = useState(false);
+  const [isEditingCheckIn, setIsEditingCheckIn] = useState(false);
+  const [isSavingCheckIn, setIsSavingCheckIn] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -870,6 +873,26 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     setAdditionalGuests(prev => prev.map((guest, i) => 
       i === index ? { ...guest, relation } : guest
     ));
+  };
+
+  const handleSaveCheckInDetails = async (updates: Partial<CheckInFormData>) => {
+    if (!checkInData) return;
+    setIsSavingCheckIn(true);
+    try {
+      const updated = await checkInService.updateCheckInData(checkInData.id, updates);
+      if (updated) {
+        setCheckInData(updated);
+        setIsEditingCheckIn(false);
+        showSuccess('Check-in details updated', 'The guest check-in information has been saved.');
+      } else {
+        showError('Update failed', 'Could not save check-in details. Please try again.');
+      }
+    } catch (e: any) {
+      console.error('Failed to save check-in details', e);
+      showError('Update failed', e?.message || 'Could not save check-in details.');
+    } finally {
+      setIsSavingCheckIn(false);
+    }
   };
 
   const handleSaveAdditionalGuests = async () => {
@@ -1877,12 +1900,23 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                   <User className="w-5 h-5 mr-2" />
                   Digital Check-in Information
                 </h3>
-                {loadingCheckIn && (
-                  <div className="flex items-center text-sm text-gray-500">
-                    <Clock className="w-4 h-4 mr-1 animate-spin" />
-                    Loading...
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {loadingCheckIn && (
+                    <div className="flex items-center text-sm text-gray-500">
+                      <Clock className="w-4 h-4 mr-1 animate-spin" />
+                      Loading...
+                    </div>
+                  )}
+                  {!loadingCheckIn && checkInData && !isEditingCheckIn && (
+                    <button
+                      onClick={() => setIsEditingCheckIn(true)}
+                      className="flex items-center px-3 py-1.5 text-sm border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
+                    >
+                      <Edit className="w-4 h-4 mr-1.5" />
+                      Edit details
+                    </button>
+                  )}
+                </div>
               </div>
 
               {!loadingCheckIn && !checkInData && (
@@ -1899,6 +1933,15 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                     const formattedData = formatCheckInDataForDisplay(checkInData);
                     return (
                       <>
+                        {isEditingCheckIn ? (
+                          <CheckInDetailsEditor
+                            data={checkInData}
+                            saving={isSavingCheckIn}
+                            onCancel={() => setIsEditingCheckIn(false)}
+                            onSave={handleSaveCheckInDetails}
+                          />
+                        ) : (
+                        <>
                         {/* Personal Information */}
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                           <h4 className="font-medium text-blue-900 mb-3 flex items-center">
@@ -2103,6 +2146,9 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                             </div>
                           </div>
                         </div>
+
+                        </>
+                        )}
 
                         {/* ID Verification Images */}
                         {checkInData.id_photo_urls && checkInData.id_photo_urls.length > 0 && (
