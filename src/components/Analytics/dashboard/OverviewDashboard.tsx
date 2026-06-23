@@ -21,6 +21,7 @@ import {
   CartesianGrid,
   Tooltip
 } from "recharts";
+import { format } from "date-fns";
 import { useProperty } from "../../../contexts/PropertyContext";
 import { useKpiPeriod, useKpiComparison } from "../../../hooks/useKPI";
 import { Skeleton } from "../../ui/Skeleton";
@@ -42,8 +43,10 @@ export function OverviewDashboard() {
   const { currentProperty, gridCalendarSettings } = useProperty();
   const propertyId = currentProperty?.id;
   const totalRooms = currentProperty?.totalRooms;
-  const startStr = gridCalendarSettings.dateRange.start.toISOString().slice(0, 10);
-  const endStr = gridCalendarSettings.dateRange.end.toISOString().slice(0, 10);
+  // Local (IST) formatting — toISOString() would shift an IST-midnight boundary
+  // back a day and drop the current day from the window.
+  const startStr = format(gridCalendarSettings.dateRange.start, "yyyy-MM-dd");
+  const endStr = format(gridCalendarSettings.dateRange.end, "yyyy-MM-dd");
   const bookingSource = gridCalendarSettings.bookingSource;
   const enabled = !!propertyId;
 
@@ -71,6 +74,7 @@ export function OverviewDashboard() {
           change: kpiCmp ? { value: Number(kpiCmp.deltas.revenueDeltaPct.toFixed(1)), period: "vs prev" } : undefined,
           trend: trendFromDelta(kpiCmp?.deltas.revenueDeltaPct),
           icon: <DollarSign className="h-4 w-4" />,
+          info: "Money actually collected in this period — payments received minus any refunds.",
         },
         {
           title: "Occupancy Rate",
@@ -78,6 +82,7 @@ export function OverviewDashboard() {
           change: kpiCmp ? { value: Number(kpiCmp.deltas.occupancyDeltaPct.toFixed(1)), period: "vs prev" } : undefined,
           trend: trendFromDelta(kpiCmp?.deltas.occupancyDeltaPct),
           icon: <Bed className="h-4 w-4" />,
+          info: "Share of your rooms that were filled = room-nights sold ÷ room-nights available (rooms × days).",
         },
         {
           title: "RevPAR",
@@ -85,6 +90,7 @@ export function OverviewDashboard() {
           change: kpiCmp ? { value: Number(kpiCmp.deltas.revparDeltaPct.toFixed(1)), period: "vs prev" } : undefined,
           trend: trendFromDelta(kpiCmp?.deltas.revparDeltaPct),
           icon: <TrendingUp className="h-4 w-4" />,
+          info: "Revenue Per Available Room — average earning per room per night, counting empty rooms too (ADR × occupancy). Shows how hard the whole property is working.",
         },
         {
           title: "ADR",
@@ -92,6 +98,7 @@ export function OverviewDashboard() {
           change: kpiCmp ? { value: Number(kpiCmp.deltas.adrDeltaPct.toFixed(1)), period: "vs prev" } : undefined,
           trend: trendFromDelta(kpiCmp?.deltas.adrDeltaPct),
           icon: <Users className="h-4 w-4" />,
+          info: "Average Daily Rate — the average price you got per room on the nights it was actually booked.",
         },
       ]
     : [];

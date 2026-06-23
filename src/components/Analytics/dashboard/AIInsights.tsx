@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { format } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/Card';
 import { Badge } from '../../ui/Badge';
@@ -23,8 +24,8 @@ export function AIInsights() {
   const queryClient = useQueryClient();
   const propertyId = currentProperty?.id;
   const totalRooms = currentProperty?.totalRooms || 0;
-  const start = gridCalendarSettings.dateRange.start.toISOString().slice(0, 10);
-  const end = gridCalendarSettings.dateRange.end.toISOString().slice(0, 10);
+  const start = format(gridCalendarSettings.dateRange.start, 'yyyy-MM-dd');
+  const end = format(gridCalendarSettings.dateRange.end, 'yyyy-MM-dd');
   const bookingSource = gridCalendarSettings.bookingSource;
 
   const filters = useMemo(() => ({

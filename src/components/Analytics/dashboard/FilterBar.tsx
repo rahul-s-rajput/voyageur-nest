@@ -94,23 +94,19 @@ export function FilterBar({ className, sticky = true }: FilterBarProps) {
     return 'custom';
   };
 
-  // Re-anchor relative presets to *today* on mount. The selected range is
-  // persisted as an absolute span, so a saved "Last 7 days" goes stale across
-  // days (the label still says "Last 7 days" but the dates no longer end today).
-  const didAnchorRef = React.useRef(false);
+  // Analytics must never look into the FUTURE. This date range is shared with the
+  // room grid, whose default is a future window (today..today+6); PropertyContext
+  // also resets any past-starting range to that future default on a full reload.
+  // So whenever the range extends past today, snap it back to "Last 7 days". This
+  // runs reactively so it corrects the post-reload reset (not just on mount).
   React.useEffect(() => {
-    if (didAnchorRef.current) return;
-    didAnchorRef.current = true;
-    const preset = inferRangeValue();
-    const endsToday = startOfDay(gridCalendarSettings.dateRange.end).getTime() === today.getTime();
-    if (endsToday) return; // already current
-    if (preset === 'today') setRange(today, today);
-    else if (preset === 'last7') setRange(subDays(today, 6), today);
-    else if (preset === 'last30') setRange(subDays(today, 29), today);
-    else if (preset === 'last90') setRange(subDays(today, 89), today);
-    // 'custom' / 'year' are left untouched
+    const start = startOfDay(gridCalendarSettings.dateRange.start);
+    const end = startOfDay(gridCalendarSettings.dateRange.end);
+    if (start.getTime() > today.getTime() || end.getTime() > today.getTime()) {
+      setRange(subDays(today, 6), today);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [gridCalendarSettings.dateRange.start, gridCalendarSettings.dateRange.end]);
 
   const onRefresh = async () => {
     // Invalidate all caches to force a full refresh across tabs

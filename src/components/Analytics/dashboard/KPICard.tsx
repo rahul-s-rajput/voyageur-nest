@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/Card";
 import { cn } from "../../../lib/utils";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 
 interface KPICardProps {
   title: string;
@@ -12,9 +12,11 @@ interface KPICardProps {
   icon?: React.ReactNode;
   trend?: "up" | "down" | "neutral";
   className?: string;
+  /** Plain-language explanation shown in a tooltip next to the title. */
+  info?: string;
 }
 
-export function KPICard({ title, value, change, icon, trend, className }: KPICardProps) {
+export function KPICard({ title, value, change, icon, trend, className, info }: KPICardProps) {
   const getTrendIcon = () => {
     switch (trend) {
       case "up":
@@ -40,7 +42,21 @@ export function KPICard({ title, value, change, icon, trend, className }: KPICar
   return (
     <Card className={cn("bg-gradient-card border-card-border shadow-kpi transition-all duration-fast hover:shadow-lg", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+          {title}
+          {info && (
+            <span className="group/tip relative inline-flex" tabIndex={0} aria-label={info}>
+              <Info className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-help" />
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] z-40 w-64 -translate-x-1/2 rounded-lg border border-border bg-popover px-3.5 py-2.5 text-[12px] font-normal normal-case leading-relaxed tracking-normal text-popover-foreground opacity-0 translate-y-1 shadow-xl ring-1 ring-black/5 transition-all duration-150 group-hover/tip:opacity-100 group-hover/tip:translate-y-0 group-focus/tip:opacity-100 group-focus/tip:translate-y-0"
+              >
+                <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-3 w-3 rotate-45 border-l border-t border-border bg-popover" />
+                {info}
+              </span>
+            </span>
+          )}
+        </CardTitle>
         {icon && <div className="text-muted-foreground">{icon}</div>}
       </CardHeader>
       <CardContent>

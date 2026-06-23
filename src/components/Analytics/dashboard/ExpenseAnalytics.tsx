@@ -25,6 +25,7 @@ import {
   CreditCard,
   Target
 } from "lucide-react";
+import { format } from "date-fns";
 import { useDetailedExpenseAnalytics } from "../../../hooks/useChartData";
 import { useProperty } from "../../../contexts/PropertyContext";
 
@@ -44,8 +45,8 @@ export function ExpenseAnalytics() {
   const { currentProperty, gridCalendarSettings } = useProperty();
   const propertyId = currentProperty?.id;
   const totalRooms = currentProperty?.totalRooms;
-  const startStr = gridCalendarSettings.dateRange.start.toISOString().slice(0, 10);
-  const endStr = gridCalendarSettings.dateRange.end.toISOString().slice(0, 10);
+  const startStr = format(gridCalendarSettings.dateRange.start, "yyyy-MM-dd");
+  const endStr = format(gridCalendarSettings.dateRange.end, "yyyy-MM-dd");
   const bookingSource = gridCalendarSettings.bookingSource;
 
   const filters = {
