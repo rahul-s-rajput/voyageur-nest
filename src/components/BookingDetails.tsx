@@ -64,6 +64,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [confirmCheckInOpen, setConfirmCheckInOpen] = useState(false);
   // Prevent duplicate auto-finalize submissions per booking
   const autoFinalizeAttemptedFor = useRef<string | null>(null);
 
@@ -657,6 +658,17 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
   const handleCheckInAction = async () => {
     if (!booking) return;
+    // Warn (and allow override) when the guest hasn't completed the check-in form.
+    if (!checkInData?.form_completed_at) {
+      setConfirmCheckInOpen(true);
+      return;
+    }
+    await performCheckIn();
+  };
+
+  // Normal check-in (form is complete) — goes through the validated path.
+  const performCheckIn = async () => {
+    if (!booking) return;
     setIsLoading(true);
     setValidationErrors([]);
     try {
@@ -666,13 +678,33 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         showSuccess('Checked in', 'Guest has been checked in.');
       } else if (result.errors) {
         setValidationErrors(result.errors);
-        // If the check-in form isn't done yet, open the QR so the guest can complete it.
         if (result.errors.some(e => e.toLowerCase().includes('check-in form must be completed'))) {
-          setShowQRCode(true);
-          showWarning('Check-in form required', 'Ask the guest to complete the check-in form, then try again.');
+          // Form state changed under us — fall back to the confirmation modal.
+          setConfirmCheckInOpen(true);
         } else {
           showError('Check-in failed', result.errors.join(', '));
         }
+      }
+    } catch (e: any) {
+      showError('Check-in failed', e?.message || 'Unexpected error while checking in');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Override: check in without a completed form (bypasses the form requirement).
+  const confirmCheckInWithoutForm = async () => {
+    if (!booking) return;
+    setConfirmCheckInOpen(false);
+    setIsLoading(true);
+    setValidationErrors([]);
+    try {
+      const updated = await bookingService.updateBooking(booking.id, { status: 'checked-in' as Booking['status'] });
+      if (updated) {
+        onUpdate(updated);
+        showSuccess('Checked in', 'Guest checked in without a completed check-in form.');
+      } else {
+        showError('Check-in failed', 'Could not update the booking status.');
       }
     } catch (e: any) {
       showError('Check-in failed', e?.message || 'Unexpected error while checking in');
@@ -2554,6 +2586,25 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
             <div className="flex items-center justify-end gap-2 border-t px-5 py-3">
               <button onClick={() => setConfirmDeleteOpen(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Close</button>
               <button onClick={() => { onDelete(booking.id); setConfirmDeleteOpen(false); }} className="px-4 py-2 text-sm text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Check-in (form not filled) Modal */}
+      {confirmCheckInOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">Check-in form not filled</h3>
+            </div>
+            <div className="px-5 py-4 text-sm text-gray-700">
+              The guest hasn't completed the digital check-in form yet. Are you sure you want to check them in anyway?
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t px-5 py-3">
+              <button onClick={() => setConfirmCheckInOpen(false)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Cancel</button>
+              <button onClick={() => { setConfirmCheckInOpen(false); setShowQRCode(true); }} className="px-4 py-2 text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors">Show QR</button>
+              <button onClick={confirmCheckInWithoutForm} disabled={isLoading} className="px-4 py-2 text-sm text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-60">Check in anyway</button>
             </div>
           </div>
         </div>
