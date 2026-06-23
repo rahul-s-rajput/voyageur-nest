@@ -779,10 +779,10 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
         <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0 p-4 sm:p-8">
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="ethereal-button w-full py-3 sm:py-4 px-6 sm:px-8 text-base sm:text-lg font-semibold flex items-center justify-center space-x-3"
+            disabled={isSubmitting || submitting}
+            className="ethereal-button w-full py-3 sm:py-4 px-6 sm:px-8 text-base sm:text-lg font-semibold flex items-center justify-center space-x-3 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? (
+            {(isSubmitting || submitting) ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                 <span>{t('form.buttons.submitting')}</span>

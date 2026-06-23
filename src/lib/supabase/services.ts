@@ -502,16 +502,21 @@ export const checkInService = {
   }),
 
   getCheckInDataByBookingId: withErrorHandling(async (bookingId: string): Promise<CheckInData | null> => {
-    const { data, error } = await supabase
+    // Order by created_at and take the first row rather than .single()/.maybeSingle():
+    // historically a double-submit could create duplicate rows for one booking, and
+    // .maybeSingle() throws ("multiple rows returned") in that case, bricking the page.
+    const { data: rows, error } = await supabase
       .from('checkin_data')
       .select('*')
       .eq('booking_id', bookingId)
-      .maybeSingle()
+      .order('created_at', { ascending: true })
+      .limit(1)
 
     if (error) {
       throw new Error(`Failed to fetch check-in data: ${error.message}`)
     }
 
+    const data = rows?.[0]
     if (!data) return null
 
     // Transform database fields to match interface
