@@ -508,6 +508,8 @@ const BookingManagement: React.FC = () => {
             onCancelBooking={handleCancelBooking}
             onCreateCancellationInvoice={handleCreateCancellationInvoice}
             onOpenActions={handleOpenActions}
+            onCheckIn={handleCheckIn}
+            onCheckOut={handleCheckOut}
             onBookingCreated={handleBookingCreated}
           />
         </div>
@@ -896,6 +898,8 @@ const BookingManagement: React.FC = () => {
           onCancelBooking={handleCancelBooking}
           onCreateCancellationInvoice={handleCreateCancellationInvoice}
           onOpenActions={handleOpenActions}
+          onCheckIn={handleCheckIn}
+          onCheckOut={handleCheckOut}
           onBookingCreated={handleBookingCreated}
         />
       </div>

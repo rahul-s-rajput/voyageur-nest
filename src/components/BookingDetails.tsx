@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2, Download } from 'lucide-react';
+import { X, Edit, Save, XCircle, FileText, Receipt, Plus, Minus, QrCode, User, Phone, MapPin, CreditCard, Users, Calendar, Clock, Trash2, Download, LogIn, LogOut } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { InvoiceData, CancellationInvoiceData } from '../types/invoice';
@@ -636,6 +636,52 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const handleEdit = () => {
     setIsEditing(true);
     setValidationErrors([]);
+  };
+
+  const handleCheckInAction = async () => {
+    if (!booking) return;
+    setIsLoading(true);
+    setValidationErrors([]);
+    try {
+      const result = await updateBookingWithValidation(booking.id, { status: 'checked-in' as Booking['status'] });
+      if (result.success && result.booking) {
+        onUpdate(result.booking);
+        showSuccess('Checked in', 'Guest has been checked in.');
+      } else if (result.errors) {
+        setValidationErrors(result.errors);
+        // If the check-in form isn't done yet, open the QR so the guest can complete it.
+        if (result.errors.some(e => e.toLowerCase().includes('check-in form must be completed'))) {
+          setShowQRCode(true);
+          showWarning('Check-in form required', 'Ask the guest to complete the check-in form, then try again.');
+        } else {
+          showError('Check-in failed', result.errors.join(', '));
+        }
+      }
+    } catch (e: any) {
+      showError('Check-in failed', e?.message || 'Unexpected error while checking in');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCheckOutAction = async () => {
+    if (!booking) return;
+    setIsLoading(true);
+    setValidationErrors([]);
+    try {
+      const result = await updateBookingWithValidation(booking.id, { status: 'checked-out' as Booking['status'] });
+      if (result.success && result.booking) {
+        onUpdate(result.booking);
+        showSuccess('Checked out', 'Guest has been checked out.');
+      } else if (result.errors) {
+        setValidationErrors(result.errors);
+        showError('Check-out failed', result.errors.join(', '));
+      }
+    } catch (e: any) {
+      showError('Check-out failed', e?.message || 'Unexpected error while checking out');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -2187,7 +2233,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               )}
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-6">
               {isEditing ? (
                 <>
                   <button
@@ -2230,6 +2276,26 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                     <QrCode className="w-4 h-4 mr-2" />
                     Check-in QR
                   </button>
+                  {!booking.cancelled && booking.status !== 'checked-in' && booking.status !== 'checked-out' && (
+                    <button
+                      onClick={handleCheckInAction}
+                      disabled={isLoading}
+                      className="flex-1 flex items-center justify-center px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <LogIn className="w-4 h-4 mr-2" />
+                      Check In
+                    </button>
+                  )}
+                  {!booking.cancelled && booking.status === 'checked-in' && (
+                    <button
+                      onClick={handleCheckOutAction}
+                      disabled={isLoading}
+                      className="flex-1 flex items-center justify-center px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Check Out
+                    </button>
+                  )}
                   {booking.cancelled && (
                     <button
                       onClick={handleShowCancellationInvoice}

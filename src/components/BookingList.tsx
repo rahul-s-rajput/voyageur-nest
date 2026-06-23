@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, Edit, FileText, Trash2, XCircle, Receipt, CheckCircle, Clock } from 'lucide-react';
+import { Eye, Edit, FileText, Trash2, XCircle, Receipt, CheckCircle, Clock, LogIn, LogOut } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { CheckInData } from '../types/checkin';
 import { checkInService } from '../lib/supabase';
@@ -14,6 +14,8 @@ interface BookingListProps {
   onCreateInvoice: (booking: Booking) => void;
   onCancelBooking?: (bookingId: string) => void;
   onCreateCancellationInvoice?: (booking: Booking) => void;
+  onCheckIn?: (bookingId: string) => void;
+  onCheckOut?: (bookingId: string) => void;
 }
 
 export const BookingList: React.FC<BookingListProps> = ({
@@ -23,7 +25,9 @@ export const BookingList: React.FC<BookingListProps> = ({
   onDeleteBooking,
   onCreateInvoice,
   onCancelBooking,
-  onCreateCancellationInvoice
+  onCreateCancellationInvoice,
+  onCheckIn,
+  onCheckOut
 }) => {
   const [checkInData, setCheckInData] = useState<Record<string, CheckInData>>({});
   const [loadingCheckIns, setLoadingCheckIns] = useState(true);
@@ -221,6 +225,26 @@ export const BookingList: React.FC<BookingListProps> = ({
                     <Edit className="w-4 h-4" />
                   </button>
 
+                  {!booking.cancelled && onCheckIn && booking.status !== 'checked-in' && booking.status !== 'checked-out' && (
+                    <button
+                      onClick={() => onCheckIn(booking.id)}
+                      className="p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-emerald-600 hover:text-emerald-900 transition-colors"
+                      title="Check In"
+                    >
+                      <LogIn className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {!booking.cancelled && onCheckOut && booking.status === 'checked-in' && (
+                    <button
+                      onClick={() => onCheckOut(booking.id)}
+                      className="p-2.5 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-amber-600 hover:text-amber-900 transition-colors"
+                      title="Check Out"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  )}
+
                   {!booking.cancelled && (
                     <>
                       <button
@@ -358,6 +382,26 @@ export const BookingList: React.FC<BookingListProps> = ({
                     >
                       <Edit className="w-4 h-4" />
                     </button>
+
+                    {!booking.cancelled && onCheckIn && booking.status !== 'checked-in' && booking.status !== 'checked-out' && (
+                      <button
+                        onClick={() => onCheckIn(booking.id)}
+                        className="text-emerald-600 hover:text-emerald-900 transition-colors"
+                        title="Check In"
+                      >
+                        <LogIn className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    {!booking.cancelled && onCheckOut && booking.status === 'checked-in' && (
+                      <button
+                        onClick={() => onCheckOut(booking.id)}
+                        className="text-amber-600 hover:text-amber-900 transition-colors"
+                        title="Check Out"
+                      >
+                        <LogOut className="w-4 h-4" />
+                      </button>
+                    )}
 
                     {!booking.cancelled && (
                       <>
