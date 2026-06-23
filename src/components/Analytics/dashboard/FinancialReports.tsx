@@ -13,7 +13,7 @@ import {
   Bar
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
-import { parse } from "date-fns";
+import { parse, format } from "date-fns";
 import { useKpiPeriod, useKpiPerProperty } from "../../../hooks/useKPI";
 import { useDetailedExpenseAnalytics, useRevenueTrends } from "../../../hooks/useChartData";
 import { useProperty } from "../../../contexts/PropertyContext";
@@ -29,8 +29,10 @@ export function FinancialReports() {
   const { currentProperty, gridCalendarSettings, properties } = useProperty();
   const propertyId = currentProperty?.id ?? "";
   const totalRooms = currentProperty?.totalRooms ?? 0;
-  const startStr = gridCalendarSettings.dateRange.start.toISOString().slice(0, 10);
-  const endStr = gridCalendarSettings.dateRange.end.toISOString().slice(0, 10);
+  // Local (IST) formatting — toISOString() shifts an IST-midnight boundary back a
+  // day, which would window differently from the Overview tab.
+  const startStr = format(gridCalendarSettings.dateRange.start, "yyyy-MM-dd");
+  const endStr = format(gridCalendarSettings.dateRange.end, "yyyy-MM-dd");
   const bookingSource = gridCalendarSettings.bookingSource;
 
   const filters = {
@@ -99,9 +101,8 @@ export function FinancialReports() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="income" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
+        <TabsList className="grid w-full grid-cols-2 mb-6">
           <TabsTrigger value="income">Income Statement</TabsTrigger>
-          <TabsTrigger value="budget">Budget vs Actual</TabsTrigger>
           <TabsTrigger value="profitability">Profitability</TabsTrigger>
         </TabsList>
 
@@ -178,7 +179,7 @@ export function FinancialReports() {
                       <p className="text-2xl font-bold text-success">{fmtCurrency(totalRevenue)}</p>
                       <p className="text-xs text-success flex items-center justify-center gap-1">
                         <TrendingUp className="h-3 w-3" />
-                        From bookings
+                        Payments received
                       </p>
                     </div>
                     <div className="text-center p-4 bg-warning/10 rounded-lg">
@@ -200,72 +201,6 @@ export function FinancialReports() {
                     </div>
                   </div>
                 </>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="budget" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Budget Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isExpenseLoading ? (
-                <div className="space-y-6">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <Skeleton className="h-4 w-40" />
-                        <div className="text-right space-y-2">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-28" />
-                        </div>
-                      </div>
-                      <Skeleton className="h-2 w-full" />
-                    </div>
-                  ))}
-                </div>
-              ) : expenseData?.budgetComparison && expenseData.budgetComparison.length > 0 ? (
-                <div className="space-y-6">
-                  {expenseData.budgetComparison.map((item, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium">{item.categoryName}</span>
-                        <div className="text-right">
-                          <span className="text-sm text-muted-foreground">
-                            {fmtCurrency(item.actual)} / {fmtCurrency(item.budgeted)}
-                          </span>
-                          <div className={`text-xs flex items-center gap-1 ${
-                            item.variance > 0 ? 'text-destructive' : 'text-success'
-                          }`}>
-                            {item.variance > 0 ? (
-                              <>
-                                <TrendingUp className="h-3 w-3" />
-                                Over by {Math.abs(item.variancePercent).toFixed(1)}%
-                              </>
-                            ) : item.variance < 0 ? (
-                              <>
-                                <TrendingDown className="h-3 w-3" />
-                                Under by {Math.abs(item.variancePercent).toFixed(1)}%
-                              </>
-                            ) : (
-                              "On target"
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <Progress 
-                        value={item.budgeted > 0 ? Math.min(100, (item.actual / item.budgeted) * 100) : 0} 
-                        className="h-2"
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No budget data available for comparison
-                </div>
               )}
             </CardContent>
           </Card>

@@ -5,7 +5,6 @@ import { OverviewDashboard } from "./dashboard/OverviewDashboard";
 import { FinancialReports } from "./dashboard/FinancialReports";
 import { BookingAnalytics } from "./dashboard/BookingAnalytics";
 import { ExpenseAnalytics } from "./dashboard/ExpenseAnalytics";
-import { AIInsights } from "./dashboard/AIInsights";
 import { Button } from "../ui/Button";
 import { Settings } from "lucide-react";
 
@@ -25,8 +24,6 @@ export default function AnalyticsDashboard() {
         return <BookingAnalytics />;
       case "expenses":
         return <ExpenseAnalytics />;
-      case "insights":
-        return <AIInsights />;
       default:
         return <OverviewDashboard />;
     }
