@@ -2244,14 +2244,30 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                 </>
               ) : (
                 <>
-                  <button
-                    onClick={() => (invoiceType === 'perline' ? setShowPerLineInvoice(true) : setShowInvoice(true))}
-                    className="flex-1 flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Print Invoice
-                  </button>
-                  {!booking.cancelled && booking.status !== 'checked-in' && booking.status !== 'checked-out' && (
+                  {/* Footer shows exactly 4 actions per state.
+                      pre-arrival: QR · Check In · Edit · Cancel
+                      checked-in:  Invoice · QR · Check Out · Edit  (no Cancel)
+                      checked-out: Invoice · QR · Edit · Delete
+                      cancelled:   Cancellation Invoice · Edit · Delete */}
+                  {!booking.cancelled && (booking.status === 'checked-in' || booking.status === 'checked-out') && (
+                    <button
+                      onClick={() => (invoiceType === 'perline' ? setShowPerLineInvoice(true) : setShowInvoice(true))}
+                      className="flex-1 flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Print Invoice
+                    </button>
+                  )}
+                  {booking.cancelled && (
+                    <button
+                      onClick={handleShowCancellationInvoice}
+                      className="flex-1 flex items-center justify-center px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+                    >
+                      <Receipt className="w-4 h-4 mr-2" />
+                      Cancellation Invoice
+                    </button>
+                  )}
+                  {!booking.cancelled && (
                     <button
                       onClick={() => setShowQRCode(true)}
                       className="flex-1 flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
@@ -2280,15 +2296,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                       Check Out
                     </button>
                   )}
-                  {booking.cancelled && (
-                    <button
-                      onClick={handleShowCancellationInvoice}
-                      className="flex-1 flex items-center justify-center px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
-                    >
-                      <Receipt className="w-4 h-4 mr-2" />
-                      Cancellation Invoice
-                    </button>
-                  )}
                   <button
                     onClick={handleEdit}
                     className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -2296,7 +2303,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
                   </button>
-                  {!booking.cancelled && (
+                  {!booking.cancelled && booking.status !== 'checked-in' && booking.status !== 'checked-out' && (
                     <button
                       onClick={handleCancelBooking}
                       className="flex-1 flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
@@ -2305,7 +2312,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                       Cancel Booking
                     </button>
                   )}
-                  {booking.cancelled && (
+                  {(booking.cancelled || booking.status === 'checked-out') && (
                     <button
                       onClick={() => setConfirmDeleteOpen(true)}
                       className="flex-1 flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"

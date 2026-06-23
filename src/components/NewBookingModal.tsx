@@ -146,6 +146,14 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       return;
     }
 
+    // Room charge (Total Amount) is mandatory. A 0/blank amount creates a booking
+    // with no room charge, which makes booking_financials read "no-charges".
+    if (!(parseFloat(formData.totalAmount) > 0)) {
+      setValidationErrors(['Please enter the room charge — Total Amount must be greater than 0.']);
+      setIsLoading(false);
+      return;
+    }
+
     // No duplicate rooms in a multi-room booking.
     if (formData.numberOfRooms > 1) {
       const chosen = roomNumbers.filter(r => r.trim());
@@ -850,17 +858,18 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Amount
+                  Total Amount <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   name="totalAmount"
                   value={formData.totalAmount || ''}
                   onChange={handleInputChange}
-                  min="0"
+                  min="1"
                   step="0.01"
                   inputMode="decimal"
-                  placeholder="Enter total amount"
+                  required
+                  placeholder="Enter room charge"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={isLoading}
                 />
