@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { bookingService, supabase } from "../../lib/supabase";
 import type { Booking } from "../../types/booking";
 import type { AnalyticsFilters, BookingKPIs } from "../../types/analytics";
@@ -61,6 +61,9 @@ export async function getBookingKPIs(filters: AnalyticsFilters): Promise<Booking
   const allBookings: Booking[] = await bookingService.getBookings({
     propertyId: filters.propertyId,
     dateRange: { start: startStr, end: endStr },
+    // Count any stay that overlaps the period (not just fully-contained ones),
+    // otherwise long stays spanning the window are dropped and KPIs read 0.
+    dateRangeMode: 'overlap',
     // showCancelled: undefined -> include both cancelled and non-cancelled
     source: filters.bookingSource && filters.bookingSource !== 'all' ? filters.bookingSource : undefined,
   });
@@ -68,40 +71,44 @@ export async function getBookingKPIs(filters: AnalyticsFilters): Promise<Booking
   const activeBookings = allBookings.filter(b => !b.cancelled);
 
   const periodStart = new Date(startStr);
-  const periodEnd = new Date(endStr);
-  const daysInPeriod = clamp(differenceInCalendarDays(periodEnd, periodStart) + 1, 1);
+  // Exclusive ceiling: the night OF endStr (endStr → endStr+1) belongs to the
+  // period, so clamp stays to endStr+1 and count it as a full day of availability.
+  const periodEnd = addDays(new Date(endStr), 1);
+  const daysInPeriod = clamp(differenceInCalendarDays(periodEnd, periodStart), 1);
 
-  // Room revenue (the room charge / legacy total) drives ADR & RevPAR by hotel
-  // convention — those metrics are room-only and exclude F&B/misc.
-  const roomRevenue = activeBookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+  // Room revenue drives ADR & RevPAR (room-only by hotel convention). Prorate each
+  // booking's room total across its nights and count only the nights that fall
+  // inside the period, so a long stay spanning the window doesn't overstate it.
+  const roomRevenue = activeBookings.reduce((sum, b) => {
+    const fullNights = Math.max(1, differenceInCalendarDays(safeParse(b.checkOut), safeParse(b.checkIn)));
+    const nightsInPeriod = calculateNightsWithinPeriod(b.checkIn, b.checkOut, periodStart, periodEnd);
+    return sum + ((b.totalAmount || 0) / fullNights) * nightsInPeriod;
+  }, 0);
   const bookingCount = activeBookings.length;
 
-  // Total revenue should reflect the full folio (room + F&B + misc), so aggregate
-  // gross_total from the booking_financials view. Fall back to room revenue if the
-  // view is unavailable.
-  let totalRevenue = roomRevenue;
+  // Total Revenue = cash actually collected in the period (cash basis): non-voided
+  // payments dated in [start, end] minus refunds, for this property. This answers
+  // "money in this period" rather than the full folio of every active stay.
+  let totalRevenue = 0;
   try {
-    const ids = activeBookings.map(b => b.id).filter(Boolean);
-    if (ids.length > 0) {
-      const { data, error } = await supabase
-        .from('booking_financials')
-        .select('booking_id, gross_total')
-        .eq('property_id', filters.propertyId)
-        .in('booking_id', ids);
-      if (!error && data) {
-        const grossById = new Map<string, number>(
-          data.map((r: any) => [r.booking_id, parseFloat(r.gross_total ?? 0)])
-        );
-        // Use gross_total where present; fall back to the booking's room total for
-        // any booking missing a financials row, so revenue isn't silently undercounted.
-        totalRevenue = activeBookings.reduce(
-          (sum, b) => sum + (grossById.has(b.id) ? (grossById.get(b.id) as number) : (b.totalAmount || 0)),
-          0
-        );
-      }
+    const endExclusive = format(addDays(periodEnd, 1), "yyyy-MM-dd");
+    const { data, error } = await supabase
+      .from('booking_payments')
+      .select('amount, payment_type, created_at')
+      .eq('property_id', filters.propertyId)
+      .eq('is_voided', false)
+      .gte('created_at', startStr)
+      .lt('created_at', endExclusive);
+    if (!error && data) {
+      totalRevenue = data.reduce((sum: number, p: any) => {
+        const amt = parseFloat(p.amount) || 0;
+        if (p.payment_type === 'payment') return sum + amt;
+        if (p.payment_type === 'refund') return sum - amt;
+        return sum; // adjustments excluded from revenue
+      }, 0);
     }
   } catch (e) {
-    console.warn('booking_financials revenue unavailable; using room totals', e);
+    console.warn('booking_payments revenue unavailable', e);
   }
 
   const roomNightsSold = activeBookings.reduce((sum, b) => {

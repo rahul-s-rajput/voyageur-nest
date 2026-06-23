@@ -35,6 +35,13 @@ export interface BookingFilters {
     start: string;
     end: string;
   };
+  /**
+   * How `dateRange` matches a booking:
+   * - 'contained' (default): booking fully inside the range (check_in >= start AND check_out <= end)
+   * - 'overlap': booking's stay overlaps the range (check_in <= end AND check_out > start)
+   * Analytics needs 'overlap' so long stays that span the window are still counted.
+   */
+  dateRangeMode?: 'contained' | 'overlap';
   guestName?: string;
   roomNo?: string;
   status?: Booking['status'][];

@@ -169,8 +169,8 @@ export const chartDataService = {
         .select('id, source, total_amount')
         .eq('property_id', filters.propertyId)
         .eq('cancelled', false)
-        .gte('check_in', filters.start)
-        .lte('check_out', filters.end);
+        .lte('check_in', filters.end)
+        .gt('check_out', filters.start);
 
       const { data: bookings } = await query;
 
@@ -241,8 +241,8 @@ export const chartDataService = {
         `)
         .eq('property_id', filters.propertyId)
         .eq('cancelled', false)
-        .gte('check_in', filters.start)
-        .lte('check_out', filters.end);
+        .lte('check_in', filters.end)
+        .gt('check_out', filters.start);
 
       if (!bookings) return [];
 
@@ -409,8 +409,8 @@ export const chartDataService = {
           .from('bookings')
           .select('*')
           .eq('property_id', property.id)
-          .gte('check_in', dateRange.start)
-          .lte('check_out', dateRange.end);
+          .lte('check_in', dateRange.end)
+          .gt('check_out', dateRange.start);
 
         if (bookings) {
           const totalBookings = bookings.length;

@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { useProperty } from "../contexts/PropertyContext";
 import { getOverviewAnalytics } from "../services/analytics/analyticsService";
 import type { OverviewAnalytics } from "../types/analytics";
 
 function toDateString(d: Date): string {
-  // Expecting date-only filtering in services
-  return d.toISOString().slice(0, 10);
+  // Format in LOCAL (IST) time, not UTC. Using toISOString() here shifted an
+  // IST-midnight boundary back a day (e.g. "today" became "yesterday"), which
+  // silently dropped the current day's bookings/payments from the window.
+  return format(d, "yyyy-MM-dd");
 }
 
 export function useOverviewAnalytics() {

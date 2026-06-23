@@ -17,9 +17,18 @@ export const bookingService = {
     }
 
     if (filters?.dateRange) {
-      query = query
-        .gte('check_in', filters.dateRange.start)
-        .lte('check_out', filters.dateRange.end)
+      if (filters.dateRangeMode === 'overlap') {
+        // Stay overlaps the range (check-out is exclusive). Includes long stays
+        // that start inside the window but end after it.
+        query = query
+          .lte('check_in', filters.dateRange.end)
+          .gt('check_out', filters.dateRange.start)
+      } else {
+        // Default: booking fully contained within the range.
+        query = query
+          .gte('check_in', filters.dateRange.start)
+          .lte('check_out', filters.dateRange.end)
+      }
     }
 
     if (filters?.guestName) {

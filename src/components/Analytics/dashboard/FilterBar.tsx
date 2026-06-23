@@ -6,7 +6,7 @@ import { Calendar as CalendarIcon, Download, Filter, RefreshCw } from "lucide-re
 import { cn } from "../../../lib/utils";
 import { useProperty } from "../../../contexts/PropertyContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { subDays, startOfDay, startOfYear } from "date-fns";
+import { subDays, startOfDay, startOfYear, format } from "date-fns";
 import { Calendar as PrimeCalendar } from "primereact/calendar";
 import { OverlayPanel } from "primereact/overlaypanel";
 import { ExportSelectionModal, ExportData } from "./ExportSelectionModal";
@@ -27,8 +27,10 @@ export function FilterBar({ className, sticky = true }: FilterBarProps) {
   const [rangeDraft, setRangeDraft] = React.useState<Date[] | null>(null);
   const propertyId = currentProperty?.id ?? "";
   const totalRooms = currentProperty?.totalRooms ?? 0;
-  const startStr = gridCalendarSettings.dateRange.start.toISOString().slice(0, 10);
-  const endStr = gridCalendarSettings.dateRange.end.toISOString().slice(0, 10);
+  // Format in LOCAL (IST) time — toISOString() shifts an IST-midnight boundary
+  // back a day, which dropped the current day from analytics windows.
+  const startStr = format(gridCalendarSettings.dateRange.start, "yyyy-MM-dd");
+  const endStr = format(gridCalendarSettings.dateRange.end, "yyyy-MM-dd");
   const bookingSource = gridCalendarSettings.bookingSource && gridCalendarSettings.bookingSource !== 'all' 
     ? gridCalendarSettings.bookingSource 
     : undefined;
@@ -91,6 +93,24 @@ export function FilterBar({ className, sticky = true }: FilterBarProps) {
     if (diffDays === 89) return 'last90';
     return 'custom';
   };
+
+  // Re-anchor relative presets to *today* on mount. The selected range is
+  // persisted as an absolute span, so a saved "Last 7 days" goes stale across
+  // days (the label still says "Last 7 days" but the dates no longer end today).
+  const didAnchorRef = React.useRef(false);
+  React.useEffect(() => {
+    if (didAnchorRef.current) return;
+    didAnchorRef.current = true;
+    const preset = inferRangeValue();
+    const endsToday = startOfDay(gridCalendarSettings.dateRange.end).getTime() === today.getTime();
+    if (endsToday) return; // already current
+    if (preset === 'today') setRange(today, today);
+    else if (preset === 'last7') setRange(subDays(today, 6), today);
+    else if (preset === 'last30') setRange(subDays(today, 29), today);
+    else if (preset === 'last90') setRange(subDays(today, 89), today);
+    // 'custom' / 'year' are left untouched
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onRefresh = async () => {
     // Invalidate all caches to force a full refresh across tabs
