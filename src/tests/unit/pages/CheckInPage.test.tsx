@@ -15,6 +15,13 @@ vi.mock('../../../lib/supabase', () => ({
   },
 }))
 
+// Mock the property service (the page fetches the property name for the header)
+vi.mock('../../../services/propertyService', () => ({
+  propertyService: {
+    getPropertyById: vi.fn().mockResolvedValue({ id: 'p1', name: 'Voyageur Nest' }),
+  },
+}))
+
 // Mock react-router-dom
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -157,7 +164,7 @@ describe('CheckInPage', () => {
 
   it('should render loading state initially', () => {
     renderWithRouter(<CheckInPage />)
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
+    expect(screen.getByText('Loading your booking…')).toBeInTheDocument()
   })
 
   it('should load booking data and render check-in form', async () => {

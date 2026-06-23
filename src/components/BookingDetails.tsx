@@ -58,6 +58,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   const [loadingCheckIn, setLoadingCheckIn] = useState(false);
   const [isEditingCheckIn, setIsEditingCheckIn] = useState(false);
   const [isSavingCheckIn, setIsSavingCheckIn] = useState(false);
+  // Which invoice the combined invoice control prints. Default to the per-line full invoice.
+  const [invoiceType, setInvoiceType] = useState<'standard' | 'perline'>('perline');
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -89,6 +91,38 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       setDownloadingInvoice(false);
     }
   };
+
+  // Switch which invoice the preview modal shows, swapping the two modals in place.
+  const switchInvoiceType = (type: 'standard' | 'perline') => {
+    setInvoiceType(type);
+    if (type === 'perline') {
+      setShowInvoice(false);
+      setShowPerLineInvoice(true);
+    } else {
+      setShowPerLineInvoice(false);
+      setShowInvoice(true);
+    }
+  };
+
+  // Full | Standard segmented toggle shown at the top of the invoice preview modal.
+  const renderInvoiceToggle = () => (
+    <div className="flex text-xs font-medium rounded-md overflow-hidden border border-gray-300">
+      <button
+        type="button"
+        onClick={() => switchInvoiceType('perline')}
+        className={`px-3 py-1.5 transition-colors ${invoiceType === 'perline' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Full
+      </button>
+      <button
+        type="button"
+        onClick={() => switchInvoiceType('standard')}
+        className={`px-3 py-1.5 transition-colors ${invoiceType === 'standard' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Standard
+      </button>
+    </div>
+  );
   // Charges + payments are cached via React Query (instant on re-open). setCharges/
   // setPayments keep the useState-setter signature, so the mutation handlers below
   // work unchanged — they now write to the query cache. Totals are derived locally.
@@ -158,12 +192,8 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
   });
 
   
-  // Additional guests and photo upload states
-  const [additionalGuests, setAdditionalGuests] = useState<Array<{name: string, age?: number, relation?: string}>>(
-    checkInData?.additionalGuests || []
-  );
+  // Photo upload state
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
-  const [isSavingGuests, setIsSavingGuests] = useState(false);
 
   useEffect(() => {
     if (booking) {
@@ -305,14 +335,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     };
     loadInvoiceNumber();
   }, []);
-
-  // Initialize additional guests when checkInData changes
-  useEffect(() => {
-    if (checkInData?.additionalGuests) {
-      setAdditionalGuests(checkInData.additionalGuests);
-    }
-  }, [checkInData]);
-
 
 
   // (Charges/payments loading is handled by useBookingLedger above.)
@@ -848,33 +870,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     });
   };
 
-  // Additional guests management handlers
-  const handleAddGuest = () => {
-    setAdditionalGuests(prev => [...prev, { name: '', age: undefined, relation: '' }]);
-  };
-
-  const handleRemoveGuest = (index: number) => {
-    setAdditionalGuests(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleGuestNameChange = (index: number, name: string) => {
-    setAdditionalGuests(prev => prev.map((guest, i) => 
-      i === index ? { ...guest, name } : guest
-    ));
-  };
-
-  const handleGuestAgeChange = (index: number, age: string) => {
-    setAdditionalGuests(prev => prev.map((guest, i) => 
-      i === index ? { ...guest, age: age ? parseInt(age) : undefined } : guest
-    ));
-  };
-
-  const handleGuestRelationChange = (index: number, relation: string) => {
-    setAdditionalGuests(prev => prev.map((guest, i) => 
-      i === index ? { ...guest, relation } : guest
-    ));
-  };
-
   const handleSaveCheckInDetails = async (updates: Partial<CheckInFormData>) => {
     if (!checkInData) return;
     setIsSavingCheckIn(true);
@@ -892,29 +887,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       showError('Update failed', e?.message || 'Could not save check-in details.');
     } finally {
       setIsSavingCheckIn(false);
-    }
-  };
-
-  const handleSaveAdditionalGuests = async () => {
-    if (!checkInData) return;
-
-    setIsSavingGuests(true);
-    try {
-      const validGuests = additionalGuests.filter(guest => guest.name.trim() !== '');
-      const updates = {
-        additionalGuests: validGuests
-      };
-
-      const updatedData = await checkInService.updateCheckInData(checkInData.id, updates);
-      if (updatedData) {
-        setCheckInData(updatedData);
-        showSuccess('Guests saved successfully!', `${validGuests.length} additional guest(s) have been saved.`);
-      }
-    } catch (error) {
-      console.error('Error saving additional guests:', error);
-      showError('Save failed', 'Failed to save additional guests. Please try again.');
-    } finally {
-      setIsSavingGuests(false);
     }
   };
 
@@ -1931,6 +1903,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                 <div className="space-y-6">
                   {(() => {
                     const formattedData = formatCheckInDataForDisplay(checkInData);
+                    // Separate the primary guest's ID photos from per-guest ones so
+                    // they aren't shown twice (guest photos render under each guest).
+                    const allIdPhotos = checkInData.id_photo_urls || [];
+                    const guestPhotoSet = new Set((checkInData.additionalGuests || []).flatMap(g => g.idPhotoUrls || []));
+                    const primaryIdPhotos = allIdPhotos.filter(u => !guestPhotoSet.has(u));
                     return (
                       <>
                         {isEditingCheckIn ? (
@@ -2081,20 +2058,41 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                         </div>
 
                         {/* Additional Guests */}
-                        {formattedData.additionalGuests && formattedData.additionalGuests.length > 0 && (
+                        {checkInData.additionalGuests && checkInData.additionalGuests.length > 0 && (
                           <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
                             <h4 className="font-medium text-indigo-900 mb-3 flex items-center">
                               <Users className="w-4 h-4 mr-2" />
                               Additional Guests
                             </h4>
                             <div className="space-y-2">
-                              {formattedData.additionalGuests.map((guest, index) => (
-                                <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
-                                  <span className="text-sm text-gray-900">{guest.name}</span>
-                                  <div className="text-xs text-gray-600">
-                                    {guest.age && <span>Age: {guest.age}</span>}
-                                    {guest.relation && <span className="ml-2">({guest.relation})</span>}
+                              {checkInData.additionalGuests.map((guest, index) => (
+                                <div key={index} className="bg-white p-2.5 rounded border">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-900">{guest.name || `Guest ${index + 1}`}</span>
+                                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                                      {guest.age != null && <span>Age: {guest.age}</span>}
+                                      {guest.isAdult && (
+                                        <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">Adult</span>
+                                      )}
+                                    </div>
                                   </div>
+                                  {guest.idPhotoUrls && guest.idPhotoUrls.length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {guest.idPhotoUrls.map((url, pi) => (
+                                        <img
+                                          key={pi}
+                                          src={url}
+                                          alt={`${guest.name || 'Guest'} ID ${pi + 1}`}
+                                          className="w-14 h-14 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                                          onClick={() => {
+                                            const idx = allIdPhotos.indexOf(url);
+                                            if (idx >= 0) { setSelectedImageIndex(idx); setShowImageModal(true); }
+                                            else { window.open(url, '_blank'); }
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -2155,17 +2153,18 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                             <h4 className="font-medium text-orange-900 mb-3 flex items-center">
                               <CreditCard className="w-4 h-4 mr-2" />
-                              ID Verification Documents
+                              Primary Guest ID
                             </h4>
+                            {primaryIdPhotos.length > 0 && (
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                              {checkInData.id_photo_urls.map((url, index) => (
+                              {primaryIdPhotos.map((url, index) => (
                                 <div key={index} className="relative group">
                                   <img
                                     src={url}
                                     alt={`ID Document ${index + 1}`}
                                     className="w-full h-24 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-all duration-200 shadow-sm hover:shadow-md"
                                     onClick={() => {
-                                      setSelectedImageIndex(index);
+                                      setSelectedImageIndex(allIdPhotos.indexOf(url));
                                       setShowImageModal(true);
                                     }}
                                     onError={(e) => {
@@ -2186,6 +2185,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                                 </div>
                               ))}
                             </div>
+                            )}
                             <div className="mt-3 pt-3 border-t border-orange-200">
                               <div className="space-y-3">
                                 <div className="space-y-4">
@@ -2210,63 +2210,6 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                                     </div>
                                   </div>
                                   
-                                  {/* Additional Guests Management */}
-                                  <div className="border-t pt-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                      <h4 className="text-sm font-medium text-gray-700">Additional Guests</h4>
-                                      <button
-                                        onClick={handleAddGuest}
-                                        className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                                      >
-                                        + Add Guest
-                                      </button>
-                                    </div>
-                                    
-                                    {additionalGuests.length > 0 ? (
-                                      <div className="space-y-2">
-                                        {additionalGuests.map((guest, index) => (
-                                          <div key={index} className="flex items-center space-x-2 p-2 bg-gray-50 rounded">
-                                            <input
-                                              type="text"
-                                              value={guest.name}
-                                              onChange={(e) => handleGuestNameChange(index, e.target.value)}
-                                              placeholder="Guest name"
-                                              className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                            />
-                                            <input
-                                              type="number"
-                                              value={guest.age || ''}
-                                              onChange={(e) => handleGuestAgeChange(index, e.target.value)}
-                                              placeholder="Age"
-                                              className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                            />
-                                            <input
-                                              type="text"
-                                              value={guest.relation || ''}
-                                              onChange={(e) => handleGuestRelationChange(index, e.target.value)}
-                                              placeholder="Relation"
-                                              className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                            />
-                                            <button
-                                              onClick={() => handleRemoveGuest(index)}
-                                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                                            >
-                                              ×
-                                            </button>
-                                          </div>
-                                        ))}
-                                        <button
-                                          onClick={handleSaveAdditionalGuests}
-                                          disabled={isSavingGuests}
-                                          className="w-full px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                          {isSavingGuests ? 'Saving...' : 'Save Additional Guests'}
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <p className="text-xs text-gray-500 italic">No additional guests added</p>
-                                    )}
-                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -2302,26 +2245,21 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
               ) : (
                 <>
                   <button
-                    onClick={() => setShowInvoice(true)}
+                    onClick={() => (invoiceType === 'perline' ? setShowPerLineInvoice(true) : setShowInvoice(true))}
                     className="flex-1 flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
                   >
                     <FileText className="w-4 h-4 mr-2" />
                     Print Invoice
                   </button>
-                  <button
-                    onClick={() => setShowPerLineInvoice(true)}
-                    className="flex-1 flex items-center justify-center px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Full Invoice (Per-line)
-                  </button>
-                  <button
-                    onClick={() => setShowQRCode(true)}
-                    className="flex-1 flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                  >
-                    <QrCode className="w-4 h-4 mr-2" />
-                    Check-in QR
-                  </button>
+                  {!booking.cancelled && booking.status !== 'checked-in' && booking.status !== 'checked-out' && (
+                    <button
+                      onClick={() => setShowQRCode(true)}
+                      className="flex-1 flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                    >
+                      <QrCode className="w-4 h-4 mr-2" />
+                      Check-in QR
+                    </button>
+                  )}
                   {!booking.cancelled && booking.status !== 'checked-in' && booking.status !== 'checked-out' && (
                     <button
                       onClick={handleCheckInAction}
@@ -2387,16 +2325,16 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
       {showInvoice && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowInvoice(false); }}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b print:hidden">
-              <h2 className="text-xl font-semibold text-gray-900">Invoice</h2>
+            <div className="sticky top-0 z-10 bg-white flex items-center justify-between p-4 border-b print:hidden">
+              {renderInvoiceToggle()}
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleDownloadInvoicePdf}
                   disabled={downloadingInvoice}
-                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-60"
+                  className="flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  {downloadingInvoice ? 'Generating…' : 'Download PDF'}
+                  {downloadingInvoice ? 'Generating PDF...' : 'Download PDF'}
                 </button>
                 <button
                   onClick={() => setShowInvoice(false)}
@@ -2421,7 +2359,7 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setShowPerLineInvoice(false); }}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b bg-white print:hidden">
-              <h2 className="text-xl font-semibold text-gray-900">Full Invoice (Per-line)</h2>
+              {renderInvoiceToggle()}
               <div className="flex items-center space-x-2">
                 <InvoicePDFExport
                   booking={booking}
@@ -2432,13 +2370,15 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
                   company={invoiceCompany}
                   checkInTime={invoiceProperty?.checkInTime}
                   checkOutTime={invoiceProperty?.checkOutTime}
-                  className="px-4 py-2 text-sm text-white bg-gray-900 rounded-md hover:bg-gray-800 transition-colors"
+                  className="flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Export
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
                 </InvoicePDFExport>
                 <button
                   onClick={() => setShowPerLineInvoice(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Close"
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <X className="w-6 h-6" />
                 </button>

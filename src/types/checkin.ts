@@ -36,6 +36,10 @@ export interface CheckInData {
     name: string;
     age?: number;
     relation?: string;
+    /** Whether this guest is an adult (drives the per-guest ID requirement). */
+    isAdult?: boolean;
+    /** Uploaded ID photo URLs for this specific guest (adults). */
+    idPhotoUrls?: string[];
   }>;
   
   // Special Requests
@@ -107,6 +111,10 @@ export interface CheckInFormData {
     name: string;
     age?: number;
     relation?: string;
+    /** Whether this guest is an adult (drives the per-guest ID requirement). */
+    isAdult?: boolean;
+    /** Uploaded ID photo URLs for this specific guest (adults). */
+    idPhotoUrls?: string[];
   }>;
   
   // Special Requests

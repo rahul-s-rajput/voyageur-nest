@@ -1,283 +1,290 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { CheckInFormData, CheckInFormProps } from '../types/checkin';
-import IDPhotoUpload from './IDPhotoUpload';
 import { StorageService } from '../lib/storage';
-import { useTranslation } from '../hooks/useTranslation';
-import LanguageSelector from './LanguageSelector';
+import { EnhancedFileValidator } from '../utils/fileValidator';
 import { ServerRateLimiter } from '../services/serverRateLimiter';
 import { SecureLogger } from '../utils/secureLogger';
-import { ErrorHandler, ErrorType } from '../utils/errorHandler';
+import { ErrorHandler } from '../utils/errorHandler';
 import { useNotification } from './NotificationContainer';
 import { GuestProfileService } from '../services/guestProfileService';
 import type { GuestProfile } from '../types/guest';
+import {
+  STR,
+  PURPOSES,
+  RELATIONSHIPS,
+  langFromCode,
+  type Lang,
+} from './checkin/checkinStrings';
+import { Upload, X, Plus, ArrowRight, AlertCircle, AlertTriangle, ChevronDown } from 'lucide-react';
+import DateField from './checkin/DateField';
 
-export const CheckInForm: React.FC<CheckInFormProps> = ({
+// ── Design tokens (Himalayan Boutique) ──────────────────────────────────────
+const C = {
+  pine: '#1f3a30',
+  pineHover: '#274a3d',
+  pineAccent: '#2f5446',
+  sectionSub: '#355c4c',
+  card: '#fffdf9',
+  sand: '#faf6ec',
+  border: '#e4dbca',
+  borderSubtle: '#ece3d2',
+  dashed: '#cdbf9f',
+  label: '#5a4f40',
+  muted: '#9a8e78',
+  asterisk: '#9a6a2f',
+  errText: '#a8431f',
+  cream: '#f3eedf',
+};
+
+interface ExtraProps {
+  /** Booking reference shown in the sticky form header, e.g. "520/391". */
+  bookingRef?: string;
+  /** True when the guest is updating an already-submitted check-in. */
+  isUpdate?: boolean;
+}
+
+// Block characters that would make a "number of guests"/"age" non-integer.
+const blockNonInteger = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (['e', 'E', '+', '-', '.', ','].includes(e.key)) e.preventDefault();
+};
+
+// NOTE: these are defined at module scope (not inside CheckInForm). Defining
+// components inside the render body creates a new component *type* every render,
+// which makes React remount the whole subtree on each keystroke/toggle — that
+// caused the form to jump to the top when the "Adult" checkbox was clicked.
+const Section: React.FC<{ n: number; title: string; children: React.ReactNode }> = ({ n, title, children }) => (
+  <section style={{ marginBottom: 26 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 15 }}>
+      <span style={{ flex: 'none', width: 26, height: 26, borderRadius: '50%', background: C.pine, color: C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', font: `600 13px 'Spectral','Noto Sans Devanagari',serif` }}>{n}</span>
+      <h2 style={{ margin: 0, font: `600 19px/1 'Spectral','Noto Sans Devanagari',serif`, color: C.pine }}>{title}</h2>
+    </div>
+    {children}
+  </section>
+);
+
+// Native <select> with a custom chevron + hover/focus (via .vn-select CSS).
+const SelectWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ position: 'relative' }}>
+    {children}
+    <ChevronDown size={16} color={C.muted} style={{ position: 'absolute', right: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+  </div>
+);
+
+export const CheckInForm: React.FC<CheckInFormProps & ExtraProps> = ({
   bookingId,
   onSubmit,
   initialData,
   isSubmitting = false,
-  language = 'en-US',
+  language = 'en',
   onLanguageChange,
-  externalErrorHandling = false
+  externalErrorHandling = false,
+  bookingRef,
+  isUpdate = false,
 }) => {
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const lang: Lang = langFromCode(language);
+  const t = STR[lang];
 
+  const { showError } = useNotification();
   const [submitting, setSubmitting] = useState(false);
-  
-  // Guest profile states (for automatic matching)
-  const [matchedGuest, setMatchedGuest] = useState<GuestProfile | null>(null);
-  
-  // Initialize notification hook
-  const { showError, showWarning, showSuccess } = useNotification();
-  
-  // Initialize translation hook with the current language
-  const { t, isLoading: isTranslating, error: translationError, setLanguage, currentLanguage } = useTranslation(language || 'en-US');
-  
-  // Initialize security utilities
-  // ServerRateLimiter and ErrorHandler are used statically, no instance needed
+  const [showSummary, setShowSummary] = useState(false);
+  const [idError, setIdError] = useState(false);
+  const [guestIdErrors, setGuestIdErrors] = useState<Record<string, boolean>>({});
+  const [idPhotos, setIdPhotos] = useState<File[]>([]);
+  // Per-guest adult ID photos, keyed by the field-array row id (stable across reorders).
+  const [guestPhotos, setGuestPhotos] = useState<Record<string, File[]>>({});
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [, setMatchedGuest] = useState<GuestProfile | null>(null);
 
   const {
     register,
     control,
+    watch,
+    setValue,
     handleSubmit,
     formState: { errors },
     reset,
-    setValue
   } = useForm<CheckInFormData>({
     defaultValues: initialData || {
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      dateOfBirth: '',
-      nationality: '',
-      idType: 'passport',
-      address: '',
-      city: '',
-      state: '',
-      country: '',
-      zipCode: '',
-      emergencyContactName: '',
-      emergencyContactPhone: '',
-      emergencyContactRelation: '',
-      purposeOfVisit: 'leisure',
-      arrivalDate: '',
-      departureDate: '',
-      roomNumber: '',
-      numberOfGuests: 1,
-      additionalGuests: [],
-      specialRequests: '',
-      preferences: {
-        wakeUpCall: false,
-        newspaper: false,
-        extraTowels: false,
-        extraPillows: false,
-        roomService: false,
-        doNotDisturb: false,
-      },
-      termsAccepted: false,
-      marketingConsent: false,
+      firstName: '', lastName: '', email: '', phone: '', dateOfBirth: '', nationality: '',
+      idType: 'passport', idNumber: '', address: '', city: '', state: '', country: '', zipCode: '',
+      emergencyContactName: '', emergencyContactPhone: '', emergencyContactRelation: '',
+      purposeOfVisit: 'leisure', arrivalDate: '', departureDate: '', roomNumber: '', numberOfGuests: 1,
+      additionalGuests: [], specialRequests: '',
+      preferences: { wakeUpCall: false, newspaper: false, extraTowels: false, extraPillows: false, roomService: false, doNotDisturb: false },
+      termsAccepted: false, marketingConsent: false,
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({ control, name: 'additionalGuests' });
+
+  useEffect(() => {
+    if (initialData) reset(initialData);
+  }, [initialData, reset]);
+
+  // ── ID photo upload (magic-number validation via EnhancedFileValidator) ────
+  const MAX_FILES = 6;
+  const MAX_PER_GUEST = 4;
+  const acceptedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+
+  const validateFiles = useCallback(async (incoming: File[], currentCount: number, max: number): Promise<File[]> => {
+    if (currentCount + incoming.length > max) {
+      showError('Too many files', `You can upload at most ${max} files here.`);
+      return [];
     }
-  });
+    const valid: File[] = [];
+    for (const file of incoming) {
+      const res = await EnhancedFileValidator.validateFile(file, { maxFileSize: 5 * 1024 * 1024, allowedTypes: acceptedTypes });
+      if (res.valid) valid.push(file);
+      else showError('File rejected', `${file.name}: ${res.error || 'Invalid file'}`);
+    }
+    return valid;
+  }, [showError]);
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: 'additionalGuests'
-  });
+  const addFiles = useCallback(async (files: FileList | File[]) => {
+    const valid = await validateFiles(Array.from(files), idPhotos.length, MAX_FILES);
+    if (valid.length) { setIdPhotos(prev => [...prev, ...valid]); setIdError(false); }
+  }, [idPhotos.length, validateFiles]);
 
-  const handleLanguageChange = async (languageCode: string) => {
-    await setLanguage(languageCode);
-    onLanguageChange?.(languageCode);
+  const addGuestFiles = useCallback(async (rowId: string, files: FileList | File[]) => {
+    const valid = await validateFiles(Array.from(files), (guestPhotos[rowId] || []).length, MAX_PER_GUEST);
+    if (valid.length) {
+      setGuestPhotos(prev => ({ ...prev, [rowId]: [...(prev[rowId] || []), ...valid] }));
+      setGuestIdErrors(prev => ({ ...prev, [rowId]: false }));
+    }
+  }, [guestPhotos, validateFiles]);
+
+  const removeGuestFile = (rowId: string, idx: number) =>
+    setGuestPhotos(prev => ({ ...prev, [rowId]: (prev[rowId] || []).filter((_, j) => j !== idx) }));
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   };
 
-  // Automatic guest profile matching
-  const findMatchingGuest = async (email: string, phone: string, name: string) => {
+  // ── Automatic guest-profile matching (unchanged behaviour) ─────────────────
+  const findMatchingGuest = async (email: string, phone: string): Promise<GuestProfile | null> => {
     if (!email && !phone) return null;
-
     try {
-      // Search by email first (most reliable)
       if (email) {
-        const emailResults = await GuestProfileService.searchGuestProfiles({
-          search: email,
-          limit: 5,
-          offset: 0
-        });
-        
-        const exactEmailMatch = emailResults.find(guest => 
-          guest.email?.toLowerCase() === email.toLowerCase()
-        );
-        if (exactEmailMatch) return exactEmailMatch;
+        const r = await GuestProfileService.searchGuestProfiles({ search: email, limit: 5, offset: 0 });
+        const m = r.find(g => g.email?.toLowerCase() === email.toLowerCase());
+        if (m) return m;
       }
-
-      // Search by phone if no email match
       if (phone) {
-        const phoneResults = await GuestProfileService.searchGuestProfiles({
-          search: phone,
-          limit: 5,
-          offset: 0
-        });
-        
-        const exactPhoneMatch = phoneResults.find(guest => 
-          guest.phone === phone
-        );
-        if (exactPhoneMatch) return exactPhoneMatch;
+        const r = await GuestProfileService.searchGuestProfiles({ search: phone, limit: 5, offset: 0 });
+        const m = r.find(g => g.phone === phone);
+        if (m) return m;
       }
-
       return null;
-    } catch (error) {
-      console.error('Error finding matching guest:', error);
+    } catch (e) {
+      console.error('Error finding matching guest:', e);
       return null;
     }
   };
 
   const onFormSubmit = async (data: CheckInFormData) => {
+    setShowSummary(false);
+
+    // ID-photo requirements: primary guest (new check-ins) + every adult guest.
+    let uploadsOk = true;
+    const needPrimaryId = !isUpdate && idPhotos.length === 0;
+    setIdError(needPrimaryId);
+    if (needPrimaryId) uploadsOk = false;
+
+    const newGuestErrors: Record<string, boolean> = {};
+    (data.additionalGuests || []).forEach((g, idx) => {
+      const rowId = fields[idx]?.id;
+      if (!rowId || !g.isAdult) return;
+      const hasId = (guestPhotos[rowId]?.length || 0) > 0 || (g.idPhotoUrls?.length || 0) > 0;
+      if (!hasId) { newGuestErrors[rowId] = true; uploadsOk = false; }
+    });
+    setGuestIdErrors(newGuestErrors);
+
+    if (!uploadsOk) { setShowSummary(true); return; }
+
+    const identifier = bookingId || data.email || 'anonymous';
+    const userAgent = navigator.userAgent;
     try {
       setSubmitting(true);
-      
-      // Get client information for rate limiting
-      const identifier = bookingId || data.email || 'anonymous';
-      const userAgent = navigator.userAgent;
-      
-      // Check server-side rate limit before submission
-      const rateLimitCheck = await ServerRateLimiter.checkRateLimit(
-        'checkin-submission', 
-        identifier,
-        undefined, // IP address will be determined server-side
-        userAgent
-      );
-      
+
+      const rateLimitCheck = await ServerRateLimiter.checkRateLimit('checkin-submission', identifier, undefined, userAgent);
       if (!rateLimitCheck.allowed) {
         const retryTime = rateLimitCheck.retryAfter || 60;
-        showError(
-          'Rate Limit Exceeded', 
-          rateLimitCheck.message || `Please wait ${retryTime} seconds before submitting again. This helps protect our system from abuse.`
-        );
+        showError('Rate Limit Exceeded', rateLimitCheck.message || `Please wait ${retryTime} seconds before submitting again.`);
         return;
       }
 
-      // Log submission start
       SecureLogger.info('Check-in form submission started', {
-        hasIdPhotos: !!data.idPhotos && data.idPhotos.length > 0,
-        guestCount: data.additionalGuests?.length || 0
+        hasIdPhotos: idPhotos.length > 0,
+        guestCount: data.additionalGuests?.length || 0,
       });
 
-      // Handle guest profile creation/linking with automatic matching
+      // Resolve / create guest profile (non-fatal on failure).
       let guestProfileId: string | null = null;
-      
       try {
-        // Automatically find matching guest profile
         const fullName = `${data.firstName} ${data.lastName}`.trim();
-        const existingGuest = await findMatchingGuest(data.email, data.phone, fullName);
-        
+        const existingGuest = await findMatchingGuest(data.email, data.phone);
         if (existingGuest) {
-          // Update existing guest profile with any new information
           guestProfileId = existingGuest.id;
+          setMatchedGuest(existingGuest);
           await GuestProfileService.updateGuestProfile({
-            id: existingGuest.id,
-            name: fullName,
-            email: data.email,
-            phone: data.phone,
-            address: data.address,
-            city: data.city,
-            state: data.state,
-            country: data.country
-          });
-          
-          // Log that we found and updated an existing guest
-          SecureLogger.info('Existing guest profile updated during check-in', {
-            guestId: existingGuest.id,
-            checkInId: data.id
+            id: existingGuest.id, name: fullName, email: data.email, phone: data.phone,
+            address: data.address, city: data.city, state: data.state, country: data.country,
           });
         } else {
-          // Create new guest profile
           const newGuest = await GuestProfileService.createGuestProfile({
-            name: fullName,
-            email: data.email,
-            phone: data.phone,
-            address: data.address,
-            city: data.city,
-            state: data.state,
-            country: data.country,
-            email_marketing_consent: data.marketingConsent || false,
-            sms_marketing_consent: data.marketingConsent || false,
-            data_retention_consent: true
+            name: fullName, email: data.email, phone: data.phone, address: data.address,
+            city: data.city, state: data.state, country: data.country,
+            email_marketing_consent: false, sms_marketing_consent: false, data_retention_consent: true,
           });
           guestProfileId = newGuest.id;
         }
       } catch (guestError) {
-        // Log guest profile error but don't fail the check-in
         SecureLogger.warn('Guest profile creation/update failed', {
-          checkInId: data.id,
-          error: guestError instanceof Error ? guestError.message : 'Unknown error'
+          error: guestError instanceof Error ? guestError.message : 'Unknown error',
         });
       }
 
-      // Handle ID photo upload if present
-      if (data.idPhotos && data.idPhotos.length > 0) {
-        try {
-          const uploadResults = await StorageService.uploadFiles(data.idPhotos, data.id || '');
-          const uploadedUrls = uploadResults.filter(result => result.success).map(result => result.url).filter(Boolean) as string[];
-          
-          // Log successful photo upload
-          SecureLogger.info('ID photos uploaded successfully', {
-            checkInId: data.id,
-            photoCount: uploadedUrls.length
-          });
-
-          // Remove file objects and add uploaded URLs and guest profile ID
-          const { idPhotos, ...submissionData } = data;
-          const finalData = {
-            ...submissionData,
-            id_photo_urls: uploadedUrls,
-            guest_profile_id: guestProfileId
-          };
-
-          await onSubmit(finalData);
-          
-          // Record successful submission
-          await ServerRateLimiter.recordAttempt('checkin-submission', identifier, true, undefined, userAgent);
-        } catch (uploadError) {
-          // Log upload failure
-          SecureLogger.warn('ID photo upload failed', {
-            checkInId: data.id,
-            error: uploadError instanceof Error ? uploadError.message : 'Unknown error'
-          });
-          
-          // Record failed submission
-          await ServerRateLimiter.recordAttempt('checkin-submission', identifier, false, undefined, userAgent);
-          throw uploadError;
+      // Upload ID photos (main + per-adult-guest), then submit.
+      try {
+        let mainUrls: string[] = [];
+        if (idPhotos.length > 0) {
+          const ur = await StorageService.uploadFiles(idPhotos, data.id || '');
+          mainUrls = ur.filter(r => r.success).map(r => r.url).filter(Boolean) as string[];
         }
-      } else {
-        // No photos to upload, submit directly
-        const { idPhotos, ...submissionData } = data;
-        const finalData = {
-          ...submissionData,
-          guest_profile_id: guestProfileId
-        };
-        await onSubmit(finalData);
-        
-        // Record successful submission
+
+        const guestsOut = await Promise.all((data.additionalGuests || []).map(async (g, idx) => {
+          const rowId = fields[idx]?.id;
+          const gFiles = rowId ? guestPhotos[rowId] : undefined;
+          const base: { name: string; age?: number; isAdult: boolean; idPhotoUrls?: string[] } = {
+            name: g.name, age: g.age, isAdult: !!g.isAdult,
+          };
+          if (g.isAdult && gFiles && gFiles.length) {
+            const ur = await StorageService.uploadFiles(gFiles, data.id || '');
+            base.idPhotoUrls = ur.filter(r => r.success).map(r => r.url).filter(Boolean) as string[];
+          } else if (g.idPhotoUrls?.length) {
+            base.idPhotoUrls = g.idPhotoUrls;
+          }
+          return base;
+        }));
+
+        // Surface every ID photo in the booking-level gallery staff already review.
+        const allIdUrls = [...mainUrls, ...guestsOut.flatMap(g => g.idPhotoUrls || [])];
+        const { idPhotos: _omit, ...submissionData } = data;
+        await onSubmit({ ...submissionData, termsAccepted: true, additionalGuests: guestsOut, id_photo_urls: allIdUrls, guest_profile_id: guestProfileId } as any);
         await ServerRateLimiter.recordAttempt('checkin-submission', identifier, true, undefined, userAgent);
+      } catch (uploadError) {
+        await ServerRateLimiter.recordAttempt('checkin-submission', identifier, false, undefined, userAgent);
+        throw uploadError;
       }
     } catch (error) {
-      // Record failed submission for rate limiting
-      const identifier = bookingId || data.email || 'anonymous';
-      const userAgent = navigator.userAgent;
       await ServerRateLimiter.recordAttempt('checkin-submission', identifier, false, undefined, userAgent);
-      
-      // Use ErrorHandler for consistent error management
-      const handledError = ErrorHandler.handle(error, 'checkin-form-submission', {
-        userId: data.id,
-        action: 'form-submit'
-      });
-
+      const handledError = ErrorHandler.handle(error, 'checkin-form-submission', { action: 'form-submit' });
       if (!externalErrorHandling) {
         showError('Submission Failed', handledError.userMessage);
-        setSubmitStatus('error');
       } else {
         throw handledError;
       }
@@ -286,518 +293,264 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
     }
   };
 
-  // Update form when initialData changes
-  useEffect(() => {
-    if (initialData) {
-      reset(initialData);
-    }
-  }, [initialData, reset]);
+  const busy = isSubmitting || submitting;
 
-  if (submitStatus === 'success') {
-    return (
-      <div className="text-center py-12">
-        <div className="floating-element text-6xl mb-8">✨</div>
-        <h2 className="dancing-script text-4xl font-bold text-[var(--text-secondary)] mb-4">{t('messages.checkInSuccess')}</h2>
-        <p className="text-xl text-[var(--text-primary)] mb-8 leading-relaxed">{t('messages.thankYou')}</p>
-        
-        <div className="ethereal-card rounded-3xl p-8 max-w-md mx-auto">
-          <div className="flex items-center justify-center mb-4">
-            <div className="ethereal-section-icon p-3 mr-3">
-              <svg className="w-6 h-6 text-[var(--mist-blue)]" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 2L3 7v11a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V7l-7-5z"/>
-              </svg>
-            </div>
-            <span className="text-lg font-semibold text-[var(--text-secondary)]">Welcome to Your Stay!</span>
-          </div>
-          <p className="text-[var(--text-primary)] leading-relaxed">
-            Your check-in is complete. We hope you enjoy your experience with us.
-          </p>
-        </div>
+  // ── Small presentational helpers ───────────────────────────────────────────
+  const labelStyle: React.CSSProperties = {
+    display: 'block', font: `600 12.5px/1.3 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`,
+    color: C.label, margin: '0 0 6px',
+  };
+  const reqMark = <span style={{ color: C.asterisk }}> *</span>;
+  const cls = (err?: boolean) => `vn-field${err ? ' vn-field--error' : ''}`;
+
+  const fieldError = (msg?: string) =>
+    msg ? (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, color: C.errText }}>
+        <AlertCircle size={13} />
+        <span style={{ font: `500 12px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif` }}>{msg}</span>
       </div>
-    );
-  }
+    ) : null;
+
+  const langToggle = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1px solid ${C.border}`, borderRadius: 999, padding: 4 }}>
+      <button type="button" onClick={() => onLanguageChange?.('en')} style={{ border: 'none', cursor: 'pointer', padding: '6px 13px', borderRadius: 999, font: `600 13px 'Hanken Grotesk',sans-serif`, color: lang === 'en' ? C.cream : C.pineAccent, background: lang === 'en' ? C.pineAccent : 'transparent' }}>English</button>
+      <button type="button" onClick={() => onLanguageChange?.('hi')} style={{ border: 'none', cursor: 'pointer', padding: '6px 13px', borderRadius: 999, font: `600 13px 'Noto Sans Devanagari',sans-serif`, color: lang === 'hi' ? C.cream : C.pineAccent, background: lang === 'hi' ? C.pineAccent : 'transparent' }}>हिन्दी</button>
+    </div>
+  );
 
   return (
-    <>
-      {/* Header with language selector */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
-        <div>
-          <h2 className="dancing-script text-3xl font-bold text-[var(--text-secondary)] mb-2">{t('form.title')}</h2>
-          <p className="text-[var(--text-primary)] text-lg">Please fill in all required information</p>
-          <div className="mt-2 text-sm text-[var(--text-primary)]/70 flex items-center">
-            <svg className="w-4 h-4 mr-1.5 text-[var(--sky-blue)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-            We'll automatically link your information to any existing guest profile
+    <div style={{ flex: 1, minWidth: 0, fontFamily: `'Hanken Grotesk','Noto Sans Devanagari',system-ui,sans-serif` }}>
+      {/* Sticky form header */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 6, background: C.card, padding: '20px 28px 14px', borderBottom: `1px solid ${C.borderSubtle}` }}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div style={{ font: `400 12.5px/1 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.muted }}>
+              {t.bkFor} {bookingRef ? `#${bookingRef}` : ''}
+            </div>
+            <div style={{ font: `600 14px/1.3 'Spectral','Noto Sans Devanagari',serif`, color: C.pine, marginTop: 5 }}>{t.subtitle}</div>
           </div>
-        </div>
-        <div className="ethereal-glass rounded-2xl p-2">
-          <LanguageSelector
-            currentLanguage={currentLanguage}
-            onLanguageChange={handleLanguageChange}
-            isLoading={isTranslating}
-            className="w-48"
-          />
+          {langToggle}
         </div>
       </div>
 
-
-      
-      {/* Translation error */}
-      {translationError && (
-        <div className="bg-gradient-to-r from-[var(--gentle-purple)]/20 to-[var(--mist-blue)]/20 border border-[var(--gentle-purple)]/30 text-[var(--text-primary)] px-6 py-4 rounded-2xl mb-8">
-          <div className="flex items-center">
-            <div className="ethereal-section-icon p-2 mr-3">
-              <svg className="w-5 h-5 text-[var(--gentle-purple)]" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <span className="font-medium">{t('messages.translationUnavailable')}</span>
+      <div style={{ padding: '22px 28px 36px' }}>
+        {showSummary && (
+          <div style={{ display: 'flex', gap: 11, alignItems: 'center', background: '#f9ece6', border: '1px solid #eccbbb', borderRadius: 12, padding: '13px 15px', marginBottom: 22 }}>
+            <AlertTriangle size={18} color={C.errText} style={{ flex: 'none' }} />
+            <span style={{ font: `600 14px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: '#8c3a1c' }}>{t.val.summary}</span>
           </div>
-        </div>
-      )}
-      
+        )}
 
-
-      {/* Form submission error */}
-      {submitStatus === 'error' && !externalErrorHandling && (
-        <div className="ethereal-error border border-red-200 text-red-700 px-6 py-4 rounded-2xl mb-8">
-          <div className="flex items-center">
-            <div className="ethereal-section-icon p-2 mr-3">
-              <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <span className="font-medium">{t('messages.submitError')}</span>
-          </div>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6 sm:space-y-8">
-        {/* Personal Details Section */}
-        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
-          <div className="ethereal-section-header">
-            <div className="flex items-center text-white">
-              <div className="ethereal-section-icon mr-3">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                </svg>
+        <form onSubmit={handleSubmit(onFormSubmit, () => setShowSummary(true))} noValidate>
+          {/* 1 Personal */}
+          <Section n={1} title={t.s.personal}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-[18px] gap-y-[15px]">
+              <div>
+                <label style={labelStyle}>{t.f.first.l}{reqMark}</label>
+                <input className={cls(!!errors.firstName)} placeholder={t.f.first.p} autoComplete="given-name" {...register('firstName', { required: t.val.required })} />
+                {fieldError(errors.firstName?.message as string)}
               </div>
-              <h2 className="text-lg sm:text-xl font-semibold">
-                {t('form.sections.personalDetails')}
-              </h2>
-            </div>
-          </div>
-          <div className="p-4 sm:p-8">
-            <div className="space-y-6">
-              <div className="relative">
-                <input
-                  type="text"
-                  {...register('firstName', { 
-                    required: t('form.validation.required')
-                  })}
-                  className="ethereal-input peer placeholder-transparent"
-                  placeholder={t('form.fields.firstName')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
-                  {t('form.fields.firstName')} *
-                </label>
-                {errors.firstName && (
-                  <p className="text-red-500 text-sm mt-2 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    {errors.firstName.message}
-                  </p>
-                )}
+              <div>
+                <label style={labelStyle}>{t.f.last.l}{reqMark}</label>
+                <input className={cls(!!errors.lastName)} placeholder={t.f.last.p} autoComplete="family-name" {...register('lastName', { required: t.val.required })} />
+                {fieldError(errors.lastName?.message as string)}
               </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  {...register('lastName', { 
-                    required: t('form.validation.required')
-                  })}
-                  className="ethereal-input peer placeholder-transparent"
-                  placeholder={t('form.fields.lastName')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
-                  {t('form.fields.lastName')} *
-                </label>
-                {errors.lastName && (
-                  <p className="text-red-500 text-sm mt-2 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    {errors.lastName.message}
-                  </p>
-                )}
+              <div>
+                <label style={labelStyle}>{t.f.email.l}{reqMark}</label>
+                <input className={cls(!!errors.email)} type="email" inputMode="email" placeholder={t.f.email.p} autoComplete="email" {...register('email', { required: t.val.required, pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: t.val.email } })} />
+                {fieldError(errors.email?.message as string)}
               </div>
-
-              <div className="relative">
-                <input
-                  type="email"
-                  {...register('email', { 
-                    required: t('form.validation.required'),
-                    pattern: {
-                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: t('form.validation.invalidEmail')
-                    }
-                  })}
-                  className="ethereal-input peer placeholder-transparent"
-                  placeholder={t('form.fields.email')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
-                  {t('form.fields.email')} *
-                </label>
-                {errors.email && (
-                  <p className="text-red-500 text-sm mt-2 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    {errors.email.message}
-                  </p>
-                )}
+              <div>
+                <label style={labelStyle}>{t.f.phone.l}{reqMark}</label>
+                <input className={cls(!!errors.phone)} type="tel" inputMode="tel" placeholder={t.f.phone.p} autoComplete="tel" {...register('phone', { required: t.val.required, pattern: { value: /^[+()\-\s0-9]{6,}$/, message: t.val.phone } })} />
+                {fieldError(errors.phone?.message as string)}
               </div>
-
-              <div className="relative">
-                <input
-                  type="tel"
-                  {...register('phone', { 
-                    required: t('form.validation.required'),
-                    pattern: {
-                      value: /^[+]?[\d\s\-()]{10,}$/,
-                      message: t('form.validation.invalidPhone')
-                    }
-                  })}
-                  className="ethereal-input peer placeholder-transparent"
-                  placeholder={t('form.fields.phone')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
-                  {t('form.fields.phone')} *
-                </label>
-                {errors.phone && (
-                  <p className="text-red-500 text-sm mt-2 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    {errors.phone.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="relative">
-                <textarea
-                  {...register('address', { 
-                    required: t('form.validation.required')
-                  })}
-                  className="ethereal-textarea peer placeholder-transparent resize-none h-24"
-                  placeholder={t('form.fields.address')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
-                  {t('form.fields.address')} *
-                </label>
-                {errors.address && (
-                  <p className="text-red-500 text-sm mt-2 flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    {errors.address.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ID Verification Section */}
-        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
-          <div className="ethereal-section-header bg-gradient-to-r from-[var(--mist-blue)] to-[var(--sky-blue)]">
-            <div className="flex items-center text-white">
-              <div className="ethereal-section-icon mr-3">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <h2 className="text-lg sm:text-xl font-semibold">
-                {t('form.sections.idVerification')}
-              </h2>
-            </div>
-          </div>
-          <div className="p-4 sm:p-8">
-            <div className="mb-6">
-              <div className="relative">
-                <select
-                  {...register('idType', { 
-                    required: t('form.validation.required')
-                  })}
-                  className="ethereal-select peer"
-                >
-                  <option value="">{t('placeholders.selectIdType')}</option>
-                  <option value="passport">{t('form.idTypes.passport')}</option>
-                  <option value="aadhaar">{t('form.idTypes.aadhaar')}</option>
-                  <option value="pan_card">{t('form.idTypes.panCard')}</option>
-                  <option value="driving_license">{t('form.idTypes.drivingLicense')}</option>
-                  <option value="voter_id">{t('form.idTypes.voterId')}</option>
-                  <option value="ration_card">{t('form.idTypes.rationCard')}</option>
-                  <option value="other">{t('form.idTypes.other')}</option>
-                </select>
-                <label className="absolute left-4 top-2 text-xs font-medium text-[var(--sky-blue)] transition-all duration-200">
-                  {t('form.fields.idType')} *
-                </label>
-                {errors.idType && (
-                  <div className="mt-2 flex items-center text-red-600">
-                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <p className="text-sm">{errors.idType.message}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-[var(--text-primary)] mb-3">
-                {t('form.fields.uploadIdPhotos')} *
-              </label>
-              <div className="ethereal-upload-area">
-                <IDPhotoUpload
-                  onPhotosChange={(files: File[]) => setValue('idPhotos', files)}
+              <div>
+                <label style={labelStyle}>{t.f.dob.l}</label>
+                <DateField
+                  value={watch('dateOfBirth')}
+                  onChange={(v) => setValue('dateOfBirth', v, { shouldDirty: true })}
+                  placeholder={t.f.dob.p}
+                  lang={lang}
+                  maxToday
                 />
               </div>
-              {errors.idPhotos && (
-                <div className="mt-2 flex items-center text-red-600">
-                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  <p className="text-sm">{errors.idPhotos.message}</p>
-                </div>
-              )}
+              <div>
+                <label style={labelStyle}>{t.f.nat.l}{reqMark}</label>
+                <input className={cls(!!errors.nationality)} placeholder={t.f.nat.p} {...register('nationality', { required: t.val.required })} />
+                {fieldError(errors.nationality?.message as string)}
+              </div>
             </div>
-          </div>
-        </div>
+          </Section>
 
-        {/* Emergency Contact Section */}
-        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
-          <div className="ethereal-section-header bg-gradient-to-r from-[var(--gentle-purple)] to-[var(--mist-blue)]">
-            <div className="flex items-center text-white">
-              <div className="ethereal-section-icon mr-3">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                </svg>
+          {/* 2 ID Verification */}
+          <Section n={2} title={t.s.id}>
+            <label style={labelStyle}>{t.up.title}</label>
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              style={{ border: `1.5px dashed ${dragOver ? C.pineAccent : C.dashed}`, borderRadius: 14, background: dragOver ? '#f3efe1' : C.sand, padding: 26, textAlign: 'center', cursor: 'pointer' }}
+            >
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.borderSubtle, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <Upload size={22} color={C.sectionSub} strokeWidth={1.7} />
               </div>
-              <h2 className="text-lg sm:text-xl font-semibold">
-                {t('form.sections.emergencyContact')}
-              </h2>
-            </div>
-          </div>
-          <div className="p-4 sm:p-8">
-            <div className="space-y-6">
-              <div className="relative">
-                <input
-                  type="text"
-                  {...register('emergencyContactName', { 
-                    required: t('form.validation.required')
-                  })}
-                  className="ethereal-input peer placeholder-transparent"
-                  placeholder={t('form.fields.emergencyContactName')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--gentle-purple)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--gentle-purple)]">
-                  {t('form.fields.emergencyContactName')} *
-                </label>
-                {errors.emergencyContactName && (
-                  <div className="mt-2 flex items-center text-red-600">
-                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <p className="text-sm">{errors.emergencyContactName.message}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <input
-                  type="tel"
-                  {...register('emergencyContactPhone', { 
-                    required: t('form.validation.required'),
-                    pattern: {
-                      value: /^[+]?[\d\s\-()]{10,}$/,
-                      message: t('form.validation.invalidPhone')
-                    }
-                  })}
-                  className="ethereal-input peer placeholder-transparent"
-                  placeholder={t('form.fields.emergencyContactPhone')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--gentle-purple)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--gentle-purple)]">
-                  {t('form.fields.emergencyContactPhone')} *
-                </label>
-                {errors.emergencyContactPhone && (
-                  <div className="mt-2 flex items-center text-red-600">
-                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <p className="text-sm">{errors.emergencyContactPhone.message}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  {...register('emergencyContactRelation', { 
-                    required: t('form.validation.required')
-                  })}
-                  className="ethereal-input peer placeholder-transparent"
-                  placeholder={t('form.fields.relationship')}
-                />
-                <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--gentle-purple)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--gentle-purple)]">
-                  {t('form.fields.relationship')} *
-                </label>
-                {errors.emergencyContactRelation && (
-                  <div className="mt-2 flex items-center text-red-600">
-                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <p className="text-sm">{errors.emergencyContactRelation.message}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Purpose of Visit Section */}
-        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
-          <div className="ethereal-section-header bg-gradient-to-r from-[var(--sky-blue)] to-[var(--gentle-purple)]">
-            <div className="flex items-center text-white">
-              <div className="ethereal-section-icon mr-3">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <h2 className="text-lg sm:text-xl font-semibold">
-                {t('form.sections.purposeOfVisit')}
-              </h2>
-            </div>
-          </div>
-          <div className="p-4 sm:p-8">
-            <div className="relative">
-              <select
-                {...register('purposeOfVisit', { required: t('form.validation.required') })}
-                className="ethereal-select peer"
-              >
-                <option value="">{t('placeholders.selectPurpose')}</option>
-                <option value="business">{t('form.purposeOptions.business')}</option>
-                <option value="leisure">{t('form.purposeOptions.leisure')}</option>
-                <option value="medical">{t('form.purposeOptions.medical')}</option>
-                <option value="other">{t('form.purposeOptions.other')}</option>
-              </select>
-              <label className="absolute left-4 top-2 text-xs font-medium text-[var(--gentle-purple)] transition-all duration-200">
-                {t('form.fields.purposeOfVisit')} *
-              </label>
-              {errors.purposeOfVisit && (
-                <div className="mt-2 flex items-center text-red-600">
-                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  <p className="text-sm">{errors.purposeOfVisit.message}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Additional Guests Section */}
-        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0">
-          <div className="ethereal-section-header">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-white space-y-3 sm:space-y-0">
-              <div className="flex items-center">
-                <div className="ethereal-section-icon mr-3">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-                  </svg>
-                </div>
-                <h2 className="text-lg sm:text-xl font-semibold">
-                  {t('form.sections.additionalGuests')}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => append({ name: '', age: undefined, relation: '' })}
-                className="bg-white/20 hover:bg-white/30 text-white px-3 sm:px-4 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-sm sm:text-base"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                <span>{t('form.buttons.addGuest')}</span>
-              </button>
-            </div>
-          </div>
-          <div className="p-4 sm:p-8">
-            {fields.length === 0 ? (
-              <div className="text-center py-8">
-                <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-                </svg>
-                <p className="text-gray-500">{t('messages.noAdditionalGuests')}</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {fields.map((field, index) => (
-                  <div key={field.id} className="ethereal-glass rounded-xl p-4 border border-white/30">
-                    <div className="flex gap-3 items-center">
-                      <div className="flex-1 relative">
-                        <input
-                          type="text"
-                          {...register(`additionalGuests.${index}.name` as const)}
-                          className="ethereal-input peer placeholder-transparent"
-                          placeholder={`Guest ${index + 1} Name`}
-                        />
-                        <label className="ethereal-label peer-placeholder-shown:text-base peer-placeholder-shown:text-[var(--text-primary)]/60 peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-sm peer-focus:text-[var(--sky-blue)] peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:text-sm peer-[:not(:placeholder-shown)]:text-[var(--sky-blue)]">
-                          Guest {index + 1} Name
-                        </label>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => remove(index)}
-                        className="px-4 py-3 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-lg transition-all duration-200 text-sm font-medium flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
-                      >
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                        <span>Remove</span>
+              <div style={{ font: `600 14.5px/1.4 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: '#3a3329' }}>{t.up.drop}</div>
+              <div style={{ font: `400 12.5px/1.4 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.muted, marginTop: 5 }}>{t.up.hint}</div>
+              {idPhotos.length > 0 && (
+                <div className="flex flex-wrap gap-[10px] justify-center mt-4" onClick={(e) => e.stopPropagation()}>
+                  {idPhotos.map((file, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 11px 8px 9px' }}>
+                      <div style={{ width: 30, height: 38, borderRadius: 5, background: 'linear-gradient(135deg,#dfe9e2,#cdbf9f)' }} />
+                      <span style={{ font: `500 12.5px/1 'Hanken Grotesk',sans-serif`, color: '#3a3329', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                      <button type="button" aria-label={t.ui.remove} onClick={() => setIdPhotos(prev => prev.filter((_, j) => j !== i))} style={{ width: 18, height: 18, borderRadius: '50%', background: '#f0e7d6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <X size={11} color="#7a6f5c" strokeWidth={2.4} />
                       </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                  ))}
+                </div>
+              )}
+              <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf" className="hidden" onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
+            </div>
+            {idError && fieldError(t.val.idRequired)}
+          </Section>
 
-        {/* Submit Button */}
-        <div className="ethereal-card rounded-2xl sm:rounded-3xl mx-0 p-4 sm:p-8">
-          <button
-            type="submit"
-            disabled={isSubmitting || submitting}
-            className="ethereal-button w-full py-3 sm:py-4 px-6 sm:px-8 text-base sm:text-lg font-semibold flex items-center justify-center space-x-3 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {(isSubmitting || submitting) ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                <span>{t('form.buttons.submitting')}</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-                <span>{t('form.buttons.submitCheckIn')}</span>
-              </>
-            )}
-          </button>
-        </div>
-      </form>
-    </>
+          {/* 3 Address */}
+          <Section n={3} title={t.s.address}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-[18px] gap-y-[15px]">
+              <div className="sm:col-span-2 lg:col-span-4">
+                <label style={labelStyle}>{t.f.addr.l}{reqMark}</label>
+                <input className={cls(!!errors.address)} placeholder={t.f.addr.p} autoComplete="street-address" {...register('address', { required: t.val.required })} />
+                {fieldError(errors.address?.message as string)}
+              </div>
+              <div><label style={labelStyle}>{t.f.city.l}</label><input className="vn-field" placeholder={t.f.city.p} {...register('city')} /></div>
+              <div><label style={labelStyle}>{t.f.state.l}</label><input className="vn-field" placeholder={t.f.state.p} {...register('state')} /></div>
+              <div><label style={labelStyle}>{t.f.country.l}</label><input className="vn-field" placeholder={t.f.country.p} {...register('country')} /></div>
+              <div><label style={labelStyle}>{t.f.zip.l}</label><input className="vn-field" inputMode="numeric" placeholder={t.f.zip.p} {...register('zipCode')} /></div>
+            </div>
+          </Section>
+
+          {/* 4 Emergency Contact */}
+          <Section n={4} title={t.s.emergency}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[18px] gap-y-[15px]">
+              <div><label style={labelStyle}>{t.f.ecName.l}</label><input className="vn-field" placeholder={t.f.ecName.p} {...register('emergencyContactName')} /></div>
+              <div><label style={labelStyle}>{t.f.ecPhone.l}</label><input className="vn-field" type="tel" inputMode="tel" placeholder={t.f.ecPhone.p} {...register('emergencyContactPhone')} /></div>
+              <div>
+                <label style={labelStyle}>{t.f.ecRel.l}</label>
+                <SelectWrap>
+                  <select className="vn-field vn-select" {...register('emergencyContactRelation')}>
+                    <option value="">{t.f.ecRel.p}</option>
+                    {RELATIONSHIPS.map(o => <option key={o.value} value={o.value}>{lang === 'hi' ? o.hi : o.en}</option>)}
+                  </select>
+                </SelectWrap>
+              </div>
+            </div>
+          </Section>
+
+          {/* 5 Visit Details */}
+          <Section n={5} title={t.s.visit}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[18px] gap-y-[15px]">
+              <div>
+                <label style={labelStyle}>{t.f.purpose.l}</label>
+                <SelectWrap>
+                  <select className="vn-field vn-select" {...register('purposeOfVisit')}>
+                    {PURPOSES.map(o => <option key={o.value} value={o.value}>{lang === 'hi' ? o.hi : o.en}</option>)}
+                  </select>
+                </SelectWrap>
+              </div>
+              <div>
+                <label style={labelStyle}>{t.f.guestsNum.l}{reqMark}</label>
+                <input className={cls(!!errors.numberOfGuests)} type="number" inputMode="numeric" min={1} step={1} onKeyDown={blockNonInteger} {...register('numberOfGuests', { valueAsNumber: true, validate: v => (typeof v === 'number' && Number.isInteger(v) && v >= 1) || t.val.guestsMin })} />
+                {fieldError(errors.numberOfGuests?.message as string)}
+              </div>
+              <div><label style={labelStyle}>{t.f.room.l}</label><input className="vn-field vn-field--muted" readOnly {...register('roomNumber')} /></div>
+              <div><label style={labelStyle}>{t.f.arrival.l}</label><input className="vn-field vn-field--muted" type="date" readOnly {...register('arrivalDate')} /></div>
+              <div><label style={labelStyle}>{t.f.departure.l}</label><input className="vn-field vn-field--muted" type="date" readOnly {...register('departureDate')} /></div>
+            </div>
+          </Section>
+
+          {/* 6 Additional Guests */}
+          <Section n={6} title={t.s.guests}>
+            {fields.map((field, i) => {
+              const isAdult = !!watch(`additionalGuests.${i}.isAdult` as const);
+              const gFiles = guestPhotos[field.id] || [];
+              return (
+                <div key={field.id} style={{ position: 'relative', border: `1px solid ${C.borderSubtle}`, borderRadius: 12, background: C.sand, padding: '13px 13px 14px', marginBottom: 10 }}>
+                  <button type="button" onClick={() => remove(i)} aria-label={t.ui.remove} style={{ position: 'absolute', top: 11, right: 11, width: 25, height: 25, border: 'none', borderRadius: 7, background: '#f0e7d6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <X size={13} color="#a05a4a" strokeWidth={2.2} />
+                  </button>
+                  <div className="flex gap-[10px] items-start" style={{ paddingRight: 30 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <label style={{ ...labelStyle, fontSize: 11, margin: '0 0 5px' }}>{t.f.gName.l}</label>
+                      <input className="vn-field vn-guestfield" placeholder={t.f.gName.p} {...register(`additionalGuests.${i}.name` as const)} />
+                    </div>
+                    <div style={{ flex: 'none', width: 84 }}>
+                      <label style={{ ...labelStyle, fontSize: 11, margin: '0 0 5px' }}>{t.f.gAge.l}</label>
+                      <input className="vn-field vn-guestfield" type="number" inputMode="numeric" min={0} step={1} onKeyDown={blockNonInteger} placeholder={t.f.gAge.p} {...register(`additionalGuests.${i}.age` as const, { valueAsNumber: true })} />
+                    </div>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" className="w-[16px] h-[16px] accent-[#2f5446]" {...register(`additionalGuests.${i}.isAdult` as const)} />
+                    <span style={{ font: `500 12.5px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.label }}>{t.ui.gAdult}</span>
+                  </label>
+
+                  {isAdult && (
+                    <div
+                      onClick={() => document.getElementById(`gfile-${field.id}`)?.click()}
+                      style={{ marginTop: 10, border: `1.5px dashed ${C.dashed}`, borderRadius: 10, background: '#fff', padding: 12, textAlign: 'center', cursor: 'pointer' }}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Upload size={16} color={C.sectionSub} strokeWidth={1.8} />
+                        <span style={{ font: `600 12.5px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: '#3a3329' }}>{t.ui.gUpload}</span>
+                      </div>
+                      <div style={{ font: `400 11px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.muted, marginTop: 3 }}>{t.up.hint}</div>
+                      {gFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-[8px] justify-center mt-2" onClick={(e) => e.stopPropagation()}>
+                          {gFiles.map((file, pi) => (
+                            <div key={pi} style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.sand, border: `1px solid ${C.border}`, borderRadius: 9, padding: '6px 9px 6px 7px' }}>
+                              <div style={{ width: 24, height: 30, borderRadius: 4, background: 'linear-gradient(135deg,#dfe9e2,#cdbf9f)' }} />
+                              <span style={{ font: `500 11.5px/1 'Hanken Grotesk',sans-serif`, color: '#3a3329', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                              <button type="button" aria-label={t.ui.remove} onClick={() => removeGuestFile(field.id, pi)} style={{ width: 17, height: 17, borderRadius: '50%', background: '#f0e7d6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <X size={10} color="#7a6f5c" strokeWidth={2.4} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <input id={`gfile-${field.id}`} type="file" multiple accept="image/*,application/pdf" className="hidden" onChange={(e) => { if (e.target.files?.length) addGuestFiles(field.id, e.target.files); e.target.value = ''; }} />
+                    </div>
+                  )}
+                  {isAdult && guestIdErrors[field.id] && fieldError(t.val.guestId)}
+                </div>
+              );
+            })}
+            <button type="button" onClick={() => append({ name: '', age: undefined, isAdult: false })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'transparent', border: `1px dashed ${C.dashed}`, borderRadius: 9, padding: '9px 14px', color: C.sectionSub, font: `600 13px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, cursor: 'pointer' }}>
+              <Plus size={15} color={C.sectionSub} /> {t.ui.addGuest}
+            </button>
+          </Section>
+
+          {/* Submit */}
+          <section style={{ borderTop: `1px solid ${C.borderSubtle}`, paddingTop: 22 }}>
+            <button type="submit" disabled={busy} style={{ width: '100%', height: 54, border: 'none', borderRadius: 12, background: busy ? C.pineHover : C.pine, color: C.cream, font: `600 16px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
+              {busy ? (
+                <>
+                  <span style={{ width: 19, height: 19, borderRadius: '50%', border: '2.4px solid rgba(243,238,223,.4)', borderTopColor: C.cream, display: 'inline-block' }} className="animate-spin" />
+                  {t.ui.submitting}
+                </>
+              ) : (
+                <>
+                  {isUpdate ? t.ui.update : t.ui.submit}
+                  <ArrowRight size={18} color={C.cream} />
+                </>
+              )}
+            </button>
+          </section>
+        </form>
+      </div>
+    </div>
   );
 };
+
+export default CheckInForm;

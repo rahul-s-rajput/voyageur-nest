@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Save, XCircle } from 'lucide-react';
+import { Save, XCircle, Trash2, Plus, Upload, X } from 'lucide-react';
 import { CheckInData, CheckInFormData } from '../types/checkin';
+import { StorageService } from '../lib/storage';
+import { EnhancedFileValidator } from '../utils/fileValidator';
+import { useNotification } from './NotificationContainer';
 
 interface CheckInDetailsEditorProps {
   data: CheckInData;
@@ -104,7 +107,56 @@ export const CheckInDetailsEditor: React.FC<CheckInDetailsEditorProps> = ({
       preferences: { ...prev.preferences, [key]: !prev.preferences[key] },
     }));
 
+  // Additional guests (kept separate from `form` since it's an array). Each
+  // guest's uploaded ID photos (idPhotoUrls) are preserved through edits.
+  type GuestRow = CheckInData['additionalGuests'][number];
+  const { showError } = useNotification();
+  const [guests, setGuests] = useState<GuestRow[]>((data.additionalGuests || []).map(g => ({ ...g })));
+  const [uploadingGuest, setUploadingGuest] = useState<number | null>(null);
+  const updateGuest = (i: number, patch: Partial<GuestRow>) =>
+    setGuests(prev => prev.map((g, idx) => (idx === i ? { ...g, ...patch } : g)));
+  const addGuest = () => setGuests(prev => [...prev, { name: '', age: undefined, isAdult: false }]);
+  const removeGuest = (i: number) => setGuests(prev => prev.filter((_, idx) => idx !== i));
+
+  const addGuestPhotos = async (i: number, files: FileList) => {
+    const valid: File[] = [];
+    for (const file of Array.from(files)) {
+      const res = await EnhancedFileValidator.validateFile(file, {
+        maxFileSize: 5 * 1024 * 1024,
+        allowedTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+      });
+      if (res.valid) valid.push(file);
+      else showError('File rejected', `${file.name}: ${res.error || 'Invalid file'}`);
+    }
+    if (!valid.length) return;
+    setUploadingGuest(i);
+    try {
+      const results = await StorageService.uploadFiles(valid, data.id);
+      const urls = results.filter(r => r.success).map(r => r.url).filter(Boolean) as string[];
+      if (urls.length) {
+        setGuests(prev => prev.map((g, idx) => (idx === i ? { ...g, idPhotoUrls: [...(g.idPhotoUrls || []), ...urls] } : g)));
+      }
+    } catch (e: any) {
+      showError('Upload failed', e?.message || 'Could not upload the ID photo.');
+    } finally {
+      setUploadingGuest(null);
+    }
+  };
+
+  const removeGuestPhoto = (i: number, photoIdx: number) =>
+    setGuests(prev => prev.map((g, idx) =>
+      idx === i ? { ...g, idPhotoUrls: (g.idPhotoUrls || []).filter((_, j) => j !== photoIdx) } : g));
+
   const handleSave = () => {
+    const cleanGuests = guests
+      .filter(g => (g.name || '').trim() !== '')
+      .map(g => ({
+        name: g.name.trim(),
+        age: g.age,
+        isAdult: !!g.isAdult,
+        ...(g.idPhotoUrls && g.idPhotoUrls.length ? { idPhotoUrls: g.idPhotoUrls } : {}),
+      }));
+    const guestPhotoUrls = cleanGuests.flatMap(g => g.idPhotoUrls || []);
     onSave({
       firstName: form.firstName,
       lastName: form.lastName,
@@ -129,6 +181,10 @@ export const CheckInDetailsEditor: React.FC<CheckInDetailsEditorProps> = ({
       numberOfGuests: Number(form.numberOfGuests) || 1,
       specialRequests: form.specialRequests || undefined,
       preferences: form.preferences,
+      additionalGuests: cleanGuests,
+      // Keep the booking-level gallery in sync so newly added guest photos are
+      // viewable there too (existing primary photos are preserved).
+      id_photo_urls: Array.from(new Set([...(data.id_photo_urls || []), ...guestPhotoUrls])),
     });
   };
 
@@ -252,6 +308,94 @@ export const CheckInDetailsEditor: React.FC<CheckInDetailsEditorProps> = ({
             </label>
           ))}
         </div>
+      </div>
+
+      {/* Additional Guests */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-indigo-900">Additional Guests</h4>
+          <button
+            type="button"
+            onClick={addGuest}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Guest
+          </button>
+        </div>
+        {guests.length === 0 ? (
+          <p className="text-xs text-gray-500 italic">No additional guests.</p>
+        ) : (
+          <div className="space-y-2">
+            {guests.map((g, i) => (
+              <div key={i} className="bg-white rounded-md border border-gray-200 p-2.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={g.name}
+                    onChange={e => updateGuest(i, { name: e.target.value })}
+                    placeholder="Guest name"
+                    className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={g.age ?? ''}
+                    onChange={e => updateGuest(i, { age: e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value) || 0) })}
+                    placeholder="Age"
+                    className="w-[72px] px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeGuest(i)}
+                    aria-label="Remove guest"
+                    className="p-2 text-red-600 hover:text-red-800 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 mt-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={!!g.isAdult} onChange={e => updateGuest(i, { isAdult: e.target.checked })} />
+                  Adult
+                </label>
+
+                {/* Per-guest ID photos */}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {(g.idPhotoUrls || []).map((url, pi) => (
+                    <div key={pi} className="relative">
+                      <img
+                        src={url}
+                        alt={`ID ${pi + 1}`}
+                        className="w-12 h-12 object-cover rounded border cursor-pointer hover:opacity-80"
+                        onClick={() => window.open(url, '_blank')}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeGuestPhoto(i, pi)}
+                        aria-label="Remove photo"
+                        className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <label className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs border border-dashed border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 ${uploadingGuest === i ? 'opacity-60 cursor-default' : 'cursor-pointer'}`}>
+                    {uploadingGuest === i
+                      ? <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full" />
+                      : <Upload className="w-3.5 h-3.5" />}
+                    {uploadingGuest === i ? 'Uploading…' : 'Add ID'}
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      disabled={uploadingGuest === i}
+                      onChange={e => { if (e.target.files?.length) addGuestPhotos(i, e.target.files); e.target.value = ''; }}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Save / Cancel */}

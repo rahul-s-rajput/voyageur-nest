@@ -1,357 +1,282 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { Mountain, Lock, Check, AlertTriangle } from 'lucide-react';
 import { CheckInForm } from '../components/CheckInForm';
 import { checkInService, bookingService } from '../lib/supabase';
+import { propertyService } from '../services/propertyService';
 import { CheckInFormData, CheckInData } from '../types/checkin';
 import { Booking } from '../types/booking';
-import { useTranslation } from '../hooks/useTranslation';
-import EtherealHero from '../components/EtherealHero';
 import { useNotification } from '../components/NotificationContainer';
+import { STR, langFromCode, type Lang } from '../components/checkin/checkinStrings';
 
 interface CheckInPageProps {
   language?: string;
 }
 
-export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en-US' }) => {
+const HERO_IMG = 'https://images.unsplash.com/photo-1486911278844-a81c5267e227?w=1000&q=55';
+const C = {
+  pine: '#1f3a30',
+  card: '#fffdf9',
+  page: '#e7e2d6',
+  cream: '#f3eedf',
+  sand: '#faf6ec',
+  borderSubtle: '#ece3d2',
+  muted: '#9a8e78',
+};
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtRange = (ci?: string, co?: string): string => {
+  const a = (ci || '').split('-');
+  const b = (co || '').split('-');
+  if (a.length !== 3 || b.length !== 3) return '';
+  const d1 = +a[2], m1 = +a[1] - 1, d2 = +b[2], m2 = +b[1] - 1, y = b[0];
+  return m1 === m2 ? `${d1}–${d2} ${MONTHS[m2]} ${y}` : `${d1} ${MONTHS[m1]} – ${d2} ${MONTHS[m2]} ${y}`;
+};
+
+export const CheckInPage: React.FC<CheckInPageProps> = ({ language = 'en' }) => {
   const { bookingId } = useParams<{ bookingId: string }>();
-  const navigate = useNavigate();
-  const { t } = useTranslation(language);
-  const { showSuccess, showError, showWarning } = useNotification();
-  
+  const { showSuccess, showError } = useNotification();
+
+  const [lang, setLang] = useState<Lang>(langFromCode(language));
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [propertyName, setPropertyName] = useState<string>('');
   const [existingCheckIn, setExistingCheckIn] = useState<CheckInData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const t = STR[lang];
+
   const loadBookingData = useCallback(async () => {
     if (!bookingId) {
-      setError('Invalid booking ID');
+      setError('invalid');
       setLoading(false);
       return;
     }
-
     try {
       setLoading(true);
-      
-      // Load booking details
       const bookingData = await bookingService.getBookingById(bookingId);
       if (!bookingData) {
-        setError('Booking not found');
+        setError('notfound');
         setLoading(false);
         return;
       }
-      
       setBooking(bookingData);
-      
-      // Check if check-in data already exists
+
+      if (bookingData.propertyId) {
+        try {
+          const property = await propertyService.getPropertyById(bookingData.propertyId);
+          if (property?.name) setPropertyName(property.name);
+        } catch { /* non-fatal */ }
+      }
+
       const checkInData = await checkInService.getCheckInDataByBookingId(bookingId);
       setExistingCheckIn(checkInData);
-      
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading booking data:', error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Failed to load booking information. Please check the link and try again.';
-      setError(errorMessage);
-      showError('Loading Error', errorMessage);
+    } catch (e) {
+      console.error('Error loading booking data:', e);
+      setError('notfound');
     } finally {
       setLoading(false);
     }
   }, [bookingId]);
 
-  useEffect(() => {
-    if (bookingId) {
-      loadBookingData();
-    }
-  }, [bookingId, loadBookingData]);
+  useEffect(() => { if (bookingId) loadBookingData(); }, [bookingId, loadBookingData]);
 
   const handleFormSubmit = async (formData: CheckInFormData) => {
     if (!bookingId) return;
-
     try {
       setSubmitting(true);
-      setSubmissionError(null);
-      
-      if (existingCheckIn) {
-        const result = await checkInService.updateCheckInData(existingCheckIn.id, formData);
-        if (result) {
-          setSuccess(true);
-          setExistingCheckIn(result);
-        } else {
-          throw new Error('Failed to update check-in data');
-        }
+      setSubmitError(null);
+      const result = existingCheckIn
+        ? await checkInService.updateCheckInData(existingCheckIn.id, formData)
+        : await checkInService.createCheckInData(bookingId, formData);
+      if (result) {
+        setExistingCheckIn(result);
+        setSuccess(true);
+        if (!existingCheckIn) showSuccess('Check-in Complete!', 'Your check-in has been submitted.');
       } else {
-        const result = await checkInService.createCheckInData(bookingId, formData);
-        if (result) {
-          setSuccess(true);
-          setExistingCheckIn(result);
-          showSuccess('Check-in Complete!', 'Your check-in has been successfully submitted. Welcome to your stay!');
-        } else {
-          throw new Error('Failed to save check-in data');
-        }
+        throw new Error('Failed to save check-in data');
       }
-    } catch (error) {
-      console.error('Error submitting check-in form:', error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Failed to submit check-in form. Please try again.';
-      setSubmissionError(errorMessage);
-      showError('Submission Failed', errorMessage);
-      throw error;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to submit check-in form. Please try again.';
+      setSubmitError(msg);
+      showError('Submission Failed', msg);
+      throw e;
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getInitialFormData = (booking: Booking, existingCheckIn?: CheckInData): CheckInFormData => {
-    return {
-      firstName: existingCheckIn?.firstName || booking.guestName.split(' ')[0] || '',
-      lastName: existingCheckIn?.lastName || booking.guestName.split(' ').slice(1).join(' ') || '',
-      email: existingCheckIn?.email || booking.contactEmail || '',
-      phone: existingCheckIn?.phone || booking.contactPhone || '',
-      dateOfBirth: existingCheckIn?.dateOfBirth || '',
-      nationality: existingCheckIn?.nationality || '',
-      idType: existingCheckIn?.idType || 'passport',
-      idNumber: existingCheckIn?.idNumber || '',
-      address: existingCheckIn?.address || '',
-      city: existingCheckIn?.city || '',
-      state: existingCheckIn?.state || '',
-      country: existingCheckIn?.country || '',
-      zipCode: existingCheckIn?.zipCode || '',
-      emergencyContactName: existingCheckIn?.emergencyContactName || '',
-      emergencyContactPhone: existingCheckIn?.emergencyContactPhone || '',
-      emergencyContactRelation: existingCheckIn?.emergencyContactRelation || '',
-      purposeOfVisit: existingCheckIn?.purposeOfVisit || 'leisure',
-      arrivalDate: existingCheckIn?.arrivalDate || booking.checkIn || '',
-      departureDate: existingCheckIn?.departureDate || booking.checkOut || '',
-      roomNumber: existingCheckIn?.roomNumber || booking.roomNo || '',
-      numberOfGuests: existingCheckIn?.numberOfGuests || booking.noOfPax || 1,
-      additionalGuests: existingCheckIn?.additionalGuests || [],
-      specialRequests: existingCheckIn?.specialRequests || booking.specialRequests || '',
-      preferences: existingCheckIn?.preferences || {
-        wakeUpCall: false,
-        newspaper: false,
-        extraTowels: false,
-        extraPillows: false,
-        roomService: false,
-        doNotDisturb: false,
-      },
-      termsAccepted: existingCheckIn?.termsAccepted || false,
-      marketingConsent: existingCheckIn?.marketingConsent || false,
-    };
-  };
+  const getInitialFormData = (b: Booking, ci?: CheckInData | null): CheckInFormData => ({
+    firstName: ci?.firstName || b.guestName?.split(' ')[0] || '',
+    lastName: ci?.lastName || b.guestName?.split(' ').slice(1).join(' ') || '',
+    email: ci?.email || b.contactEmail || '',
+    phone: ci?.phone || b.contactPhone || '',
+    dateOfBirth: ci?.dateOfBirth || '',
+    nationality: ci?.nationality || '',
+    idType: ci?.idType || 'passport',
+    idNumber: ci?.idNumber || '',
+    address: ci?.address || '',
+    city: ci?.city || '',
+    state: ci?.state || '',
+    country: ci?.country || '',
+    zipCode: ci?.zipCode || '',
+    emergencyContactName: ci?.emergencyContactName || '',
+    emergencyContactPhone: ci?.emergencyContactPhone || '',
+    emergencyContactRelation: ci?.emergencyContactRelation || '',
+    purposeOfVisit: ci?.purposeOfVisit || 'leisure',
+    arrivalDate: ci?.arrivalDate || b.checkIn || '',
+    departureDate: ci?.departureDate || b.checkOut || '',
+    roomNumber: ci?.roomNumber || b.roomNo || '',
+    numberOfGuests: ci?.numberOfGuests || b.noOfPax || 1,
+    additionalGuests: ci?.additionalGuests || [],
+    specialRequests: ci?.specialRequests || b.specialRequests || '',
+    preferences: ci?.preferences || { wakeUpCall: false, newspaper: false, extraTowels: false, extraPillows: false, roomService: false, doNotDisturb: false },
+    termsAccepted: ci?.termsAccepted || false,
+    marketingConsent: ci?.marketingConsent || false,
+  });
 
+  const name = propertyName || 'Voyageur Nest';
+  const chips = booking
+    ? [
+        booking.roomNo ? (lang === 'hi' ? `कमरा ${booking.roomNo}` : `Room ${booking.roomNo}`) : '',
+        fmtRange(booking.checkIn, booking.checkOut),
+        `${booking.noOfPax || 1} ${lang === 'hi' ? 'अतिथि' : 'guests'}`,
+      ].filter(Boolean)
+    : [];
+
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen relative bg-gradient-to-b from-[#F8FBFF] via-[#F0F8FF] to-[#F5F8FF] flex items-center justify-center">
-        {/* Subtle background elements */}
-        <div className="absolute top-20 left-10 opacity-5">
-          <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
-            <path d="M20 90 L40 50 L60 70 L80 40 L100 90 Z" fill="rgba(168,208,230,0.3)"/>
-          </svg>
-        </div>
-        <div className="absolute bottom-20 right-20 opacity-4">
-          <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
-            <path d="M40 10 L30 30 L50 30 Z" fill="rgba(200,230,245,0.2)"/>
-            <rect x="36" y="30" width="8" height="16" fill="rgba(139,69,19,0.1)"/>
-          </svg>
-        </div>
-        <div className="relative z-10 text-center ethereal-glass rounded-3xl p-12 max-w-md mx-auto">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-20 w-20 border-4 border-transparent border-t-[var(--mist-blue)] mx-auto"></div>
-            <div className="absolute inset-0 rounded-full border-4 border-[var(--sky-blue)] opacity-20"></div>
-          </div>
-          <h3 className="text-xl font-semibold text-[var(--text-primary)] mb-2 mt-6">Welcome to Your Check-In</h3>
-          <p className="text-[var(--text-primary)] font-medium text-lg">
-            {t('checkInPage.loading')}
-          </p>
-          <div className="mt-4 flex justify-center space-x-1">
-            <div className="w-2 h-2 bg-[var(--mist-blue)] rounded-full animate-bounce"></div>
-            <div className="w-2 h-2 bg-[var(--sky-blue)] rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-            <div className="w-2 h-2 bg-[var(--gentle-purple)] rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-          </div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-5 p-10" style={{ background: C.page }}>
+        <div className="w-12 h-12 rounded-full animate-spin" style={{ border: `3px solid ${C.borderSubtle}`, borderTopColor: '#2f5446' }} />
+        <div className="text-center">
+          <div style={{ font: `600 21px 'Spectral','Noto Sans Devanagari',serif`, color: C.pine }}>{name}</div>
+          <div style={{ font: `400 14px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.muted, marginTop: 7 }}>{t.loading}</div>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  // ── Error (booking not found / invalid link) ────────────────────────────────
+  if (error === 'notfound' || error === 'invalid') {
     return (
-      <div className="min-h-screen relative bg-gradient-to-b from-[#F8FBFF] via-[#F0F8FF] to-[#F5F8FF] flex items-center justify-center p-4">
-        {/* Subtle background elements */}
-        <div className="absolute top-20 right-10 opacity-5">
-          <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
-            <path d="M50 10 L40 30 L60 30 Z" fill="rgba(168,208,230,0.2)"/>
-            <path d="M50 24 L36 44 L64 44 Z" fill="rgba(168,208,230,0.15)"/>
-          </svg>
-        </div>
-        <div className="absolute bottom-20 left-20 opacity-4">
-          <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-            <path d="M30 5 L30 55 M5 30 L55 30" stroke="rgba(200,230,245,0.2)" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <div className="relative z-10 max-w-md w-full ethereal-glass rounded-3xl p-12 text-center">
-          <div className="text-6xl mb-6 floating-element">🏔️</div>
-          <h2 className="dancing-script text-3xl font-bold text-[var(--text-secondary)] mb-4">
-            {t('checkInPage.error')}
-          </h2>
-          <p className="text-[var(--text-primary)] mb-8 leading-relaxed">{error}</p>
-          <div className="bg-[var(--soft-gray)]/30 rounded-xl p-4 border border-[var(--sky-blue)]/20">
-            <div className="flex items-center justify-center mb-2">
-              <svg className="w-5 h-5 text-[var(--mist-blue)] mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
-              </svg>
-              <span className="text-sm font-medium text-[var(--text-primary)]">Need Assistance?</span>
-            </div>
-            <p className="text-sm text-[var(--text-primary)] mb-2">
-              {t('checkInPage.canClosePageNow')}
-            </p>
-            <p className="text-xs text-[var(--misty-gray)]">
-              {t('checkInPage.processCompleted')}
-            </p>
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: C.page }}>
+        <div className="w-full max-w-[460px] text-center" style={{ background: C.card, borderRadius: 16, boxShadow: '0 1px 3px rgba(60,45,20,.12)', padding: '40px 36px' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f6ece4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <AlertTriangle size={30} color="#a8553b" strokeWidth={1.9} />
           </div>
+          <h1 style={{ margin: 0, font: `600 27px 'Spectral','Noto Sans Devanagari',serif`, color: C.pine }}>{t.err.title}</h1>
+          <p style={{ margin: '12px auto 0', maxWidth: 380, font: `400 14.5px/1.55 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: '#6e6353' }}>{t.err.body}</p>
         </div>
       </div>
     );
   }
 
+  // ── Success ─────────────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div className="min-h-screen relative bg-gradient-to-b from-[#F8FBFF] via-[#F0F8FF] to-[#F5F8FF] flex items-center justify-center p-4">
-        {/* Celebratory background elements */}
-        <div className="absolute top-16 left-16 opacity-6">
-          <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
-            <path d="M40 10 L30 30 L50 30 Z" fill="rgba(168,208,230,0.3)"/>
-            <path d="M40 24 L26 44 L54 44 Z" fill="rgba(168,208,230,0.2)"/>
-          </svg>
-        </div>
-        <div className="absolute top-20 right-16 opacity-5">
-          <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-            <path d="M30 5 L30 55 M5 30 L55 30 M15 15 L45 45 M45 15 L15 45" 
-                  stroke="rgba(200,230,245,0.3)" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <div className="absolute bottom-20 left-1/4 opacity-4">
-          <svg width="100" height="40" viewBox="0 0 100 40" fill="none">
-            <path d="M15,30 Q5,15 20,15 Q25,5 40,15 Q55,5 70,15 Q85,5 95,15 Q100,25 85,30 Z" 
-                  fill="rgba(168,208,230,0.2)" />
-          </svg>
-        </div>
-        <div className="relative z-10 max-w-lg w-full ethereal-glass rounded-3xl p-12 text-center">
-          <div className="text-6xl mb-6 floating-element">✨</div>
-          <h2 className="dancing-script text-4xl font-bold text-[var(--text-secondary)] mb-4">
-            {t('checkInPage.checkInComplete')}
-          </h2>
-          <p className="text-lg text-[var(--text-primary)] mb-8 leading-relaxed">
-            {t('checkInPage.checkInSuccess')}
-          </p>
-          
-          <div className="bg-gradient-to-r from-[var(--mist-blue)]/20 to-[var(--sky-blue)]/20 rounded-xl p-6 border border-[var(--sky-blue)]/30 mb-6">
-            <div className="flex items-center justify-center mb-3">
-              <svg className="w-6 h-6 text-[var(--mist-blue)] mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 2L3 7v11a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V7l-7-5z"/>
-              </svg>
-              <span className="text-lg font-semibold text-[var(--text-secondary)]">Welcome to Your Stay!</span>
-            </div>
-            <p className="text-[var(--text-primary)] text-sm">
-              Your check-in is complete. We hope you enjoy your experience with us.
-            </p>
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundImage: `linear-gradient(180deg,rgba(255,253,249,.86),rgba(255,253,249,.97)),url('${HERO_IMG}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        <div className="text-center max-w-[540px] px-6">
+          <div style={{ width: 96, height: 96, borderRadius: '50%', background: C.pine, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px', boxShadow: '0 10px 30px rgba(31,58,48,.3)' }}>
+            <Check size={44} color={C.cream} strokeWidth={2.4} />
           </div>
-
-          <div className="bg-[var(--soft-gray)]/30 rounded-xl p-4 border border-[var(--sky-blue)]/20">
-            <div className="flex items-center justify-center mb-2">
-              <svg className="w-5 h-5 text-[var(--text-primary)] mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
-              </svg>
-              <span className="text-sm font-medium text-[var(--text-primary)]">Next Steps</span>
+          <h1 style={{ margin: 0, font: `600 44px/1.05 'Spectral','Noto Sans Devanagari',serif`, color: C.pine }}>{t.suc.title}</h1>
+          <p style={{ margin: '18px auto 0', maxWidth: 440, font: `400 16px/1.6 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: '#6e6353' }}>{t.suc.body}</p>
+          {booking && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, marginTop: 26, background: '#fff', border: `1px solid ${C.borderSubtle}`, borderRadius: 13, padding: '13px 22px', boxShadow: '0 1px 3px rgba(60,45,20,.06)' }}>
+              <span style={{ font: `500 13px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.muted }}>{t.suc.ref}</span>
+              <span style={{ width: 1, height: 18, background: C.borderSubtle }} />
+              <span style={{ font: `600 16px 'Spectral','Noto Sans Devanagari',serif`, color: C.pine }}>
+                {booking.folioNumber ? `#${booking.folioNumber}` : ''}{booking.roomNo ? ` · ${lang === 'hi' ? 'कमरा' : 'Room'} ${booking.roomNo}` : ''}
+              </span>
             </div>
-            <p className="text-sm text-[var(--text-primary)] mb-2">
-              {t('checkInPage.canClosePageNow')}
-            </p>
-            <p className="text-xs text-[var(--misty-gray)]">
-              {t('checkInPage.processCompleted')}
-            </p>
-          </div>
+          )}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen relative">
-      {/* Ethereal Hero Section */}
-      <EtherealHero 
-        title={t('checkInPage.digitalCheckIn')}
-        subtitle="Complete your check-in process"
-      />
-
-      {/* Complementary Background for Content */}
-      <div className="absolute inset-0 top-[400px] bg-gradient-to-b from-[#F8FBFF] via-[#F0F8FF] to-[#F5F8FF] -z-10">
-        {/* Subtle floating elements inspired by hero */}
-        <div className="absolute top-20 left-10 opacity-5">
-          <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
-            <path d="M20 90 L40 50 L60 70 L80 40 L100 90 Z" fill="rgba(168,208,230,0.3)"/>
-          </svg>
+  // ── Form (+ already-completed banner) ───────────────────────────────────────
+  const heroAside = (
+    <aside
+      className="hidden lg:flex flex-col lg:sticky lg:top-0 lg:h-screen"
+      style={{ flex: 'none', width: 404, color: C.cream, padding: '38px 36px', backgroundImage: `linear-gradient(180deg,rgba(24,46,38,.62),rgba(20,38,31,.92)),url('${HERO_IMG}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+    >
+      <div className="flex items-center gap-[11px]">
+        <div style={{ width: 34, height: 34, border: '1.5px solid rgba(243,238,223,.6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Mountain size={17} color={C.cream} strokeWidth={1.6} />
         </div>
-        <div className="absolute top-40 right-20 opacity-4">
-          <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
-            <path d="M40 10 L30 30 L50 30 Z" fill="rgba(200,230,245,0.2)"/>
-            <path d="M40 24 L26 44 L54 44 Z" fill="rgba(200,230,245,0.15)"/>
-            <rect x="36" y="44" width="8" height="16" fill="rgba(139,69,19,0.1)"/>
-          </svg>
-        </div>
-        <div className="absolute bottom-40 left-1/3 opacity-3">
-          <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-            <path d="M30 5 L30 55 M5 30 L55 30 M15 15 L45 45 M45 15 L15 45" 
-                  stroke="rgba(168,208,230,0.2)" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
-        {/* Subtle cloud patterns */}
-        <div className="absolute top-60 right-1/4 opacity-3">
-          <svg width="200" height="60" viewBox="0 0 200 60" fill="none">
-            <path d="M25,45 Q10,25 30,25 Q40,10 60,25 Q80,10 100,25 Q120,10 140,25 Q160,10 180,25 Q190,35 175,45 Z" 
-                  fill="rgba(200,230,245,0.15)" />
-          </svg>
-        </div>
+        <span style={{ font: `500 12px/1 'Hanken Grotesk',sans-serif`, letterSpacing: '.22em', textTransform: 'uppercase', color: 'rgba(243,238,223,.85)' }}>Manali · HP</span>
       </div>
+      <div style={{ paddingTop: 30 }}>
+        <div style={{ font: `400 13px/1 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, letterSpacing: '.16em', textTransform: 'uppercase', color: 'rgba(243,238,223,.78)', marginBottom: 10 }}>{t.subtitle}</div>
+        <h1 style={{ margin: 0, font: `600 52px/1.02 'Spectral','Noto Sans Devanagari',serif`, letterSpacing: '-.01em' }}>{name}</h1>
+      </div>
+      <div className="flex flex-wrap gap-2" style={{ marginTop: 22 }}>
+        {chips.map((c, i) => (
+          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(243,238,223,.13)', border: '1px solid rgba(243,238,223,.25)', borderRadius: 999, padding: '7px 13px', font: `500 12.5px/1 'Hanken Grotesk','Noto Sans Devanagari',sans-serif` }}>{c}</span>
+        ))}
+      </div>
+      <div className="flex items-center gap-2" style={{ marginTop: 'auto', paddingTop: 26, color: 'rgba(243,238,223,.7)' }}>
+        <Lock size={14} />
+        <span style={{ font: `500 12px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif` }}>{t.secure}</span>
+      </div>
+    </aside>
+  );
 
-      {/* Main Content */}
-      <div className="relative z-10 container mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        <div className="max-w-5xl mx-auto">
+  const mobileHero = (
+    <div className="lg:hidden" style={{ color: C.cream, padding: '20px 20px 22px', backgroundImage: `linear-gradient(180deg,rgba(24,46,38,.5),rgba(20,38,31,.9)),url('${HERO_IMG}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <span style={{ font: `500 11px/1 'Hanken Grotesk',sans-serif`, letterSpacing: '.2em', textTransform: 'uppercase', color: 'rgba(243,238,223,.85)' }}>Manali · HP</span>
+      <h1 style={{ margin: '14px 0 0', font: `600 33px/1.05 'Spectral','Noto Sans Devanagari',serif` }}>{name}</h1>
+      <div style={{ font: `400 12px/1 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(243,238,223,.8)', marginTop: 7 }}>{t.subtitle}</div>
+      <div className="flex flex-wrap gap-[7px]" style={{ marginTop: 14 }}>
+        {chips.map((c, i) => (
+          <span key={i} style={{ background: 'rgba(243,238,223,.15)', border: '1px solid rgba(243,238,223,.25)', borderRadius: 999, padding: '6px 11px', font: `500 11.5px/1 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.cream }}>{c}</span>
+        ))}
+      </div>
+    </div>
+  );
 
-          {/* Status Messages */}
+  return (
+    <div className="min-h-screen" style={{ background: C.page }}>
+      <div className="lg:flex lg:min-h-screen" style={{ background: C.card }}>
+        {heroAside}
+        <main className="flex-1 min-w-0">
+          {mobileHero}
+          {submitError && (
+            <div className="flex gap-[11px] items-center" style={{ background: '#f9ece6', borderBottom: '1px solid #eccbbb', padding: '14px 20px' }}>
+              <AlertTriangle size={18} color="#a8431f" style={{ flex: 'none' }} />
+              <span style={{ font: `600 14px 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: '#8c3a1c' }}>{submitError}</span>
+            </div>
+          )}
           {existingCheckIn && (
-            <div className="mb-6 p-4 bg-[var(--gentle-purple)]/20 border border-[var(--gentle-purple)]/30 rounded-xl">
-              <p className="text-sm text-[var(--text-primary)]">
-                {t('checkInPage.alreadyCompleted')}
-              </p>
+            <div className="flex gap-[13px] items-start" style={{ background: '#eef3ec', borderBottom: '1px solid #d8e2d4', padding: '16px 20px' }}>
+              <span style={{ flex: 'none', width: 32, height: 32, borderRadius: '50%', background: '#2f5446', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                <Check size={17} color={C.cream} strokeWidth={2.4} />
+              </span>
+              <div>
+                <div style={{ font: `600 15px/1.35 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: C.pine }}>{t.alr.title}</div>
+                <div style={{ font: `400 13px/1.45 'Hanken Grotesk','Noto Sans Devanagari',sans-serif`, color: '#4d5f51', marginTop: 4 }}>{t.alr.body}</div>
+              </div>
             </div>
           )}
-          
-          {submissionError && (
-            <div className="mb-6 p-4 bg-red-100/50 border border-red-200 rounded-xl">
-              <p className="text-sm text-red-800">
-                {t('checkInPage.errorPrefix')}{submissionError}
-              </p>
-            </div>
+          {booking && (
+            <CheckInForm
+              language={lang}
+              onLanguageChange={(code) => setLang(langFromCode(code))}
+              onSubmit={handleFormSubmit}
+              initialData={getInitialFormData(booking, existingCheckIn)}
+              isSubmitting={submitting}
+              bookingId={bookingId}
+              bookingRef={booking.folioNumber || undefined}
+              isUpdate={!!existingCheckIn}
+              externalErrorHandling={true}
+            />
           )}
-
-          {/* Form Container - removed redundant ethereal-card wrapper */}
-          <CheckInForm
-            language={language}
-            onSubmit={handleFormSubmit}
-            initialData={booking ? getInitialFormData(booking, existingCheckIn || undefined) : undefined}
-            isSubmitting={submitting}
-            bookingId={bookingId}
-            externalErrorHandling={true}
-          />
-
-          
-        </div>
+        </main>
       </div>
     </div>
   );
