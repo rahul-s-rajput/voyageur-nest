@@ -57,12 +57,14 @@ const MobileQuickStats: React.FC<MobileQuickStatsProps> = ({ bookings, className
     const todayCheckIns = activeBookings.filter(b => b.checkIn === today);
     const todayCheckOuts = activeBookings.filter(b => b.checkOut === today);
     
-    // Current occupancy
-    const currentlyOccupied = activeBookings.filter(b => 
-      b.status === 'checked-in' && 
-      b.checkIn <= today && 
+    // Current occupancy — count ROOMS in use, not bookings (one booking can
+    // occupy multiple rooms).
+    const currentlyOccupied = activeBookings.filter(b =>
+      b.status === 'checked-in' &&
+      b.checkIn <= today &&
       b.checkOut > today
     );
+    const roomsOccupied = currentlyOccupied.reduce((sum, b) => sum + (b.numberOfRooms || 1), 0);
     
     // Pending payments
     const pendingPayments = activeBookings.filter(b => 
@@ -78,7 +80,7 @@ const MobileQuickStats: React.FC<MobileQuickStatsProps> = ({ bookings, className
     return {
       checkIns: todayCheckIns.length,
       checkOuts: todayCheckOuts.length,
-      occupied: currentlyOccupied.length,
+      occupied: roomsOccupied,
       pendingPayments: pendingPayments.length,
       revenue: totalRevenue
     };

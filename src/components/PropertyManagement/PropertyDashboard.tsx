@@ -45,12 +45,15 @@ const PropertyDashboard: React.FC = () => {
       const allBookings = await bookingService.getBookings();
       const today = new Date().toISOString().split('T')[0];
       const propertyBookings = allBookings.filter(b => b.propertyId === currentProperty.id);
-      const occupied = propertyBookings.filter(b =>
-        b.checkIn <= today &&
-        b.checkOut > today &&
-        (b.status === 'confirmed' || b.status === 'checked-in') &&
-        !b.cancelled
-      ).length;
+      const occupied = propertyBookings
+        .filter(b =>
+          b.checkIn <= today &&
+          b.checkOut > today &&
+          (b.status === 'confirmed' || b.status === 'checked-in') &&
+          !b.cancelled
+        )
+        // Count rooms, not bookings — one booking can occupy multiple rooms.
+        .reduce((sum, b) => sum + (b.numberOfRooms || 1), 0);
       setOccupancy({ occupied, available: Math.max(0, currentProperty.totalRooms - occupied) });
 
       // Expense summary (MTD totals, pending approvals, recent)

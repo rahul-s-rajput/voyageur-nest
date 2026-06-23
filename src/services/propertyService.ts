@@ -614,7 +614,8 @@ export class PropertyService {
       const checkIn = new Date(booking.check_in);
       const checkOut = new Date(booking.check_out);
       const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-      return sum + nights;
+      // A single booking can span multiple rooms.
+      return sum + nights * (booking.number_of_rooms || 1);
     }, 0);
     
     const occupancyRate = totalRoomNights > 0 ? (occupiedRoomNights / totalRoomNights) * 100 : 0;

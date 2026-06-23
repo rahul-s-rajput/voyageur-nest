@@ -91,14 +91,16 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
     const todayCheckOuts = activeBookings.filter(b => b.checkOut === today);
     const tomorrowCheckIns = activeBookings.filter(b => b.checkIn === tomorrow);
 
-    // Current occupancy (checked-in guests)
+    // Current occupancy — count ROOMS in use, not bookings (a single booking
+    // can occupy multiple rooms, e.g. "Room 101, 104").
     const currentlyOccupied = activeBookings.filter(b =>
       b.status === 'checked-in' &&
       b.checkIn <= today &&
       b.checkOut > today
     );
+    const roomsOccupied = currentlyOccupied.reduce((sum, b) => sum + (b.numberOfRooms || 1), 0);
     const totalRooms = currentProperty?.totalRooms || 0;
-    const occupancyRate = totalRooms > 0 ? (currentlyOccupied.length / totalRooms) * 100 : 0;
+    const occupancyRate = totalRooms > 0 ? (roomsOccupied / totalRooms) * 100 : 0;
 
     // Outstanding balances
     const totalRevenue = activeBookings.reduce((sum, b) => sum + parseFloat(String(b.totalAmount || 0)), 0);
@@ -131,7 +133,7 @@ const EnhancedKPIDashboard: React.FC<EnhancedKPIDashboardProps> = ({ bookings, c
       {
         id: 'current-occupancy',
         label: 'Current Occupancy',
-        value: currentlyOccupied.length,
+        value: roomsOccupied,
         subValue: `${occupancyRate.toFixed(0)}% rate`,
         icon: <Building className="w-5 h-5" />,
         color: 'text-green-600 bg-green-50 border-green-200'
