@@ -229,19 +229,11 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
 
 
 
-  // Auto-close QR modal when booking gets checked in (e.g., after form completion)
-  useEffect(() => {
-    if (booking && showQRCode && booking.status === 'checked-in') {
-      setShowQRCode(false);
-    }
-  }, [booking?.status, showQRCode]);
-
-  // Also auto-close QR when we detect form completion via check-in data
-  useEffect(() => {
-    if (showQRCode && checkInData?.form_completed_at) {
-      setShowQRCode(false);
-    }
-  }, [showQRCode, checkInData?.form_completed_at]);
+  // NOTE: we intentionally do NOT auto-close the QR just because the booking is
+  // already checked-in / the form is already complete — staff may reopen the QR
+  // on a checked-in booking to recover from an accidental check-in. The normal
+  // "close after the guest finishes" path is handled by the auto-finalize effect
+  // below (it closes the QR once it flips the status to checked-in).
 
   // While QR is open, poll for check-in form completion so we can auto-finalize
   useEffect(() => {
