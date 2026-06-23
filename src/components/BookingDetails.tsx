@@ -294,7 +294,10 @@ export const BookingDetails: React.FC<BookingDetailsProps> = ({
     const maybeFinalize = async () => {
       if (!booking) return;
       if (!checkInData?.form_completed_at) return;
-      if (booking.status === 'checked-in') return;
+      // Only auto-finalize from a pre-arrival state. Without this, checking a
+      // guest OUT (status 'checked-out') would re-trigger this and flip them
+      // back to 'checked-in'.
+      if (booking.status !== 'confirmed' && booking.status !== 'pending') return;
       // Guard to avoid repeated submissions for the same booking
       if (autoFinalizeAttemptedFor.current === booking.id) return;
 
